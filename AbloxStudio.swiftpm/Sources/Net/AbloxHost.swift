@@ -48,7 +48,9 @@ public final class AbloxHost {
     public var onRosterChange: (([PlayerSnapshot]) -> Void)?
     /// Effects the rule engine produced, for the host's own client to apply.
     public var onLocalEffects: (([EventMachine.Effect]) -> Void)?
-    public var onChat: ((ChatPayload) -> Void)?
+    /// Sender is passed alongside the payload so the UI can offer a mute
+    /// control; a display name is not an identity.
+    public var onChat: ((PeerID, ChatPayload) -> Void)?
     public var onStateChange: ((State) -> Void)?
     /// A world edit arrived from a co-editing peer.
     public var onRemoteDelta: ((WorldDelta) -> Void)?
@@ -243,7 +245,7 @@ public final class AbloxHost {
         case .chat:
             guard let payload = try? codec.decodePayload(ChatPayload.self, from: packet) else { return }
             relay(packet, excluding: peer)
-            onChat?(payload)
+            onChat?(packet.senderID, payload)
 
         case .leave:
             dropConnection(peer)
@@ -366,7 +368,7 @@ public final class AbloxHost {
             guard let self else { return }
             let payload = ChatPayload(senderName: self.localProfile.displayName, text: text)
             self.broadcast(.chat, payload)
-            self.onChat?(payload)
+            self.onChat?(self.localPeerID, payload)
         }
     }
 

@@ -89,7 +89,9 @@ public struct GameViewport: UIViewRepresentable {
 
         /// Local player state, simulated here and published to the network.
         private var localSnapshot: PlayerSnapshot
-        private var lastPublishedAt: TimeInterval = 0
+        /// Decides which ticks are worth a packet — see `TransformPublisher`.
+        private var publisher = TransformPublisher()
+        private var elapsed: TimeInterval = 0
         private var lastWorldRevision: Date?
 
         /// Blocks currently overlapped, so a touch is reported on entry rather
@@ -188,6 +190,21 @@ public struct GameViewport: UIViewRepresentable {
                     // Clear the touch set: the blocks we were standing in are
                     // no longer under us, and they must be able to fire again.
                     currentlyTouching.removeAll()
+                    // A teleport is exactly the discontinuity dead reckoning
+                    // cannot predict, so tell peers immediately.
+                    publisher.reset()
+
+                case let .bouncePlayer(speed):
+                    // Replaces upward velocity rather than adding to it, so
+                    // bouncing mid-rise cannot compound into an escape from
+                    // the world.
+                    localSnapshot.velocity = Vec3(
+                        localSnapshot.velocity.x,
+                        speed,
+                        localSnapshot.velocity.z
+                    )
+                    localSnapshot.isGrounded = false
+                    publisher.reset()
                 case .playSound:
                     // Hooked up by the HUD, which owns the audio session.
                     break
@@ -202,6 +219,7 @@ public struct GameViewport: UIViewRepresentable {
         private func tick(deltaTime: Float) {
             let world = parent.session.world
             let dt = min(deltaTime, 1.0 / 20)
+            elapsed += Double(dt)
 
             // 1. Intent → velocity.
             var input = parent.input
@@ -273,11 +291,14 @@ public struct GameViewport: UIViewRepresentable {
             camera.look(at: focus.simd, from: cameraAnchor.position, relativeTo: nil)
         }
 
-        /// Publishes at the protocol tick rate, not the frame rate.
+        /// Publishes only when peers could not have predicted where we are.
+        ///
+        /// The rate ceiling lives inside `TransformPublisher` along with the
+        /// thresholds, so this is just "ask, then send" — and a player who is
+        /// standing still costs one keepalive a second instead of twenty
+        /// packets.
         private func publishIfDue() {
-            let now = CACurrentMediaTime()
-            guard now - lastPublishedAt >= 1.0 / AbloxProtocol.transformHz else { return }
-            lastPublishedAt = now
+            guard publisher.shouldPublish(localSnapshot, at: elapsed) else { return }
             parent.session.publishLocalTransform(localSnapshot)
         }
 

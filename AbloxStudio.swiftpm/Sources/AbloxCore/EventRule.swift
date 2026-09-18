@@ -140,13 +140,16 @@ public enum EventAction: Codable, Hashable, Sendable {
     case playSound(name: String)
     /// Ends the round.
     case endRound(message: String)
+    /// Launches the triggering player upward at `speed` m/s. The client owns
+    /// the impulse — the host has no simulation to apply it to.
+    case bouncePlayer(speed: Float)
 
     private enum CodingKeys: String, CodingKey {
-        case type, blockID, color, duration, offset, visible, enabled, position, points, message, name
+        case type, blockID, color, duration, offset, visible, enabled, position, points, message, name, speed
     }
 
     private enum Kind: String, Codable {
-        case tint, move, setVisible, setCollision, teleportPlayer, awardPoints, announce, playSound, endRound
+        case tint, move, setVisible, setCollision, teleportPlayer, awardPoints, announce, playSound, endRound, bouncePlayer
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -186,6 +189,9 @@ public enum EventAction: Codable, Hashable, Sendable {
         case let .endRound(message):
             try c.encode(Kind.endRound, forKey: .type)
             try c.encode(message, forKey: .message)
+        case let .bouncePlayer(speed):
+            try c.encode(Kind.bouncePlayer, forKey: .type)
+            try c.encode(speed, forKey: .speed)
         }
     }
 
@@ -227,6 +233,8 @@ public enum EventAction: Codable, Hashable, Sendable {
             self = .playSound(name: try c.decode(String.self, forKey: .name))
         case .endRound:
             self = .endRound(message: try c.decodeIfPresent(String.self, forKey: .message) ?? "Round over")
+        case .bouncePlayer:
+            self = .bouncePlayer(speed: try c.decodeIfPresent(Float.self, forKey: .speed) ?? 14)
         }
     }
 }
@@ -243,6 +251,7 @@ public extension EventAction {
         case .announce: return "Announce"
         case .playSound: return "Play sound"
         case .endRound: return "End round"
+        case let .bouncePlayer(speed): return String(format: "Bounce player (%.0f m/s)", speed)
         }
     }
 
@@ -257,6 +266,7 @@ public extension EventAction {
         case .announce: return "megaphone.fill"
         case .playSound: return "speaker.wave.2.fill"
         case .endRound: return "flag.checkered"
+        case .bouncePlayer: return "arrow.up.circle.fill"
         }
     }
 
@@ -264,7 +274,7 @@ public extension EventAction {
         switch self {
         case let .tint(id, _, _), let .move(id, _, _), let .setVisible(id, _), let .setCollision(id, _):
             return [id]
-        case .teleportPlayer, .awardPoints, .announce, .playSound, .endRound:
+        case .teleportPlayer, .awardPoints, .announce, .playSound, .endRound, .bouncePlayer:
             return []
         }
     }

@@ -109,6 +109,20 @@ public enum BlockBehavior: String, Codable, CaseIterable, Sendable {
     /// Inert by itself — exists so `EventRule`s can hang off it.
     case trigger
 
+    // MARK: Gimmicks
+    //
+    // The no-code vocabulary: an author picks one of these in the Inspector
+    // and the block does something, with no rule to write. Each is tuned by
+    // `BlockData.gimmick`.
+
+    /// Launches the player upward. A trampoline.
+    case bounce
+    /// Fades out shortly after being stepped on, then returns. The classic
+    /// disappearing-platform trap.
+    case disappear
+    /// Moves the player to `gimmick.teleportTargetID`. A warp pad.
+    case teleport
+
     public var displayName: String {
         switch self {
         case .none: return "None"
@@ -118,6 +132,9 @@ public enum BlockBehavior: String, Codable, CaseIterable, Sendable {
         case .collectible: return "Collectible"
         case .goal: return "Goal"
         case .trigger: return "Trigger"
+        case .bounce: return "Bouncy"
+        case .disappear: return "Disappearing"
+        case .teleport: return "Teleporter"
         }
     }
 
@@ -130,6 +147,9 @@ public enum BlockBehavior: String, Codable, CaseIterable, Sendable {
         case .collectible: return "star.fill"
         case .goal: return "flag.checkered"
         case .trigger: return "bolt.fill"
+        case .bounce: return "arrow.up.circle.fill"
+        case .disappear: return "square.dashed"
+        case .teleport: return "sparkles"
         }
     }
 
@@ -138,8 +158,72 @@ public enum BlockBehavior: String, Codable, CaseIterable, Sendable {
         switch self {
         case .none, .spawn: return false
         case .checkpoint, .hazard, .collectible, .goal, .trigger: return true
+        // Every gimmick fires on contact, so the runtime has to be told.
+        case .bounce, .disappear, .teleport: return true
         }
     }
+
+    /// Whether this behaviour is one of the no-code gimmicks, which share the
+    /// `BlockData.gimmick` tuning and a per-block cooldown.
+    public var isGimmick: Bool {
+        switch self {
+        case .bounce, .disappear, .teleport: return true
+        case .none, .spawn, .checkpoint, .hazard, .collectible, .goal, .trigger: return false
+        }
+    }
+}
+
+// MARK: - Gimmick tuning
+
+/// Parameters for the no-code gimmick behaviours.
+///
+/// Gathered into one struct rather than five loose fields on `BlockData`,
+/// because they are only meaningful together and only when `behavior` is a
+/// gimmick. That keeps `BlockData` readable and keeps a world file from
+/// carrying five nulls on every inert block.
+public struct GimmickSettings: Codable, Hashable, Sendable {
+
+    /// Upward speed, in m/s, imparted by a `.bounce` block.
+    ///
+    /// Default is comfortably above `MovementConfig.jumpSpeed`, so a
+    /// trampoline always feels like more than a jump.
+    public var bounceSpeed: Float
+
+    /// Seconds between a `.disappear` block being stepped on and it going.
+    /// The grace period is the whole point — zero would be an instant
+    /// trapdoor, which reads as a bug rather than a trap.
+    public var disappearDelay: Double
+
+    /// Seconds a `.disappear` block stays gone before returning.
+    public var respawnDelay: Double
+
+    /// Where a `.teleport` block sends the player. The player arrives above
+    /// this block's top face. A nil or dangling target makes the block inert
+    /// rather than dropping the player through the world.
+    public var teleportTargetID: UUID?
+
+    /// Minimum seconds between firings of this specific block.
+    ///
+    /// Without it a gimmick re-triggers on every contact report while the
+    /// player stands on it — a bounce pad would fire dozens of times a second
+    /// and fling the player into orbit.
+    public var cooldown: Double
+
+    public init(
+        bounceSpeed: Float = 14,
+        disappearDelay: Double = 0.3,
+        respawnDelay: Double = 3.0,
+        teleportTargetID: UUID? = nil,
+        cooldown: Double = 1.5
+    ) {
+        self.bounceSpeed = bounceSpeed
+        self.disappearDelay = disappearDelay
+        self.respawnDelay = respawnDelay
+        self.teleportTargetID = teleportTargetID
+        self.cooldown = cooldown
+    }
+
+    public static let `default` = GimmickSettings()
 }
 
 // MARK: - BlockData
@@ -182,6 +266,10 @@ public struct BlockData: Codable, Hashable, Identifiable, Sendable {
     /// lets one rule cover a whole group of blocks.
     public var tags: [String]
 
+    /// Tuning for `.bounce`, `.disappear` and `.teleport`. Ignored by every
+    /// other behaviour.
+    public var gimmick: GimmickSettings
+
     public init(
         id: UUID = UUID(),
         name: String = "Part",
@@ -195,7 +283,8 @@ public struct BlockData: Codable, Hashable, Identifiable, Sendable {
         behavior: BlockBehavior = .none,
         scoreValue: Int = 0,
         parentID: UUID? = nil,
-        tags: [String] = []
+        tags: [String] = [],
+        gimmick: GimmickSettings = .default
     ) {
         self.id = id
         self.name = name
@@ -210,6 +299,7 @@ public struct BlockData: Codable, Hashable, Identifiable, Sendable {
         self.scoreValue = scoreValue
         self.parentID = parentID
         self.tags = tags
+        self.gimmick = gimmick
     }
 
     // Convenience accessors so call sites read as `block.position` rather than
@@ -268,6 +358,7 @@ public extension BlockData {
         scoreValue = try c.decodeIfPresent(Int.self, forKey: .scoreValue) ?? 0
         parentID = try c.decodeIfPresent(UUID.self, forKey: .parentID)
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
+        gimmick = try c.decodeIfPresent(GimmickSettings.self, forKey: .gimmick) ?? .default
     }
 }
 

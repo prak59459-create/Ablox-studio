@@ -20,7 +20,7 @@ public final class AbloxClient {
     public var onRoster: (([PlayerSnapshot]) -> Void)?
     public var onTransform: ((PlayerTransformPayload) -> Void)?
     public var onEffects: ((EventEffectPayload) -> Void)?
-    public var onChat: ((ChatPayload) -> Void)?
+    public var onChat: ((PeerID, ChatPayload) -> Void)?
 
     public private(set) var state: State = .idle {
         didSet {
@@ -148,7 +148,7 @@ public final class AbloxClient {
 
         case .chat:
             guard let payload = try? codec.decodePayload(ChatPayload.self, from: packet) else { return }
-            onChat?(payload)
+            onChat?(packet.senderID, payload)
 
         case .leave:
             if let payload = try? codec.decodePayload(LeavePayload.self, from: packet), payload.peerID == hostPeerID {

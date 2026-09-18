@@ -376,9 +376,11 @@ public enum AbloxProtocol {
 
     public static let maxChatLength = 240
 
-    /// How often avatars publish their transform. 15 Hz is smooth enough with
-    /// client-side interpolation and leaves headroom on a crowded Wi-Fi.
-    public static let transformHz: Double = 15
+    /// Ceiling on how often avatars publish their transform. 20 Hz is smooth
+    /// with client-side interpolation and leaves headroom on a crowded Wi-Fi.
+    /// `TransformPublisher` sends well below this in practice — the rate only
+    /// binds while an avatar is actually moving.
+    public static let transformHz: Double = 20
 
     public static let defaultCapacity = 8
 

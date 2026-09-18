@@ -47,9 +47,40 @@ public final class SessionCoordinator: ObservableObject {
 
     public struct ChatEntry: Identifiable, Hashable {
         public let id = UUID()
+        public let senderID: PeerID
         public let senderName: String
         public let text: String
+        /// True when the word filter masked something. The UI marks it, so a
+        /// child can see the filter is working rather than assume the message
+        /// arrived that way.
+        public let wasFiltered: Bool
         public let timestamp = Date()
+
+        public init(senderID: PeerID, senderName: String, text: String, wasFiltered: Bool = false) {
+            self.senderID = senderID
+            self.senderName = senderName
+            self.text = text
+            self.wasFiltered = wasFiltered
+        }
+    }
+
+    /// Chat safety, supplied by the app's settings.
+    ///
+    /// Filtering happens on receipt so it covers everyone's messages, not
+    /// just what this device sends — a peer running a modified client cannot
+    /// opt its own messages out of your filter.
+    public var moderator = ChatModerator()
+
+    /// Muting is applied when the log is read rather than when a message
+    /// arrives, so unmuting someone brings their backlog back instead of
+    /// leaving a hole in the conversation.
+    public var muteList = MuteList() {
+        didSet { objectWillChange.send() }
+    }
+
+    /// The chat log as it should be displayed.
+    public var visibleChatLog: [ChatEntry] {
+        chatLog.filter { muteList.allows($0.senderID, localPeerID: localPeerID) }
     }
 
     public struct Announcement: Equatable {
@@ -152,8 +183,8 @@ public final class SessionCoordinator: ObservableObject {
             Task { @MainActor in self?.roster = roster }
         }
 
-        host.onChat = { [weak self] payload in
-            Task { @MainActor in self?.appendChat(payload) }
+        host.onChat = { [weak self] sender, payload in
+            Task { @MainActor in self?.appendChat(payload, from: sender) }
         }
 
         host.onLocalEffects = { [weak self] effects in
@@ -235,8 +266,8 @@ public final class SessionCoordinator: ObservableObject {
             Task { @MainActor in self?.apply(effects: payload.actions) }
         }
 
-        client.onChat = { [weak self] payload in
-            Task { @MainActor in self?.appendChat(payload) }
+        client.onChat = { [weak self] sender, payload in
+            Task { @MainActor in self?.appendChat(payload, from: sender) }
         }
 
         self.client = client
@@ -297,7 +328,7 @@ public final class SessionCoordinator: ObservableObject {
         switch role {
         case .hosting: host?.sendChat(trimmed)
         case .joined: client?.sendChat(trimmed)
-        case .offline: appendChat(ChatPayload(senderName: profile.displayName, text: trimmed))
+        case .offline: appendChat(ChatPayload(senderName: profile.displayName, text: trimmed), from: localPeerID)
         }
     }
 
@@ -353,8 +384,14 @@ public final class SessionCoordinator: ObservableObject {
         }
     }
 
-    private func appendChat(_ payload: ChatPayload) {
-        chatLog.append(ChatEntry(senderName: payload.senderName, text: payload.text))
+    private func appendChat(_ payload: ChatPayload, from sender: PeerID) {
+        let filtered = moderator.filter(payload.text)
+        chatLog.append(ChatEntry(
+            senderID: sender,
+            senderName: payload.senderName,
+            text: filtered.text,
+            wasFiltered: filtered.wasFiltered
+        ))
         // The overlay only shows the last handful; keeping every message of a
         // long session would grow without bound.
         if chatLog.count > 100 {

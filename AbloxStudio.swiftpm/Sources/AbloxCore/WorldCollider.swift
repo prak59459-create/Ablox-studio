@@ -133,7 +133,17 @@ public enum WorldCollider {
             grounded = solids.contains { probeBox.penetrates($0) }
         }
 
-        let playerBox = body.bounds(at: p)
+        // Triggers are tested against a box grown by the ground probe depth,
+        // so a block you are *standing on* counts as touched.
+        //
+        // Without this, a falling player comes to rest wherever the last step
+        // left them — up to `groundProbeDepth` above the surface, because it
+        // is the probe, not a collision, that stops them. That gap is
+        // invisible on screen but enough that a hazard, a checkpoint or a
+        // bounce pad would never fire for a player simply standing on it.
+        // Erring toward triggers firing is the right direction here: a coin
+        // you nearly touched should count.
+        let playerBox = body.bounds(at: p).expanded(by: groundProbeDepth)
         let touched = triggers.filter { $0.box.intersects(playerBox) }.map(\.id)
 
         return CollisionResult(position: p, velocity: v, isGrounded: grounded, touchedBlockIDs: touched)
@@ -146,6 +156,14 @@ public enum WorldCollider {
             return true
         case .none, .hazard, .goal:
             return false
+
+        // A trampoline and a disappearing platform are both things you stand
+        // on — they have to be solid or there is nothing to step on in the
+        // first place. A teleport pad is walked into, like a checkpoint.
+        case .bounce, .disappear:
+            return false
+        case .teleport:
+            return true
         }
     }
 

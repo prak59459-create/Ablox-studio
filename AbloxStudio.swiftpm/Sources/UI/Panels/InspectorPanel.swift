@@ -158,6 +158,10 @@ struct InspectorPanel: View {
                     }
                 }
 
+                if block.behavior.isGimmick {
+                    gimmickFields(block)
+                }
+
                 if block.behavior != .none {
                     Text(behaviorHint(block.behavior))
                         .font(.system(size: 10))
@@ -168,6 +172,85 @@ struct InspectorPanel: View {
         }
     }
 
+    /// The tuning an author actually needs for the gimmick they picked, and
+    /// nothing else — a bounce pad has no business showing a teleport target.
+    @ViewBuilder
+    private func gimmickFields(_ block: BlockData) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            switch block.behavior {
+            case .bounce:
+                gimmickSlider("Launch speed", value: block.gimmick.bounceSpeed, range: 6...30, unit: " m/s") { newValue in
+                    session.edit { $0.mutateSelection(label: "Change launch speed") { $0.gimmick.bounceSpeed = newValue } }
+                }
+
+            case .disappear:
+                gimmickSlider("Delay before it goes", value: Float(block.gimmick.disappearDelay), range: 0...2, unit: " s") { newValue in
+                    session.edit { $0.mutateSelection(label: "Change delay") { $0.gimmick.disappearDelay = Double(newValue) } }
+                }
+                gimmickSlider("Time until it returns", value: Float(block.gimmick.respawnDelay), range: 0.5...15, unit: " s") { newValue in
+                    session.edit { $0.mutateSelection(label: "Change respawn") { $0.gimmick.respawnDelay = Double(newValue) } }
+                }
+
+            case .teleport:
+                HStack {
+                    Text("Sends you to").font(.caption2).foregroundStyle(Ablox.Palette.inkMuted)
+                    Spacer()
+                    Picker("Target", selection: Binding(
+                        get: { block.gimmick.teleportTargetID ?? Self.noTeleportTarget },
+                        set: { newValue in
+                            let target = newValue == Self.noTeleportTarget ? nil : newValue
+                            session.edit { $0.mutateSelection(label: "Change target") { $0.gimmick.teleportTargetID = target } }
+                        }
+                    )) {
+                        Text("Nowhere").tag(Self.noTeleportTarget)
+                        // A pad pointing at itself would teleport the player
+                        // onto the pad, forever.
+                        ForEach(world.blocks.filter { $0.id != block.id }) { candidate in
+                            Text(candidate.name).tag(candidate.id)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .font(.caption)
+                    .tint(Ablox.Palette.accent)
+                }
+
+            default:
+                EmptyView()
+            }
+
+            gimmickSlider("Wait between uses", value: Float(block.gimmick.cooldown), range: 0...5, unit: " s") { newValue in
+                session.edit { $0.mutateSelection(label: "Change cooldown") { $0.gimmick.cooldown = Double(newValue) } }
+            }
+        }
+    }
+
+    /// Sentinel for "no target", since a Picker tag cannot be nil.
+    private static let noTeleportTarget = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+
+    private func gimmickSlider(
+        _ title: String,
+        value: Float,
+        range: ClosedRange<Float>,
+        unit: String,
+        onChange: @escaping (Float) -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(title).font(.caption2).foregroundStyle(Ablox.Palette.inkMuted)
+                Spacer()
+                Text(String(format: "%.1f%@", value, unit))
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Ablox.Palette.accent)
+            }
+            Slider(value: Binding(get: { value }, set: onChange), in: range)
+                .tint(Ablox.Palette.accent)
+                .controlSize(.mini)
+        }
+    }
+
+    private var world: WorldDocument { session.document.world }
+
     private func behaviorHint(_ behavior: BlockBehavior) -> String {
         switch behavior {
         case .none: return ""
@@ -177,6 +260,9 @@ struct InspectorPanel: View {
         case .collectible: return "Each player can collect it once. Players walk through it."
         case .goal: return "Touching it ends the round for everyone."
         case .trigger: return "Does nothing by itself — add a rule that listens for it."
+        case .bounce: return "Launches anyone who lands on it. A trampoline."
+        case .disappear: return "Vanishes shortly after it is stepped on, then comes back."
+        case .teleport: return "Moves the player to another block. Players walk through it."
         }
     }
 

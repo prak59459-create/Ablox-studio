@@ -58,6 +58,19 @@ public struct EventMachine: Sendable {
     /// Where each player respawns — updated by checkpoints.
     private var respawnPoints: [PeerID: Vec3] = [:]
 
+    /// Last firing time per gimmick block, for `GimmickSettings.cooldown`.
+    private var blockCooldowns: [UUID: Double] = [:]
+
+    /// Deferred gimmick effects, ordered by due time. A disappearing platform
+    /// is two of these: vanish, then return.
+    private var scheduled: [(due: Double, action: ScheduledAction)] = []
+
+    /// Work `advance(to:)` performs once its due time arrives.
+    private enum ScheduledAction: Hashable, Sendable {
+        case hideBlock(UUID)
+        case showBlock(UUID)
+    }
+
     private var now: Double = 0
     private var hasStarted = false
     public private(set) var isRoundOver = false
@@ -141,6 +154,7 @@ public struct EventMachine: Sendable {
         guard hasStarted, !isRoundOver else { return [] }
 
         var effects: [Effect] = []
+        effects.append(contentsOf: fireScheduled())
         effects.append(contentsOf: fireTimerRules())
         effects.append(contentsOf: evaluateProximity())
         effects.append(contentsOf: enforceKillPlane())
@@ -165,6 +179,8 @@ public struct EventMachine: Sendable {
             lastTimerFireAt.removeAll()
             consumedBlocks.removeAll()
             proximityInside.removeAll()
+            blockCooldowns.removeAll()
+            scheduled.removeAll()
             // Anchor every timer to the start of the round. Seeding them
             // lazily on the first `advance(to:)` instead would make the first
             // interval depend on when the render loop happened to tick.
@@ -282,7 +298,59 @@ public struct EventMachine: Sendable {
             isRoundOver = true
             let name = players[peer]?.profile.displayName ?? "Someone"
             return [Effect(ruleID: nil, targetPeerID: nil, action: .endRound(message: "\(name) reached the goal!"))]
+
+        // MARK: Gimmicks
+        //
+        // All three share a per-block cooldown. Contact is reported on every
+        // collision step while a player stands on a block, so without it a
+        // bounce pad would fire dozens of times a second.
+
+        case .bounce:
+            guard beginGimmick(on: block) else { return [] }
+            return [
+                Effect(ruleID: nil, targetPeerID: peer, action: .bouncePlayer(speed: block.gimmick.bounceSpeed)),
+                Effect(ruleID: nil, targetPeerID: nil, action: .playSound(name: "bounce"))
+            ]
+
+        case .disappear:
+            guard beginGimmick(on: block) else { return [] }
+            // Nothing happens now: the grace period is the trap. Both the
+            // vanish and the return are scheduled, and `advance(to:)` emits
+            // them — which is why the machine needs a clock it is given
+            // rather than one it reads.
+            schedule(.hideBlock(block.id), at: now + block.gimmick.disappearDelay)
+            schedule(
+                .showBlock(block.id),
+                at: now + block.gimmick.disappearDelay + Swift.max(0.1, block.gimmick.respawnDelay)
+            )
+            return [Effect(ruleID: nil, targetPeerID: nil, action: .tint(
+                blockID: block.id,
+                color: block.color.withAlpha(0.35),
+                duration: block.gimmick.disappearDelay
+            ))]
+
+        case .teleport:
+            // A pad with no target, or one pointing at a deleted block, is
+            // inert. Dropping the player at the origin would be worse.
+            guard let targetID = block.gimmick.teleportTargetID,
+                  let target = world.block(id: targetID),
+                  targetID != block.id,
+                  beginGimmick(on: block) else { return [] }
+            return [
+                Effect(ruleID: nil, targetPeerID: peer, action: .teleportPlayer(to: topSurfacePosition(of: target))),
+                Effect(ruleID: nil, targetPeerID: nil, action: .playSound(name: "teleport"))
+            ]
         }
+    }
+
+    /// Consumes a gimmick block's cooldown, returning false while it is still
+    /// cooling down.
+    private mutating func beginGimmick(on block: BlockData) -> Bool {
+        if let last = blockCooldowns[block.id], now - last < block.gimmick.cooldown {
+            return false
+        }
+        blockCooldowns[block.id] = now
+        return true
     }
 
     private mutating func award(points: Int, to peer: PeerID, ruleID: UUID?) -> [Effect] {
@@ -372,6 +440,43 @@ public struct EventMachine: Sendable {
         return effects
     }
 
+    private mutating func schedule(_ action: ScheduledAction, at due: Double) {
+        // A block already queued for the same action is left alone, so a
+        // player bouncing on a platform mid-cycle cannot stack restores.
+        guard !scheduled.contains(where: { $0.action == action }) else { return }
+        scheduled.append((due: due, action: action))
+    }
+
+    /// Emits any scheduled gimmick effects that have come due.
+    ///
+    /// The world document is updated alongside the broadcast so a player who
+    /// joins while a platform is missing sees it missing.
+    private mutating func fireScheduled() -> [Effect] {
+        guard !scheduled.isEmpty else { return [] }
+
+        let due = scheduled.filter { $0.due <= now }
+        guard !due.isEmpty else { return [] }
+        scheduled.removeAll { $0.due <= now }
+
+        var effects: [Effect] = []
+        for item in due {
+            switch item.action {
+            case let .hideBlock(id):
+                guard world.block(id: id) != nil else { continue }
+                world.mutate(id: id) { $0.isVisible = false; $0.hasCollision = false }
+                effects.append(Effect(ruleID: nil, targetPeerID: nil, action: .setVisible(blockID: id, visible: false)))
+                effects.append(Effect(ruleID: nil, targetPeerID: nil, action: .setCollision(blockID: id, enabled: false)))
+
+            case let .showBlock(id):
+                guard world.block(id: id) != nil else { continue }
+                world.mutate(id: id) { $0.isVisible = true; $0.hasCollision = true }
+                effects.append(Effect(ruleID: nil, targetPeerID: nil, action: .setVisible(blockID: id, visible: true)))
+                effects.append(Effect(ruleID: nil, targetPeerID: nil, action: .setCollision(blockID: id, enabled: true)))
+            }
+        }
+        return effects
+    }
+
     private func canFire(_ rule: EventRule) -> Bool {
         if let limit = rule.maxFireCount, (fireCounts[rule.id] ?? 0) >= limit { return false }
         if let last = lastFiredAt[rule.id], now - last < rule.cooldown { return false }
@@ -426,6 +531,11 @@ public struct EventMachine: Sendable {
 
             case .announce, .playSound:
                 effects.append(Effect(ruleID: rule.id, targetPeerID: nil, action: action))
+
+            case .bouncePlayer:
+                // Personal, like a teleport: only whoever set it off is moved.
+                guard let peer else { continue }
+                effects.append(Effect(ruleID: rule.id, targetPeerID: peer, action: action))
             }
         }
         return effects
