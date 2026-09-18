@@ -2,7 +2,6 @@ import Foundation
 import RealityKit
 import simd
 import UIKit
-import AbloxCore
 
 /// A blocky avatar built from RealityKit primitives.
 ///

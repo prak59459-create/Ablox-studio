@@ -3,8 +3,6 @@ import RealityKit
 import ARKit
 import simd
 import Combine
-import AbloxCore
-import EditorCore
 
 /// The Studio's 3D canvas.
 ///

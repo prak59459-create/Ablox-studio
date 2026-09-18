@@ -1,6 +1,4 @@
 import SwiftUI
-import AbloxCore
-import EditorCore
 
 /// The editor screen: toolbar on top, Explorer left, viewport centre,
 /// Inspector right.

@@ -46,6 +46,7 @@ MIRRORED_DIRS=(
 # either side does not silently drop the file from the check.
 MIRRORED_FILES=(
   "Sources/UI/Components/DesignSystem.swift:Sources/UI/Components/DesignSystem.swift"
+  "Sources/UI/Components/AbloxMark.swift:Sources/UI/Components/AbloxMark.swift"
   "Sources/UI/ProjectStore.swift:Sources/UI/ProjectStore.swift"
 )
 

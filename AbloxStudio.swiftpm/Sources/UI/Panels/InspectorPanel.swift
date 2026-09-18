@@ -1,6 +1,4 @@
 import SwiftUI
-import AbloxCore
-import EditorCore
 
 /// Properties of whatever is selected.
 struct InspectorPanel: View {

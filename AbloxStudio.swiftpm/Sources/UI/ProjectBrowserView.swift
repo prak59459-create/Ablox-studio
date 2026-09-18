@@ -1,6 +1,4 @@
 import SwiftUI
-import AbloxCore
-import EditorCore
 
 /// The Studio's landing screen: pick a project, make one, or join someone
 /// else's editing session.
@@ -64,26 +62,9 @@ struct ProjectBrowserView: View {
 
     private var header: some View {
         HStack(alignment: .center) {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Ablox.Palette.brand)
-                        .frame(width: 54, height: 54)
-                    Image(systemName: "hammer.fill")
-                        .font(.title2)
-                        .foregroundStyle(.black)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("ABLOX STUDIO")
-                        .font(.system(size: 27, weight: .black, design: .rounded))
-                        .foregroundStyle(
-                            LinearGradient(colors: [.white, Ablox.Palette.accent], startPoint: .leading, endPoint: .trailing)
-                        )
-                    Text("Build 3D worlds on iPad")
-                        .font(.subheadline)
-                        .foregroundStyle(Ablox.Palette.inkMuted)
-                }
-            }
+            // The same drawn cube the client uses, so both apps present one
+            // brand rather than two near-misses.
+            AbloxLockup(subtitle: "STUDIO · Build 3D worlds on iPad", markSize: 54)
 
             Spacer()
 
@@ -137,12 +118,14 @@ struct ProjectBrowserView: View {
             GlassCard(padding: 16) {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .fill(Ablox.Palette.brand.opacity(0.9))
-                                .frame(width: 42, height: 42)
-                            Image(systemName: "cube.fill").foregroundStyle(.black)
-                        }
+                        AbloxMark()
+                            .foregroundStyle(.white)
+                            .frame(width: 26, height: 26)
+                            .frame(width: 42, height: 42)
+                            .background(
+                                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                    .fill(Color.white.opacity(0.08))
+                            )
                         Spacer()
                         Menu {
                             Button { store.duplicate(entry) } label: {

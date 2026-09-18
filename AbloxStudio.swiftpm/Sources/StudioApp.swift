@@ -1,6 +1,4 @@
 import SwiftUI
-import AbloxCore
-import EditorCore
 
 @main
 struct AbloxStudioApp: App {

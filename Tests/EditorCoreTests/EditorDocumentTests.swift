@@ -1,6 +1,5 @@
 import XCTest
-@testable import EditorCore
-import AbloxCore
+@testable import AbloxCore
 
 final class EditorDocumentTests: XCTestCase {
 

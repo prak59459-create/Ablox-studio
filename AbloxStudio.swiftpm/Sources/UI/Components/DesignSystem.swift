@@ -1,5 +1,4 @@
 import SwiftUI
-import AbloxCore
 
 /// Shared visual language: one place to change the look, rather than the same
 /// gradient pasted into nine views.
@@ -33,6 +32,26 @@ public enum Ablox {
         /// aimed at children with imprecise aim, so controls go bigger where
         /// there is room.
         public static let minimumTapTarget: CGFloat = 44
+    }
+}
+
+// MARK: - Icons
+
+public extension Image {
+    /// Renders an icon from the Ablox vocabulary.
+    ///
+    /// Views ask for `Image(icon: .trophy)` rather than
+    /// `Image(systemName: "trophy.fill")`, so the symbol a given icon resolves
+    /// to is decided in exactly one place. Swapping in custom artwork later is
+    /// a change to `AbloxIcon.symbolName`, not a sweep through the UI.
+    init(icon: AbloxIcon) {
+        self.init(systemName: icon.symbolName)
+    }
+}
+
+public extension Label where Title == Text, Icon == Image {
+    init(_ title: String, icon: AbloxIcon) {
+        self.init(title, systemImage: icon.symbolName)
     }
 }
 

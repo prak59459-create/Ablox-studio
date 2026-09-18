@@ -1,5 +1,4 @@
 import Foundation
-import AbloxCore
 
 /// The editor's model: a world, a selection, a tool, and an undo history.
 ///

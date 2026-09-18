@@ -1,7 +1,5 @@
 import Foundation
 import Combine
-import AbloxCore
-import EditorCore
 
 /// The observable wrapper the SwiftUI layer binds to.
 ///

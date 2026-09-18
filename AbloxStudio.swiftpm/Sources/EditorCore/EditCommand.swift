@@ -1,5 +1,4 @@
 import Foundation
-import AbloxCore
 
 /// A reversible edit.
 ///

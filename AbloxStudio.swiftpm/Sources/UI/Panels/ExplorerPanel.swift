@@ -2,8 +2,6 @@ import SwiftUI
 // `UTType.text`, used by the drag-to-reparent drop target. SwiftUI does not
 // re-export it.
 import UniformTypeIdentifiers
-import AbloxCore
-import EditorCore
 
 /// The scene tree. Tap to select, drag onto another row to reparent.
 struct ExplorerPanel: View {

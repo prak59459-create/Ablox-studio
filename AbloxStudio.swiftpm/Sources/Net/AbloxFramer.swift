@@ -1,6 +1,5 @@
 import Foundation
 import Network
-import AbloxCore
 
 /// Message framing for the Ablox protocol, as an `NWProtocolFramer`.
 ///

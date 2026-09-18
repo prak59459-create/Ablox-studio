@@ -6,8 +6,13 @@
 // The repository root also has a Package.swift, which exists only to build and
 // unit-test the portable layers off-device. It points at these same sources.
 //
-// `AbloxCore` and `Net` are mirrored from the Ablox client repository — run
-// `scripts/sync-core.sh --check` to confirm they have not drifted.
+// `AbloxCore`, `Net` and `Engine` are mirrored from the Ablox client
+// repository — run `scripts/sync-core.sh --check` to confirm they have not
+// drifted.
+//
+// Deliberately ONE target, matching the client. Swift Playgrounds App projects
+// are built as a single module; the off-device test package supplies the
+// module boundary instead, which is why no file in Sources/ imports AbloxCore.
 
 import PackageDescription
 import AppleProductTypes
@@ -25,7 +30,11 @@ let package = Package(
             teamIdentifier: "",
             displayVersion: "1.0",
             bundleVersion: "1",
-            appIcon: .placeholder(icon: .hammer),
+            // `PlaceholderIcon` has no hammer, so this is the cube the client
+            // uses. The inverted Studio mark is in `design/AppIcon.png`; set it
+            // from Swift Playgrounds' own app-settings screen, which writes the
+            // asset catalogue itself.
+            appIcon: .placeholder(icon: .cube),
             accentColor: .presetColor(.cyan),
             supportedDeviceFamilies: [
                 .pad
@@ -41,26 +50,15 @@ let package = Package(
                 // simply finding nothing.
                 .localNetwork(
                     purposeString: "Ablox Studio finds nearby iPads so you can build a world together. Nothing leaves your local network.",
-                    bonjourServices: ["_ablox._tcp"]
+                    bonjourServiceTypes: ["_ablox._tcp"]
                 )
             ]
         )
     ],
     targets: [
-        .target(
-            name: "AbloxCore",
-            path: "Sources/AbloxCore"
-        ),
-        .target(
-            name: "EditorCore",
-            dependencies: ["AbloxCore"],
-            path: "Sources/EditorCore"
-        ),
         .executableTarget(
             name: "AbloxStudioApp",
-            dependencies: ["AbloxCore", "EditorCore"],
-            path: "Sources",
-            exclude: ["AbloxCore", "EditorCore"]
+            path: "Sources"
         )
     ]
 )
