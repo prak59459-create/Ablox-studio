@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  core:
+    name: AbloxCore + EditorCore (Linux)
+    runs-on: ubuntu-latest
+    container: swift:6.0.3-noble
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
+
+  mirror:
+    name: Shared layers match the Ablox client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: Ablox-studio
+
+      # AbloxCore and Net are mirrored copies, not a package dependency —
+      # Swift Playgrounds on iPad can only resolve dependencies by git URL,
+      # which would mean the editor cannot open without internet. Drift has to
+      # fail a build here rather than surface as a protocol mismatch between
+      # two iPads.
+      - uses: actions/checkout@v4
+        with:
+          repository: prak59459-create/Ablox
+          path: Ablox
+          ref: ${{ github.ref_name }}
+        continue-on-error: true
+
+      - name: Fall back to the client's default branch
+        run: |
+          if [ ! -d Ablox ]; then
+            git clone --depth 1 https://github.com/prak59459-create/Ablox.git Ablox
+          fi
+
+      - name: Check for drift
+        env:
+          ABLOX_UPSTREAM: ${{ github.workspace }}/Ablox
+        run: Ablox-studio/scripts/sync-core.sh --check

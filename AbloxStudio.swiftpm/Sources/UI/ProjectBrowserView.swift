@@ -1,0 +1,407 @@
+import SwiftUI
+import AbloxCore
+import EditorCore
+
+/// The Studio's landing screen: pick a project, make one, or join someone
+/// else's editing session.
+struct ProjectBrowserView: View {
+    @EnvironmentObject private var store: ProjectStore
+    @EnvironmentObject private var settings: StudioSettings
+
+    @State private var openSession: StudioSession?
+    @State private var isCreating = false
+    @State private var newName = ""
+    @State private var selectedTemplate: ProjectStore.Template = .starter
+    @State private var pendingDeletion: ProjectStore.Entry?
+
+    @StateObject private var browser = BrowserModel()
+    @State private var joiningPeer: DiscoveredPeer?
+    @State private var joinCode = ""
+
+    var body: some View {
+        ZStack {
+            DynamicBackgroundView()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 26) {
+                    header
+                    projectsSection
+                    collaborateSection
+                }
+                .padding(32)
+                .frame(maxWidth: 1100)
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .preferredColorScheme(.dark)
+        .tint(Ablox.Palette.accent)
+        .fullScreenCover(item: $openSession) { session in
+            StudioView(session: session) {
+                session.save()
+                session.stopSharing()
+                openSession = nil
+                store.reload()
+            }
+        }
+        .sheet(isPresented: $isCreating) { createSheet }
+        .sheet(item: $joiningPeer) { peer in
+            joinSheet(peer)
+        }
+        .alert("Delete this project?", isPresented: .constant(pendingDeletion != nil)) {
+            Button("Cancel", role: .cancel) { pendingDeletion = nil }
+            Button("Delete", role: .destructive) {
+                if let pendingDeletion { store.delete(pendingDeletion) }
+                pendingDeletion = nil
+            }
+        } message: {
+            Text("“\(pendingDeletion?.name ?? "")” will be removed from this iPad. This cannot be undone.")
+        }
+        .onAppear { browser.start() }
+        .onDisappear { browser.stop() }
+    }
+
+    // MARK: Header
+
+    private var header: some View {
+        HStack(alignment: .center) {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Ablox.Palette.brand)
+                        .frame(width: 54, height: 54)
+                    Image(systemName: "hammer.fill")
+                        .font(.title2)
+                        .foregroundStyle(.black)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("ABLOX STUDIO")
+                        .font(.system(size: 27, weight: .black, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(colors: [.white, Ablox.Palette.accent], startPoint: .leading, endPoint: .trailing)
+                        )
+                    Text("Build 3D worlds on iPad")
+                        .font(.subheadline)
+                        .foregroundStyle(Ablox.Palette.inkMuted)
+                }
+            }
+
+            Spacer()
+
+            Button {
+                newName = store.uniqueName(basedOn: "My World")
+                selectedTemplate = .starter
+                isCreating = true
+            } label: {
+                Label("New project", systemImage: "plus")
+            }
+            .buttonStyle(NeonButtonStyle(.primary))
+        }
+    }
+
+    // MARK: Projects
+
+    private var projectsSection: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            SectionHeader("Your projects", systemImage: "square.stack.3d.up.fill")
+
+            if let error = store.lastError {
+                GlassCard {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(Ablox.Palette.warning)
+                }
+            }
+
+            if store.entries.isEmpty {
+                GlassCard {
+                    EmptyStateView(
+                        title: "Nothing built yet",
+                        message: "Start from the obstacle-course template to see how spawn points, coins and goals fit together — or start blank and make it up.",
+                        systemImage: "cube.transparent"
+                    )
+                }
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 15)], spacing: 15) {
+                    ForEach(store.entries) { entry in
+                        projectCard(entry)
+                    }
+                }
+            }
+        }
+    }
+
+    private func projectCard(_ entry: ProjectStore.Entry) -> some View {
+        Button {
+            open(entry)
+        } label: {
+            GlassCard(padding: 16) {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                .fill(Ablox.Palette.brand.opacity(0.9))
+                                .frame(width: 42, height: 42)
+                            Image(systemName: "cube.fill").foregroundStyle(.black)
+                        }
+                        Spacer()
+                        Menu {
+                            Button { store.duplicate(entry) } label: {
+                                Label("Duplicate", systemImage: "doc.on.doc")
+                            }
+                            Divider()
+                            Button(role: .destructive) { pendingDeletion = entry } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .font(.title3)
+                                .foregroundStyle(Ablox.Palette.inkMuted)
+                                .frame(width: 44, height: 44, alignment: .trailing)
+                                .contentShape(Rectangle())
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(entry.name)
+                            .font(.headline)
+                            .foregroundStyle(Ablox.Palette.ink)
+                            .lineLimit(1)
+                        Text(entry.subtitle)
+                            .font(.caption)
+                            .foregroundStyle(Ablox.Palette.inkMuted)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Collaboration
+
+    private var collaborateSection: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            SectionHeader("Build together", systemImage: "person.2.fill") {
+                if browser.peers.isEmpty && browser.unavailableReason == nil {
+                    ProgressView().controlSize(.small).tint(Ablox.Palette.accent)
+                }
+            }
+
+            if let reason = browser.unavailableReason {
+                GlassCard {
+                    Label(reason, systemImage: "exclamationmark.triangle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(Ablox.Palette.warning)
+                }
+            } else if browser.studioPeers.isEmpty {
+                GlassCard {
+                    EmptyStateView(
+                        title: "No shared projects nearby",
+                        message: "When someone taps Share inside Ablox Studio, their project appears here and you can edit it together.",
+                        systemImage: "dot.radiowaves.left.and.right"
+                    )
+                }
+            } else {
+                VStack(spacing: 11) {
+                    ForEach(browser.studioPeers) { peer in
+                        GlassCard(padding: 15) {
+                            HStack(spacing: 13) {
+                                Image(systemName: "hammer.circle.fill")
+                                    .font(.title2)
+                                    .foregroundStyle(Ablox.Palette.warning)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(peer.worldName)
+                                        .font(.headline)
+                                        .foregroundStyle(Ablox.Palette.ink)
+                                    Text("\(peer.hostName) · \(peer.subtitle)")
+                                        .font(.caption)
+                                        .foregroundStyle(Ablox.Palette.inkMuted)
+                                }
+                                Spacer()
+                                if peer.isCompatible {
+                                    Button("Join") {
+                                        joinCode = ""
+                                        joiningPeer = peer
+                                    }
+                                    .buttonStyle(NeonButtonStyle(.primary))
+                                } else {
+                                    Badge("Update needed", color: Ablox.Palette.warning)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: Actions
+
+    private func open(_ entry: ProjectStore.Entry) {
+        guard let world = store.load(entry) else { return }
+        openSession = StudioSession(
+            world: world,
+            store: store,
+            localPeerID: settings.peerID,
+            profile: settings.profile
+        )
+    }
+
+    // MARK: Sheets
+
+    private var createSheet: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            Text("New project").font(.title2.weight(.bold))
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text("Name").font(.caption.weight(.semibold)).foregroundStyle(Ablox.Palette.inkMuted)
+                TextField("My World", text: $newName)
+                    .textFieldStyle(.plain)
+                    .padding(12)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+
+            VStack(alignment: .leading, spacing: 9) {
+                Text("Start from").font(.caption.weight(.semibold)).foregroundStyle(Ablox.Palette.inkMuted)
+                ForEach(ProjectStore.Template.allCases) { template in
+                    Button { selectedTemplate = template } label: {
+                        HStack(spacing: 13) {
+                            Image(systemName: template.symbolName)
+                                .font(.title3)
+                                .frame(width: 30)
+                                .foregroundStyle(selectedTemplate == template ? Ablox.Palette.accent : Ablox.Palette.inkMuted)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(template.displayName).font(.headline).foregroundStyle(Ablox.Palette.ink)
+                                Text(template.detail)
+                                    .font(.caption)
+                                    .foregroundStyle(Ablox.Palette.inkMuted)
+                                    .multilineTextAlignment(.leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                            Image(systemName: selectedTemplate == template ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(selectedTemplate == template ? Ablox.Palette.accent : Ablox.Palette.inkFaint)
+                        }
+                        .padding(13)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                .strokeBorder(selectedTemplate == template ? Ablox.Palette.accent.opacity(0.55) : .clear, lineWidth: 1.5)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            HStack(spacing: 11) {
+                Button("Cancel") { isCreating = false }
+                    .buttonStyle(NeonButtonStyle(.secondary, fullWidth: true))
+                Button("Create") {
+                    let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let world = store.createWorld(
+                        named: trimmed.isEmpty ? "My World" : trimmed,
+                        template: selectedTemplate,
+                        author: settings.profile.displayName
+                    )
+                    isCreating = false
+                    openSession = StudioSession(
+                        world: world,
+                        store: store,
+                        localPeerID: settings.peerID,
+                        profile: settings.profile
+                    )
+                }
+                .buttonStyle(NeonButtonStyle(.primary, fullWidth: true))
+            }
+        }
+        .padding(26)
+        .frame(maxWidth: 520)
+        .presentationDetents([.medium, .large])
+        .presentationBackground(.ultraThinMaterial)
+    }
+
+    private func joinSheet(_ peer: DiscoveredPeer) -> some View {
+        VStack(spacing: 20) {
+            VStack(spacing: 6) {
+                Text(peer.worldName).font(.title2.weight(.bold))
+                Text("Shared by \(peer.hostName)")
+                    .font(.subheadline)
+                    .foregroundStyle(Ablox.Palette.inkMuted)
+            }
+            .padding(.top, 26)
+
+            VStack(spacing: 8) {
+                Text("Room code")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Ablox.Palette.inkMuted)
+                TextField("ABC DEF", text: $joinCode)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 28, weight: .bold, design: .monospaced))
+                    .multilineTextAlignment(.center)
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: 250)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+
+            Button("Join and edit together") {
+                // A joined session starts from a blank world; the host's
+                // snapshot replaces it as soon as it arrives.
+                let session = StudioSession(
+                    world: .blank(named: peer.worldName),
+                    store: store,
+                    localPeerID: settings.peerID,
+                    profile: settings.profile
+                )
+                session.join(peer, code: joinCode)
+                joiningPeer = nil
+                openSession = session
+            }
+            .buttonStyle(NeonButtonStyle(.primary, fullWidth: true))
+            .disabled(!RoomCode.isPlausible(joinCode))
+            .opacity(RoomCode.isPlausible(joinCode) ? 1 : 0.5)
+            .padding(.horizontal, 30)
+
+            Spacer(minLength: 0)
+        }
+        .presentationDetents([.height(330)])
+        .presentationBackground(.ultraThinMaterial)
+    }
+}
+
+// MARK: - Discovery model
+
+/// Thin observable wrapper around `AbloxBrowser`, filtered to Studio sessions.
+@MainActor
+final class BrowserModel: ObservableObject {
+    @Published private(set) var peers: [DiscoveredPeer] = []
+    @Published private(set) var unavailableReason: String?
+
+    /// Studio only lists other Studio sessions — joining a running *game*
+    /// from the editor would put you in a world you cannot edit.
+    var studioPeers: [DiscoveredPeer] {
+        peers.filter(\.isStudioSession)
+    }
+
+    private let browser = AbloxBrowser()
+
+    init() {
+        browser.onPeersChange = { [weak self] peers in
+            Task { @MainActor in self?.peers = peers }
+        }
+        browser.onStateChange = { [weak self] state in
+            Task { @MainActor in
+                switch state {
+                case .browsing, .stopped: self?.unavailableReason = nil
+                case let .unavailable(reason): self?.unavailableReason = reason
+                }
+            }
+        }
+    }
+
+    func start() { browser.start() }
+    func stop() { browser.stop() }
+}
