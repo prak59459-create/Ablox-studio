@@ -102,15 +102,21 @@ public final class PeerConnection {
         connection.cancel()
     }
 
+    /// The Security framework's SSL/TLS error block, `errSSLProtocol` (-9800)
+    /// down to `errSSLUnexpectedRecord` and friends near -9860.
+    private static let tlsErrorRange: ClosedRange<OSStatus> = (-9860)...(-9800)
+
     /// Human-readable reason, with the PSK mismatch called out specifically —
-    /// "-9836" tells a 12-year-old nothing, "wrong room code" tells them
+    /// "-9847" tells a 12-year-old nothing, "wrong room code" tells them
     /// everything.
     static func describe(_ error: NWError) -> String {
         if case let .tls(status) = error {
-            // errSSLBadRecordMac / handshake failures are what a wrong PSK
-            // looks like from the outside.
+            // Security's SSL/TLS errors run *downward* from errSSLProtocol
+            // (-9800) to roughly -9860. A wrong room code surfaces in here as
+            // a handshake or record-MAC failure (errSSLBadRecordMac is -9847),
+            // so the range has to extend below -9800, not above it.
             switch status {
-            case -9800...(-9800 + 200):
+            case Self.tlsErrorRange:
                 return "Could not connect — check the room code is the same on both iPads."
             default:
                 return "Secure connection failed (TLS \(status))."

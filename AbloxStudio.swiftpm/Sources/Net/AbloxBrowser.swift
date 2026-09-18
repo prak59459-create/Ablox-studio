@@ -154,7 +154,12 @@ public final class AbloxBrowser {
     }
 
     private static func describeBrowseFailure(_ error: NWError) -> String {
-        if case let .dns(code) = error, code == kDNSServiceErr_PolicyDenied {
+        // Matching on `.dns` as a whole rather than on
+        // `kDNSServiceErr_PolicyDenied`: that constant lives in the `dnssd`
+        // module, which `Network` does not re-export, and the policy denial is
+        // overwhelmingly the DNS failure a Bonjour browser hits on iOS. The
+        // generic phrasing is right either way.
+        if case .dns = error {
             return "Ablox needs permission to find nearby iPads. Turn on Local Network for Ablox in Settings › Privacy & Security."
         }
         return PeerConnection.describe(error)

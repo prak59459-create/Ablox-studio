@@ -230,15 +230,13 @@ public final class WorldScene {
             entities[blockID]?.isEnabled = visible
 
         case let .setCollision(blockID, enabled):
-            guard let entity = entities[blockID] else { return }
-            if enabled {
-                // Restored from the block's own definition on the next sync;
-                // removing is the only part that has to happen immediately.
-                break
-            } else {
-                entity.components.remove(CollisionComponent.self)
-                entity.components.remove(PhysicsBodyComponent.self)
-            }
+            // Only the removal has to happen now — a floor that vanishes must
+            // stop holding the player up this frame. Re-enabling is picked up
+            // from the block's own definition on the next sync, which rebuilds
+            // the collider with the right shape.
+            guard !enabled, let entity = entities[blockID] else { return }
+            entity.components.remove(CollisionComponent.self)
+            entity.components.remove(PhysicsBodyComponent.self)
 
         case .teleportPlayer, .awardPoints, .announce, .playSound, .endRound:
             // Not scene-level: handled by the viewport and the HUD.
