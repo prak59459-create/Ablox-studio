@@ -14,11 +14,11 @@ public enum BlockShape: String, Codable, CaseIterable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .box: return "Box"
-        case .sphere: return "Sphere"
-        case .cylinder: return "Cylinder"
-        case .cone: return "Cone"
-        case .plane: return "Plane"
+        case .box: return L("Box")
+        case .sphere: return L("Sphere")
+        case .cylinder: return L("Cylinder")
+        case .cone: return L("Cone")
+        case .plane: return L("Plane")
         }
     }
 
@@ -60,11 +60,11 @@ public enum MaterialKind: String, Codable, CaseIterable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .plastic: return "Plastic"
-        case .metal: return "Metal"
-        case .glass: return "Glass"
-        case .neon: return "Neon"
-        case .matte: return "Matte"
+        case .plastic: return L("Plastic")
+        case .metal: return L("Metal")
+        case .glass: return L("Glass")
+        case .neon: return L("Neon")
+        case .matte: return L("Matte")
         }
     }
 
@@ -125,16 +125,16 @@ public enum BlockBehavior: String, Codable, CaseIterable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .none: return "None"
-        case .spawn: return "Spawn Point"
-        case .checkpoint: return "Checkpoint"
-        case .hazard: return "Hazard"
-        case .collectible: return "Collectible"
-        case .goal: return "Goal"
-        case .trigger: return "Trigger"
-        case .bounce: return "Bouncy"
-        case .disappear: return "Disappearing"
-        case .teleport: return "Teleporter"
+        case .none: return L("None")
+        case .spawn: return L("Spawn Point")
+        case .checkpoint: return L("Checkpoint")
+        case .hazard: return L("Hazard")
+        case .collectible: return L("Collectible")
+        case .goal: return L("Goal")
+        case .trigger: return L("Trigger")
+        case .bounce: return L("Bouncy")
+        case .disappear: return L("Disappearing")
+        case .teleport: return L("Teleporter")
         }
     }
 
@@ -161,16 +161,16 @@ public enum BlockBehavior: String, Codable, CaseIterable, Sendable {
     /// Adding a case forces a sentence to be written for it.
     public var guidance: String {
         switch self {
-        case .none: return "Ordinary scenery. Players can stand on it and nothing else happens."
-        case .spawn: return "Players start on top of this block."
-        case .checkpoint: return "Touching it sets where the player respawns. Players walk through it."
-        case .hazard: return "Touching it sends the player back to their last checkpoint."
-        case .collectible: return "Each player can collect it once. Players walk through it."
-        case .goal: return "Touching it ends the round for everyone."
-        case .trigger: return "Does nothing by itself — add a rule that listens for it."
-        case .bounce: return "Launches anyone who lands on it. A trampoline."
-        case .disappear: return "Vanishes shortly after it is stepped on, then comes back."
-        case .teleport: return "Moves the player to another block. Players walk through it."
+        case .none: return L("Ordinary scenery. Players can stand on it and nothing else happens.")
+        case .spawn: return L("Players start on top of this block.")
+        case .checkpoint: return L("Touching it sets where the player respawns. Players walk through it.")
+        case .hazard: return L("Touching it sends the player back to their last checkpoint.")
+        case .collectible: return L("Each player can collect it once. Players walk through it.")
+        case .goal: return L("Touching it ends the round for everyone.")
+        case .trigger: return L("Does nothing by itself — add a rule that listens for it.")
+        case .bounce: return L("Launches anyone who lands on it. A trampoline.")
+        case .disappear: return L("Vanishes shortly after it is stepped on, then comes back.")
+        case .teleport: return L("Moves the player to another block. Players walk through it.")
         }
     }
 
@@ -458,15 +458,15 @@ public extension BlockData {
 
         public var displayName: String {
             switch self {
-            case .block: return "Block"
-            case .platform: return "Platform"
-            case .pillar: return "Pillar"
-            case .ramp: return "Ramp"
-            case .orb: return "Orb"
-            case .hazard: return "Hazard"
-            case .checkpoint: return "Checkpoint"
-            case .goal: return "Goal"
-            case .spawn: return "Spawn"
+            case .block: return L("Block")
+            case .platform: return L("Platform")
+            case .pillar: return L("Pillar")
+            case .ramp: return L("Ramp")
+            case .orb: return L("Orb")
+            case .hazard: return L("Hazard")
+            case .checkpoint: return L("Checkpoint")
+            case .goal: return L("Goal")
+            case .spawn: return L("Spawn")
             }
         }
 
@@ -492,15 +492,15 @@ public extension BlockData {
         /// the palette does not produce.
         public var guidance: String {
             switch self {
-            case .block: return "A plain 2×1×2 box. The everyday building material."
-            case .platform: return "A wide, thin 6×0.5×6 slab. Floors and floating islands."
-            case .pillar: return "A tall thin cylinder, 4 high. Posts, columns, poles."
-            case .ramp: return "A long box already tilted 25°, so players can walk up it."
-            case .orb: return "A glowing yellow sphere worth 10 points, collectible once per player."
-            case .hazard: return "A flat slab of lava. Touching it sends players back to their checkpoint."
-            case .checkpoint: return "A green pad that saves where a player respawns."
-            case .goal: return "A purple glass gate. Touching it ends the round."
-            case .spawn: return "A cyan pad players start on. Every world needs at least one."
+            case .block: return L("A plain 2×1×2 box. The everyday building material.")
+            case .platform: return L("A wide, thin 6×0.5×6 slab. Floors and floating islands.")
+            case .pillar: return L("A tall thin cylinder, 4 high. Posts, columns, poles.")
+            case .ramp: return L("A long box already tilted 25°, so players can walk up it.")
+            case .orb: return L("A glowing yellow sphere worth 10 points, collectible once per player.")
+            case .hazard: return L("A flat slab of lava. Touching it sends players back to their checkpoint.")
+            case .checkpoint: return L("A green pad that saves where a player respawns.")
+            case .goal: return L("A purple glass gate. Touching it ends the round.")
+            case .spawn: return L("A cyan pad players start on. Every world needs at least one.")
             }
         }
     }

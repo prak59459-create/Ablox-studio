@@ -18,10 +18,10 @@ public struct ShopItem: Codable, Hashable, Identifiable, Sendable {
 
         public var displayName: String {
             switch self {
-            case .bodyColor: return "Body"
-            case .headColor: return "Head & arms"
-            case .accentColor: return "Legs & hat"
-            case .hat: return "Hat"
+            case .bodyColor: return L("Body")
+            case .headColor: return L("Head & arms")
+            case .accentColor: return L("Legs & hat")
+            case .hat: return L("Hat")
             }
         }
     }
@@ -30,7 +30,15 @@ public struct ShopItem: Codable, Hashable, Identifiable, Sendable {
     /// UUID so a saved wallet stays readable and a catalogue entry can be
     /// re-added later without orphaning what people already bought.
     public let id: String
+    /// The English name. Built once into the catalogue, so it is stored as the
+    /// original and translated when shown — `displayName`. Translating it here
+    /// would freeze whatever language the app happened to be in when the
+    /// catalogue was first built.
     public let name: String
+
+    /// The name to show. Falls back to `name` for anything untranslated, so a
+    /// new colour is readable the moment it exists.
+    public var displayName: String { L(name) }
     public let kind: Kind
     public let price: Int
     /// For colour items.

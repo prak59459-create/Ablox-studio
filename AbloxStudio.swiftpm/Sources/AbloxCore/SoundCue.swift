@@ -72,8 +72,25 @@ public enum SoundCue: String, CaseIterable, Sendable {
         return SoundCue(rawValue: key)
     }
 
+    /// The label in Studio's sound picker.
+    ///
+    /// Spelled out rather than derived from `rawValue`, for two reasons: a
+    /// capitalised raw value cannot be translated (there is nothing to look
+    /// up), and "Join" alone does not say whose join it is. `rawValue` stays
+    /// the wire format, which must not change with the UI language.
     public var displayName: String {
-        rawValue.prefix(1).uppercased() + rawValue.dropFirst()
+        switch self {
+        case .collect: return L("Collect")
+        case .checkpoint: return L("Checkpoint reached")
+        case .hurt: return L("Hurt")
+        case .bounce: return L("Bounce")
+        case .teleport: return L("Teleport")
+        case .goal: return L("Goal")
+        case .join: return L("Player joined")
+        case .leave: return L("Player left")
+        case .tick: return L("Tick")
+        case .error: return L("Error")
+        }
     }
 }
 

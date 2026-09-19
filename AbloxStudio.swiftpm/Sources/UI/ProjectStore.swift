@@ -161,15 +161,15 @@ public final class ProjectStore: ObservableObject {
 
         public var displayName: String {
             switch self {
-            case .starter: return "Obstacle Course"
-            case .blank: return "Blank"
+            case .starter: return L("Obstacle Course")
+            case .blank: return L("Blank")
             }
         }
 
         public var detail: String {
             switch self {
-            case .starter: return "A floor, a spawn pad, stairs, a coin and a finish line. Tap Play and it already works."
-            case .blank: return "Just a floor and a spawn point. Build from nothing."
+            case .starter: return L("A floor, a spawn pad, stairs, a coin and a finish line. Tap Play and it already works.")
+            case .blank: return L("Just a floor and a spawn point. Build from nothing.")
             }
         }
 

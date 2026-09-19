@@ -95,11 +95,11 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
 
         public var displayName: String {
             switch self {
-            case .none: return "None"
-            case .cap: return "Cap"
-            case .crown: return "Crown"
-            case .antenna: return "Antenna"
-            case .halo: return "Halo"
+            case .none: return L("None")
+            case .cap: return L("Cap")
+            case .crown: return L("Crown")
+            case .antenna: return L("Antenna")
+            case .halo: return L("Halo")
             }
         }
 

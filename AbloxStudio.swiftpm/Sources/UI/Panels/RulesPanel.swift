@@ -40,7 +40,7 @@ struct RulesPanel: View {
 
     private var header: some View {
         HStack {
-            Label("Rules", systemImage: "bolt.fill")
+            Label(L("Rules"), systemImage: "bolt.fill")
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(Ablox.Palette.ink)
             Spacer()
@@ -54,7 +54,7 @@ struct RulesPanel: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Add rule")
+            .accessibilityLabel(L("Add rule"))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -108,7 +108,7 @@ struct RulesPanel: View {
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 12) {
-                    TextField("Rule name", text: Binding(
+                    TextField(L("Rule name"), text: Binding(
                         get: { rule.name },
                         set: { newValue in update(rule) { $0.name = newValue } }
                     ))
@@ -124,7 +124,7 @@ struct RulesPanel: View {
                     Button(role: .destructive) {
                         session.edit { $0.setRules(rules.filter { $0.id != rule.id }) }
                     } label: {
-                        Label("Delete rule", systemImage: "trash")
+                        Label(L("Delete rule"), systemImage: "trash")
                             .font(.caption)
                             .frame(maxWidth: .infinity)
                     }
@@ -144,9 +144,9 @@ struct RulesPanel: View {
     // MARK: Trigger
 
     private func triggerEditor(_ rule: EventRule) -> some View {
-        InspectorGroup("When") {
+        InspectorGroup(L("When")) {
             VStack(alignment: .leading, spacing: 8) {
-                Picker("Trigger", selection: Binding(
+                Picker(L("Trigger"), selection: Binding(
                     get: { TriggerKind(rule.trigger) },
                     set: { kind in
                         update(rule) { $0.trigger = kind.makeTrigger(existing: $0.trigger, world: world) }
@@ -187,7 +187,7 @@ struct RulesPanel: View {
             }
 
         case let .tagTouched(tag):
-            TextField("tag", text: Binding(
+            TextField(L("tag"), text: Binding(
                 get: { tag },
                 set: { newValue in update(rule) { $0.trigger = .tagTouched(tag: newValue) } }
             ))
@@ -215,7 +215,7 @@ struct RulesPanel: View {
     // MARK: Actions
 
     private func actionsEditor(_ rule: EventRule) -> some View {
-        InspectorGroup("Then") {
+        InspectorGroup(L("Then")) {
             VStack(alignment: .leading, spacing: 7) {
                 ForEach(Array(rule.actions.enumerated()), id: \.offset) { index, action in
                     HStack(spacing: 7) {
@@ -228,7 +228,7 @@ struct RulesPanel: View {
                             .foregroundStyle(Ablox.Palette.ink)
 
                         if case let .playSound(name) = action {
-                            Picker("Sound", selection: Binding(
+                            Picker(L("Sound"), selection: Binding(
                                 get: { SoundCue.named(name) ?? .collect },
                                 set: { cue in
                                     update(rule) { $0.actions[index] = .playSound(name: cue.rawValue) }
@@ -249,7 +249,7 @@ struct RulesPanel: View {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .font(.system(size: 9))
                                     .foregroundStyle(Ablox.Palette.warning)
-                                    .help("Unknown sound — nothing will play")
+                                    .help(L("Unknown sound — nothing will play"))
                             }
                         }
 
@@ -275,7 +275,7 @@ struct RulesPanel: View {
                         }
                     }
                 } label: {
-                    Label("Add action", systemImage: "plus")
+                    Label(L("Add action"), systemImage: "plus")
                         .font(.caption)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 7)
@@ -287,9 +287,9 @@ struct RulesPanel: View {
     }
 
     private func limitsEditor(_ rule: EventRule) -> some View {
-        InspectorGroup("Limits") {
+        InspectorGroup(L("Limits")) {
             VStack(alignment: .leading, spacing: 8) {
-                Toggle("Only once", isOn: Binding(
+                Toggle(L("Only once"), isOn: Binding(
                     get: { rule.maxFireCount == 1 },
                     set: { newValue in update(rule) { $0.maxFireCount = newValue ? 1 : nil } }
                 ))
@@ -306,11 +306,11 @@ struct RulesPanel: View {
     // MARK: Helpers
 
     private func blockPicker(selected: UUID, onChange: @escaping (UUID) -> Void) -> some View {
-        Picker("Block", selection: Binding(get: { selected }, set: onChange)) {
+        Picker(L("Block"), selection: Binding(get: { selected }, set: onChange)) {
             // A rule can point at a block that has since been deleted; show
             // that rather than silently snapping to something else.
             if world.block(id: selected) == nil {
-                Text("(deleted)").tag(selected)
+                Text(L("(deleted)")).tag(selected)
             }
             ForEach(world.blocks) { block in
                 Text(block.name).tag(block.id)
@@ -385,13 +385,13 @@ private enum TriggerKind: String, CaseIterable, Hashable {
 
     var displayName: String {
         switch self {
-        case .blockTouched: return "A player touches a block"
-        case .tagTouched: return "A player touches any tagged block"
-        case .blockTapped: return "A player taps a block"
-        case .proximity: return "A player comes close"
-        case .worldStart: return "The round starts"
-        case .timer: return "On a timer"
-        case .scoreReached: return "A score is reached"
+        case .blockTouched: return L("A player touches a block")
+        case .tagTouched: return L("A player touches any tagged block")
+        case .blockTapped: return L("A player taps a block")
+        case .proximity: return L("A player comes close")
+        case .worldStart: return L("The round starts")
+        case .timer: return L("On a timer")
+        case .scoreReached: return L("A score is reached")
         }
     }
 
@@ -416,15 +416,15 @@ private enum ActionKind: String, CaseIterable, Hashable {
 
     var displayName: String {
         switch self {
-        case .tint: return "Change a block's colour"
-        case .move: return "Move a block"
-        case .setVisible: return "Hide a block"
-        case .setCollision: return "Make a block walk-through"
-        case .teleportPlayer: return "Teleport the player"
-        case .awardPoints: return "Award points"
-        case .announce: return "Show a message"
-        case .playSound: return "Play a sound"
-        case .endRound: return "End the round"
+        case .tint: return L("Change a block's colour")
+        case .move: return L("Move a block")
+        case .setVisible: return L("Hide a block")
+        case .setCollision: return L("Make a block walk-through")
+        case .teleportPlayer: return L("Teleport the player")
+        case .awardPoints: return L("Award points")
+        case .announce: return L("Show a message")
+        case .playSound: return L("Play a sound")
+        case .endRound: return L("End the round")
         }
     }
 

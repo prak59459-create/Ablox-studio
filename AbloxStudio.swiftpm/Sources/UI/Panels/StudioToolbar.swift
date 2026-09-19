@@ -19,7 +19,7 @@ struct StudioToolbar: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(Ablox.Palette.ink)
-            .accessibilityLabel("Back to projects")
+            .accessibilityLabel(L("Back to projects"))
 
             worldTitle
 
@@ -69,7 +69,7 @@ struct StudioToolbar: View {
                 Circle()
                     .fill(Ablox.Palette.warning)
                     .frame(width: 6, height: 6)
-                    .accessibilityLabel("Unsaved changes")
+                    .accessibilityLabel(L("Unsaved changes"))
             }
         }
         .frame(minWidth: 90, alignment: .leading)
@@ -106,11 +106,11 @@ struct StudioToolbar: View {
     private var snapControls: some View {
         HStack(spacing: 8) {
             Menu {
-                Picker("Grid", selection: Binding(
+                Picker(L("Grid"), selection: Binding(
                     get: { session.gridSize },
                     set: { session.gridSize = $0 }
                 )) {
-                    Text("Off").tag(Float(0))
+                    Text(L("Off")).tag(Float(0))
                     Text("0.25 m").tag(Float(0.25))
                     Text("0.5 m").tag(Float(0.5))
                     Text("1 m").tag(Float(1))
@@ -120,19 +120,19 @@ struct StudioToolbar: View {
                 HStack(spacing: 4) {
                     Image(systemName: session.gridSize > 0 ? "grid" : "grid.circle")
                         .font(.caption)
-                    Text(session.gridSize > 0 ? formatted(session.gridSize) : "Off")
+                    Text(session.gridSize > 0 ? formatted(session.gridSize) : L("Off"))
                         .font(.caption.monospacedDigit())
                 }
                 .foregroundStyle(session.gridSize > 0 ? Ablox.Palette.accent : Ablox.Palette.inkMuted)
             }
-            .accessibilityLabel("Grid snapping")
+            .accessibilityLabel(L("Grid snapping"))
 
             Menu {
-                Picker("Angle", selection: Binding(
+                Picker(L("Angle"), selection: Binding(
                     get: { session.angleSnap },
                     set: { session.angleSnap = $0 }
                 )) {
-                    Text("Off").tag(Float(0))
+                    Text(L("Off")).tag(Float(0))
                     Text("15°").tag(Float(15))
                     Text("45°").tag(Float(45))
                     Text("90°").tag(Float(90))
@@ -140,12 +140,12 @@ struct StudioToolbar: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "angle").font(.caption)
-                    Text(session.angleSnap > 0 ? "\(Int(session.angleSnap))°" : "Off")
+                    Text(session.angleSnap > 0 ? "\(Int(session.angleSnap))°" : L("Off"))
                         .font(.caption.monospacedDigit())
                 }
                 .foregroundStyle(session.angleSnap > 0 ? Ablox.Palette.accent : Ablox.Palette.inkMuted)
             }
-            .accessibilityLabel("Angle snapping")
+            .accessibilityLabel(L("Angle snapping"))
         }
         .disabled(session.mode == .play)
         .opacity(session.mode == .play ? 0.4 : 1)
@@ -157,19 +157,19 @@ struct StudioToolbar: View {
 
     private var historyControls: some View {
         HStack(spacing: 3) {
-            toolbarButton("arrow.uturn.backward", label: session.document.history.undoLabel.map { "Undo \($0)" } ?? "Undo") {
+            toolbarButton("arrow.uturn.backward", label: session.document.history.undoLabel.map { L("Undo {}", $0) } ?? L("Undo")) {
                 session.undo()
             }
             .disabled(!session.document.history.canUndo)
 
-            toolbarButton("arrow.uturn.forward", label: session.document.history.redoLabel.map { "Redo \($0)" } ?? "Redo") {
+            toolbarButton("arrow.uturn.forward", label: session.document.history.redoLabel.map { L("Redo {}", $0) } ?? L("Redo")) {
                 session.redo()
             }
             .disabled(!session.document.history.canRedo)
 
-            toolbarButton("scope", label: "Frame selection", action: onFrameSelection)
+            toolbarButton("scope", label: L("Frame selection"), action: onFrameSelection)
 
-            toolbarButton("doc.on.doc", label: "Duplicate") {
+            toolbarButton("doc.on.doc", label: L("Duplicate")) {
                 session.duplicateSelection()
             }
             .disabled(session.document.selection.isEmpty)
@@ -193,7 +193,7 @@ struct StudioToolbar: View {
     @ViewBuilder private var collaboratorBadge: some View {
         let others = session.collaborators.count
         if others > 1 {
-            Badge("\(others) editing", color: Ablox.Palette.success, systemImage: "person.2.fill")
+            Badge(L("{} editing", others), color: Ablox.Palette.success, systemImage: "person.2.fill")
         }
     }
 
@@ -208,7 +208,7 @@ struct StudioToolbar: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(Ablox.Palette.inkMuted)
-        .accessibilityLabel("How to make a map")
+        .accessibilityLabel(L("How to make a map"))
     }
 
     private var shareButton: some View {
@@ -257,10 +257,10 @@ struct StudioToolbar: View {
                 .foregroundStyle(Ablox.Palette.accent)
                 .padding(.top, 28)
 
-            Text("Build together")
+            Text(L("Build together"))
                 .font(.title2.weight(.bold))
 
-            Text("Other iPads running Ablox Studio can find this project and edit it with you. Give them the code.")
+            Text(L("Other iPads running Ablox Studio can find this project and edit it with you. Give them the code."))
                 .font(.subheadline)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(Ablox.Palette.inkMuted)
@@ -282,20 +282,20 @@ struct StudioToolbar: View {
                 ProgressView().tint(Ablox.Palette.accent).padding(.vertical, 30)
             }
 
-            Label("Encrypted with TLS 1.3", systemImage: "lock.shield.fill")
+            Label(L("Encrypted with TLS 1.3"), systemImage: "lock.shield.fill")
                 .font(.caption)
                 .foregroundStyle(Ablox.Palette.success)
 
             Spacer(minLength: 0)
 
             HStack(spacing: 11) {
-                Button("Stop sharing") {
+                Button(L("Stop sharing")) {
                     session.stopSharing()
                     showShareSheet = false
                 }
                 .buttonStyle(NeonButtonStyle(.secondary, fullWidth: true))
 
-                Button("Done") { showShareSheet = false }
+                Button(L("Done")) { showShareSheet = false }
                     .buttonStyle(NeonButtonStyle(.primary, fullWidth: true))
             }
             .padding(.horizontal, 26)

@@ -67,8 +67,8 @@ struct InspectorPanel: View {
     }
 
     private func nameField(_ block: BlockData) -> some View {
-        InspectorGroup("Name") {
-            TextField("Part", text: Binding(
+        InspectorGroup(L("Name")) {
+            TextField(L("Part"), text: Binding(
                 get: { block.name },
                 set: { newValue in
                     session.edit { $0.mutateSelection(label: "Rename") { $0.name = newValue } }
@@ -82,7 +82,7 @@ struct InspectorPanel: View {
     }
 
     private func transformSection(_ block: BlockData) -> some View {
-        InspectorGroup("Transform") {
+        InspectorGroup(L("Transform")) {
             VStack(spacing: 9) {
                 vectorField("Position", value: block.position, step: 0.5) { newValue in
                     session.edit { $0.mutateSelection(label: "Move") { $0.position = newValue } }
@@ -98,7 +98,7 @@ struct InspectorPanel: View {
     }
 
     private func appearanceSection(_ block: BlockData) -> some View {
-        InspectorGroup("Appearance") {
+        InspectorGroup(L("Appearance")) {
             VStack(alignment: .leading, spacing: 11) {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 30), spacing: 7)], spacing: 7) {
                     ForEach(ColorRGBA.palette, id: \.hexString) { color in
@@ -108,14 +108,14 @@ struct InspectorPanel: View {
                     }
                 }
 
-                labelledPicker("Shape", selection: Binding(
+                labelledPicker(L("Shape"), selection: Binding(
                     get: { block.shape },
                     set: { newValue in
                         session.edit { $0.mutateSelection(label: "Change shape") { $0.shape = newValue } }
                     }
                 ), options: BlockShape.allCases) { $0.displayName }
 
-                labelledPicker("Material", selection: Binding(
+                labelledPicker(L("Material"), selection: Binding(
                     get: { block.material },
                     set: { newValue in
                         session.edit { $0.mutateSelection(label: "Change material") { $0.material = newValue } }
@@ -126,9 +126,9 @@ struct InspectorPanel: View {
     }
 
     private func behaviorSection(_ block: BlockData) -> some View {
-        InspectorGroup("Behaviour") {
+        InspectorGroup(L("Behaviour")) {
             VStack(alignment: .leading, spacing: 9) {
-                labelledPicker("Acts as", selection: Binding(
+                labelledPicker(L("Acts as"), selection: Binding(
                     get: { block.behavior },
                     set: { newValue in
                         session.edit { $0.mutateSelection(label: "Change behaviour") { $0.behavior = newValue } }
@@ -179,30 +179,30 @@ struct InspectorPanel: View {
         VStack(alignment: .leading, spacing: 9) {
             switch block.behavior {
             case .bounce:
-                gimmickSlider("Launch speed", value: block.gimmick.bounceSpeed, range: 6...30, unit: " m/s") { newValue in
+                gimmickSlider(L("Launch speed"), value: block.gimmick.bounceSpeed, range: 6...30, unit: " m/s") { newValue in
                     session.edit { $0.mutateSelection(label: "Change launch speed") { $0.gimmick.bounceSpeed = newValue } }
                 }
 
             case .disappear:
-                gimmickSlider("Delay before it goes", value: Float(block.gimmick.disappearDelay), range: 0...2, unit: " s") { newValue in
+                gimmickSlider(L("Delay before it goes"), value: Float(block.gimmick.disappearDelay), range: 0...2, unit: " s") { newValue in
                     session.edit { $0.mutateSelection(label: "Change delay") { $0.gimmick.disappearDelay = Double(newValue) } }
                 }
-                gimmickSlider("Time until it returns", value: Float(block.gimmick.respawnDelay), range: 0.5...15, unit: " s") { newValue in
+                gimmickSlider(L("Time until it returns"), value: Float(block.gimmick.respawnDelay), range: 0.5...15, unit: " s") { newValue in
                     session.edit { $0.mutateSelection(label: "Change respawn") { $0.gimmick.respawnDelay = Double(newValue) } }
                 }
 
             case .teleport:
                 HStack {
-                    Text("Sends you to").font(.caption2).foregroundStyle(Ablox.Palette.inkMuted)
+                    Text(L("Sends you to")).font(.caption2).foregroundStyle(Ablox.Palette.inkMuted)
                     Spacer()
-                    Picker("Target", selection: Binding(
+                    Picker(L("Target"), selection: Binding(
                         get: { block.gimmick.teleportTargetID ?? Self.noTeleportTarget },
                         set: { newValue in
                             let target = newValue == Self.noTeleportTarget ? nil : newValue
                             session.edit { $0.mutateSelection(label: "Change target") { $0.gimmick.teleportTargetID = target } }
                         }
                     )) {
-                        Text("Nowhere").tag(Self.noTeleportTarget)
+                        Text(L("Nowhere")).tag(Self.noTeleportTarget)
                         // A pad pointing at itself would teleport the player
                         // onto the pad, forever.
                         ForEach(world.blocks.filter { $0.id != block.id }) { candidate in
@@ -219,7 +219,7 @@ struct InspectorPanel: View {
                 EmptyView()
             }
 
-            gimmickSlider("Wait between uses", value: Float(block.gimmick.cooldown), range: 0...5, unit: " s") { newValue in
+            gimmickSlider(L("Wait between uses"), value: Float(block.gimmick.cooldown), range: 0...5, unit: " s") { newValue in
                 session.edit { $0.mutateSelection(label: "Change cooldown") { $0.gimmick.cooldown = Double(newValue) } }
             }
         }
@@ -261,7 +261,7 @@ struct InspectorPanel: View {
     }
 
     private func flagsSection(_ block: BlockData) -> some View {
-        InspectorGroup("Physics") {
+        InspectorGroup(L("Physics")) {
             VStack(alignment: .leading, spacing: 7) {
                 toggle("Anchored", isOn: block.isAnchored, hint: "Stays put. Turn off to let it fall in Play mode.") { newValue in
                     session.edit { $0.mutateSelection(label: "Toggle anchored") { $0.isAnchored = newValue } }
@@ -277,9 +277,9 @@ struct InspectorPanel: View {
     }
 
     private func tagsSection(_ block: BlockData) -> some View {
-        InspectorGroup("Tags") {
+        InspectorGroup(L("Tags")) {
             VStack(alignment: .leading, spacing: 7) {
-                TextField("coin, trap, door…", text: Binding(
+                TextField(L("coin, trap, door…"), text: Binding(
                     get: { block.tags.joined(separator: ", ") },
                     set: { newValue in
                         let tags = newValue
@@ -295,7 +295,7 @@ struct InspectorPanel: View {
                 .padding(8)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
 
-                Text("A rule can listen for any block with a tag, so one rule can cover a whole group.")
+                Text(L("A rule can listen for any block with a tag, so one rule can cover a whole group."))
                     .font(.system(size: 10))
                     .foregroundStyle(Ablox.Palette.inkFaint)
                     .fixedSize(horizontal: false, vertical: true)
@@ -307,7 +307,7 @@ struct InspectorPanel: View {
 
     private var multiSelectionBody: some View {
         VStack(alignment: .leading, spacing: 18) {
-            InspectorGroup("Colour all") {
+            InspectorGroup(L("Colour all")) {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 30), spacing: 7)], spacing: 7) {
                     ForEach(ColorRGBA.palette, id: \.hexString) { color in
                         ColorSwatch(color: color, isSelected: false, size: 28) {
@@ -317,7 +317,7 @@ struct InspectorPanel: View {
                 }
             }
 
-            InspectorGroup("Nudge all") {
+            InspectorGroup(L("Nudge all")) {
                 VStack(spacing: 7) {
                     nudgeRow("Move", axes: ["X", "Y", "Z"]) { axis, amount in
                         let offset = Vec3(axis == 0 ? amount : 0, axis == 1 ? amount : 0, axis == 2 ? amount : 0)
@@ -326,15 +326,15 @@ struct InspectorPanel: View {
                 }
             }
 
-            InspectorGroup("Actions") {
+            InspectorGroup(L("Actions")) {
                 VStack(spacing: 7) {
                     Button { session.duplicateSelection() } label: {
-                        Label("Duplicate", systemImage: "doc.on.doc").frame(maxWidth: .infinity)
+                        Label(L("Duplicate"), systemImage: "doc.on.doc").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(NeonButtonStyle(.secondary, fullWidth: true))
 
                     Button(role: .destructive) { session.deleteSelection() } label: {
-                        Label("Delete all", systemImage: "trash").frame(maxWidth: .infinity)
+                        Label(L("Delete all"), systemImage: "trash").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(NeonButtonStyle(.destructive, fullWidth: true))
                 }
@@ -367,8 +367,8 @@ struct InspectorPanel: View {
         let environment = session.document.world.environment
 
         return VStack(alignment: .leading, spacing: 18) {
-            InspectorGroup("World name") {
-                TextField("World", text: Binding(
+            InspectorGroup(L("World name")) {
+                TextField(L("World"), text: Binding(
                     get: { session.document.world.name },
                     set: { newName in
                         session.edit { document in document.renameWorld(newName) }
@@ -380,19 +380,19 @@ struct InspectorPanel: View {
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             }
 
-            InspectorGroup("Lighting") {
+            InspectorGroup(L("Lighting")) {
                 VStack(alignment: .leading, spacing: 9) {
-                    labelledSlider("Brightness", value: environment.ambientIntensity, range: 0.1...1.5) { newValue in
+                    labelledSlider(L("Brightness"), value: environment.ambientIntensity, range: 0.1...1.5) { newValue in
                         var updated = environment
                         updated.ambientIntensity = newValue
                         session.edit { $0.setEnvironment(updated) }
                     }
-                    labelledSlider("Sun height", value: environment.sunPitchDegrees, range: -89...(-5), unit: "°") { newValue in
+                    labelledSlider(L("Sun height"), value: environment.sunPitchDegrees, range: -89...(-5), unit: "°") { newValue in
                         var updated = environment
                         updated.sunPitchDegrees = newValue
                         session.edit { $0.setEnvironment(updated) }
                     }
-                    labelledSlider("Sun direction", value: environment.sunYawDegrees, range: -180...180, unit: "°") { newValue in
+                    labelledSlider(L("Sun direction"), value: environment.sunYawDegrees, range: -180...180, unit: "°") { newValue in
                         var updated = environment
                         updated.sunYawDegrees = newValue
                         session.edit { $0.setEnvironment(updated) }
@@ -400,28 +400,28 @@ struct InspectorPanel: View {
                 }
             }
 
-            InspectorGroup("Physics") {
+            InspectorGroup(L("Physics")) {
                 VStack(alignment: .leading, spacing: 9) {
-                    labelledSlider("Gravity", value: environment.gravity, range: -30...(-1), unit: "m/s²") { newValue in
+                    labelledSlider(L("Gravity"), value: environment.gravity, range: -30...(-1), unit: "m/s²") { newValue in
                         var updated = environment
                         updated.gravity = newValue
                         session.edit { $0.setEnvironment(updated) }
                     }
-                    labelledSlider("Fall limit", value: environment.killPlaneHeight, range: -200...(-5), unit: "m") { newValue in
+                    labelledSlider(L("Fall limit"), value: environment.killPlaneHeight, range: -200...(-5), unit: "m") { newValue in
                         var updated = environment
                         updated.killPlaneHeight = newValue
                         session.edit { $0.setEnvironment(updated) }
                     }
-                    Text("A player who falls below the fall limit respawns.")
+                    Text(L("A player who falls below the fall limit respawns."))
                         .font(.system(size: 10))
                         .foregroundStyle(Ablox.Palette.inkFaint)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            InspectorGroup("Ground") {
+            InspectorGroup(L("Ground")) {
                 VStack(alignment: .leading, spacing: 9) {
-                    Toggle("Show backdrop", isOn: Binding(
+                    Toggle(L("Show backdrop"), isOn: Binding(
                         get: { environment.showGroundPlane },
                         set: { newValue in
                             var updated = environment

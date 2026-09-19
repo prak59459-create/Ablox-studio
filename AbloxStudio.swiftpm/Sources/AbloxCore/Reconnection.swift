@@ -55,21 +55,21 @@ public enum DisconnectReason: Hashable, Sendable {
     public var message: String {
         switch self {
         case .userLeft:
-            return "You left the world."
+            return L("You left the world.")
         case .hostClosed:
-            return "The host closed the world."
+            return L("The host closed the world.")
         case .authenticationFailed:
-            return "Could not connect — check the room code is the same on both iPads."
+            return L("Could not connect — check the room code is the same on both iPads.")
         case .protocolMismatch:
-            return "That iPad is running a different version of Ablox. Update both to play together."
+            return L("That iPad is running a different version of Ablox. Update both to play together.")
         case .sessionFull:
-            return "That world is full."
+            return L("That world is full.")
         case .networkLost:
-            return "Lost connection to the host."
+            return L("Lost connection to the host.")
         case .timedOut:
-            return "The host stopped responding."
+            return L("The host stopped responding.")
         case let .unknown(detail):
-            return detail.isEmpty ? "Disconnected." : detail
+            return detail.isEmpty ? L("Disconnected.") : detail
         }
     }
 }
@@ -315,7 +315,7 @@ public struct ReconnectCoordinator: Sendable {
     /// What to show while reconnecting.
     public var progressDescription: String? {
         guard let number = status.attemptNumber else { return nil }
-        return "Reconnecting… (\(number) of \(policy.maximumAttempts))"
+        return L("Reconnecting… ({} of {})", number, policy.maximumAttempts)
     }
 
     /// Why it gave up, if it did.

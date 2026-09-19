@@ -108,6 +108,18 @@ for root in "${source_roots[@]}"; do
     done < <(find "$root" -name '*.swift' -print0)
 done
 
+# ------------------------------------------------------------ translation --
+#
+# Both apps must be showable in English and Japanese. Delegated to a Python
+# script because the checks need to understand Swift string literals —
+# escaped quotes, and `\(interpolations)` that are not words to translate.
+
+if command -v python3 > /dev/null; then
+    "$repo_root/scripts/check-translations.py" "$repo_root" || status=1
+else
+    echo "  ! python3 not found; skipping the translation check"
+fi
+
 if [ "$status" -eq 0 ]; then
     printf '  \033[32m✓\033[0m no known-bad patterns\n'
 fi

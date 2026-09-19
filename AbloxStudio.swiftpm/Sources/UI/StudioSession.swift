@@ -120,7 +120,7 @@ public final class StudioSession: ObservableObject, Identifiable {
             return
         }
         document.markSaved()
-        flash("Saved")
+        flash(L("Saved"))
     }
 
     /// Debounced autosave. A drag produces an edit every frame; writing the
@@ -173,7 +173,7 @@ public final class StudioSession: ObservableObject, Identifiable {
                 case .hosting:
                     self.isHosting = true
                     self.roomCode = code
-                    self.flash("Sharing — room code \(RoomCode.formatted(code))")
+                    self.flash(L("Sharing — room code {}", RoomCode.formatted(code)))
                 case let .failed(reason):
                     self.isHosting = false
                     self.roomCode = nil
@@ -209,7 +209,7 @@ public final class StudioSession: ObservableObject, Identifiable {
                 // history with it, since it described a document that is no
                 // longer on screen.
                 self.document = EditorDocument(world: world)
-                self.flash("Joined \(world.name)")
+                self.flash(L("Joined {}", world.name))
             }
         }
 

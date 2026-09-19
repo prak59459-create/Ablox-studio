@@ -313,14 +313,14 @@ public extension WorldDocument {
                 issues.append(.init(
                     kind: .danglingParent,
                     blockID: block.id,
-                    message: "\(block.name) points at a parent that no longer exists."
+                    message: L("{} points at a parent that no longer exists.", block.name)
                 ))
             }
             if block.scale.x == 0 || block.scale.y == 0 || block.scale.z == 0 {
                 issues.append(.init(
                     kind: .degenerateScale,
                     blockID: block.id,
-                    message: "\(block.name) has a zero scale component and will be invisible."
+                    message: L("{} has a zero scale component and will be invisible.", block.name)
                 ))
             }
             // ancestors() stops at a cycle, so a block that never reaches the
@@ -339,7 +339,7 @@ public extension WorldDocument {
                 issues.append(.init(
                     kind: .parentCycle,
                     blockID: block.id,
-                    message: "\(block.name) is part of a parent cycle."
+                    message: L("{} is part of a parent cycle.", block.name)
                 ))
             }
         }
@@ -349,7 +349,7 @@ public extension WorldDocument {
                 issues.append(.init(
                     kind: .danglingRuleTarget,
                     blockID: target,
-                    message: "Rule “\(rule.name)” refers to a block that no longer exists."
+                    message: L("Rule “{}” refers to a block that no longer exists.", rule.name)
                 ))
             }
         }
@@ -358,7 +358,7 @@ public extension WorldDocument {
             issues.append(.init(
                 kind: .noSpawnPoint,
                 blockID: nil,
-                message: "No spawn point — players will start above the origin."
+                message: L("No spawn point — players will start above the origin.")
             ))
         }
 

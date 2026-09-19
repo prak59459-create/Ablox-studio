@@ -18,10 +18,10 @@ public struct EditorDocument: Sendable {
 
         public var displayName: String {
             switch self {
-            case .select: return "Select"
-            case .move: return "Move"
-            case .rotate: return "Rotate"
-            case .scale: return "Scale"
+            case .select: return L("Select")
+            case .move: return L("Move")
+            case .rotate: return L("Rotate")
+            case .scale: return L("Scale")
             }
         }
 

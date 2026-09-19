@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Regenerates `docs/making-maps.md` from `EditorCore/MapGuide.swift`.
+# Regenerates `docs/making-maps.md` and `docs/making-maps.ja.md` from
+# `EditorCore/MapGuide.swift`.
 #
 # The map-making guide has two audiences — the sheet inside Studio and this
 # repository — and one source. Editing the Markdown by hand would make the app
@@ -20,6 +21,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 app="$repo_root/AbloxStudio.swiftpm"
 output="$repo_root/docs/making-maps.md"
+output_ja="$repo_root/docs/making-maps.ja.md"
 
 if ! command -v swiftc > /dev/null; then
     echo "error: swiftc not found. Install a Swift toolchain, or let CI catch the drift." >&2
@@ -34,7 +36,15 @@ trap 'rm -rf "$work"' EXIT
 # can stay a single target.
 cat > "$work/main.swift" <<'SWIFT'
 import Foundation
-try! MapGuide.markdown.write(toFile: CommandLine.arguments[1], atomically: true, encoding: .utf8)
+
+// One pass per language. `MapGuide.markdown` reads whatever `Localization`
+// is set to, which is the same mechanism the app uses — so if the Japanese
+// document is wrong, the Japanese guide in Studio is wrong the same way.
+for (language, path) in [(Language.english, CommandLine.arguments[1]),
+                         (Language.japanese, CommandLine.arguments[2])] {
+    Localization.language = language
+    try! MapGuide.markdown.write(toFile: path, atomically: true, encoding: .utf8)
+}
 SWIFT
 
 # The same exclusions as the root Package.swift: everything that needs SwiftUI,
@@ -49,6 +59,6 @@ mapfile -t sources < <(
 )
 
 swiftc "${sources[@]}" "$work/main.swift" -o "$work/emit"
-"$work/emit" "$output"
+"$work/emit" "$output" "$output_ja"
 
-echo "wrote ${output#"$repo_root"/}"
+echo "wrote ${output#"$repo_root"/} and ${output_ja#"$repo_root"/}"

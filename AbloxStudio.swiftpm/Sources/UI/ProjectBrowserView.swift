@@ -45,14 +45,14 @@ struct ProjectBrowserView: View {
         .sheet(item: $joiningPeer) { peer in
             joinSheet(peer)
         }
-        .alert("Delete this project?", isPresented: .constant(pendingDeletion != nil)) {
-            Button("Cancel", role: .cancel) { pendingDeletion = nil }
-            Button("Delete", role: .destructive) {
+        .alert(L("Delete this project?"), isPresented: .constant(pendingDeletion != nil)) {
+            Button(L("Cancel"), role: .cancel) { pendingDeletion = nil }
+            Button(L("Delete"), role: .destructive) {
                 if let pendingDeletion { store.delete(pendingDeletion) }
                 pendingDeletion = nil
             }
         } message: {
-            Text("“\(pendingDeletion?.name ?? "")” will be removed from this iPad. This cannot be undone.")
+            Text(L("“{}” will be removed from this iPad. This cannot be undone.", pendingDeletion?.name ?? ""))
         }
         .onAppear { browser.start() }
         .onDisappear { browser.stop() }
@@ -64,26 +64,50 @@ struct ProjectBrowserView: View {
         HStack(alignment: .center) {
             // The same drawn cube the client uses, so both apps present one
             // brand rather than two near-misses.
-            AbloxLockup(subtitle: "STUDIO · Build 3D worlds on iPad", markSize: 54)
+            AbloxLockup(subtitle: L("STUDIO · Build 3D worlds on iPad"), markSize: 54)
 
             Spacer()
+
+            languageMenu
 
             Button {
                 newName = store.uniqueName(basedOn: "My World")
                 selectedTemplate = .starter
                 isCreating = true
             } label: {
-                Label("New project", systemImage: "plus")
+                Label(L("New project"), systemImage: "plus")
             }
             .buttonStyle(NeonButtonStyle(.primary))
         }
+    }
+
+    /// The language switch, on the landing screen rather than behind a
+    /// settings screen Studio does not have. Each row is written in the
+    /// language it selects, so someone who cannot read the current interface
+    /// can still recognise theirs.
+    private var languageMenu: some View {
+        Menu {
+            Picker(L("Language"), selection: $settings.language) {
+                ForEach(LanguagePreference.allCases) { preference in
+                    Text(preference.displayName).tag(preference)
+                }
+            }
+        } label: {
+            Label(L("Language"), systemImage: "globe")
+                .labelStyle(.iconOnly)
+                .font(.title3)
+                .frame(width: Ablox.Metrics.minimumTapTarget, height: Ablox.Metrics.minimumTapTarget)
+                .contentShape(Rectangle())
+        }
+        .foregroundStyle(Ablox.Palette.inkMuted)
+        .accessibilityLabel(L("Language"))
     }
 
     // MARK: Projects
 
     private var projectsSection: some View {
         VStack(alignment: .leading, spacing: 15) {
-            SectionHeader("Your projects", systemImage: "square.stack.3d.up.fill")
+            SectionHeader(L("Your projects"), systemImage: "square.stack.3d.up.fill")
 
             if let error = store.lastError {
                 GlassCard {
@@ -129,11 +153,11 @@ struct ProjectBrowserView: View {
                         Spacer()
                         Menu {
                             Button { store.duplicate(entry) } label: {
-                                Label("Duplicate", systemImage: "doc.on.doc")
+                                Label(L("Duplicate"), systemImage: "doc.on.doc")
                             }
                             Divider()
                             Button(role: .destructive) { pendingDeletion = entry } label: {
-                                Label("Delete", systemImage: "trash")
+                                Label(L("Delete"), systemImage: "trash")
                             }
                         } label: {
                             Image(systemName: "ellipsis.circle")
@@ -164,7 +188,7 @@ struct ProjectBrowserView: View {
 
     private var collaborateSection: some View {
         VStack(alignment: .leading, spacing: 15) {
-            SectionHeader("Build together", systemImage: "person.2.fill") {
+            SectionHeader(L("Build together"), systemImage: "person.2.fill") {
                 if browser.peers.isEmpty && browser.unavailableReason == nil {
                     ProgressView().controlSize(.small).tint(Ablox.Palette.accent)
                 }
@@ -196,19 +220,19 @@ struct ProjectBrowserView: View {
                                     Text(peer.worldName)
                                         .font(.headline)
                                         .foregroundStyle(Ablox.Palette.ink)
-                                    Text("\(peer.hostName) · \(peer.subtitle)")
+                                    Text(L("{} · {}", peer.hostName, peer.subtitle))
                                         .font(.caption)
                                         .foregroundStyle(Ablox.Palette.inkMuted)
                                 }
                                 Spacer()
                                 if peer.isCompatible {
-                                    Button("Join") {
+                                    Button(L("Join")) {
                                         joinCode = ""
                                         joiningPeer = peer
                                     }
                                     .buttonStyle(NeonButtonStyle(.primary))
                                 } else {
-                                    Badge("Update needed", color: Ablox.Palette.warning)
+                                    Badge(L("Update needed"), color: Ablox.Palette.warning)
                                 }
                             }
                         }
@@ -234,18 +258,18 @@ struct ProjectBrowserView: View {
 
     private var createSheet: some View {
         VStack(alignment: .leading, spacing: 22) {
-            Text("New project").font(.title2.weight(.bold))
+            Text(L("New project")).font(.title2.weight(.bold))
 
             VStack(alignment: .leading, spacing: 7) {
-                Text("Name").font(.caption.weight(.semibold)).foregroundStyle(Ablox.Palette.inkMuted)
-                TextField("My World", text: $newName)
+                Text(L("Name")).font(.caption.weight(.semibold)).foregroundStyle(Ablox.Palette.inkMuted)
+                TextField(L("My World"), text: $newName)
                     .textFieldStyle(.plain)
                     .padding(12)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
 
             VStack(alignment: .leading, spacing: 9) {
-                Text("Start from").font(.caption.weight(.semibold)).foregroundStyle(Ablox.Palette.inkMuted)
+                Text(L("Start from")).font(.caption.weight(.semibold)).foregroundStyle(Ablox.Palette.inkMuted)
                 ForEach(ProjectStore.Template.allCases) { template in
                     Button { selectedTemplate = template } label: {
                         HStack(spacing: 13) {
@@ -279,9 +303,9 @@ struct ProjectBrowserView: View {
             Spacer(minLength: 0)
 
             HStack(spacing: 11) {
-                Button("Cancel") { isCreating = false }
+                Button(L("Cancel")) { isCreating = false }
                     .buttonStyle(NeonButtonStyle(.secondary, fullWidth: true))
-                Button("Create") {
+                Button(L("Create")) {
                     let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
                     let world = store.createWorld(
                         named: trimmed.isEmpty ? "My World" : trimmed,
@@ -309,14 +333,14 @@ struct ProjectBrowserView: View {
         VStack(spacing: 20) {
             VStack(spacing: 6) {
                 Text(peer.worldName).font(.title2.weight(.bold))
-                Text("Shared by \(peer.hostName)")
+                Text(L("Shared by {}", peer.hostName))
                     .font(.subheadline)
                     .foregroundStyle(Ablox.Palette.inkMuted)
             }
             .padding(.top, 26)
 
             VStack(spacing: 8) {
-                Text("Room code")
+                Text(L("Room code"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Ablox.Palette.inkMuted)
                 TextField("ABC DEF", text: $joinCode)
@@ -330,7 +354,7 @@ struct ProjectBrowserView: View {
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
 
-            Button("Join and edit together") {
+            Button(L("Join and edit together")) {
                 // A joined session starts from a blank world; the host's
                 // snapshot replaces it as soon as it arrives.
                 let session = StudioSession(

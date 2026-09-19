@@ -15,6 +15,9 @@ public final class StudioSettings: ObservableObject {
         static let peerID = "ablox.peerID"
         static let gridSize = "ablox.studio.gridSize"
         static let angleSnap = "ablox.studio.angleSnap"
+        // Shares the client's key, so setting the language in one app
+        // sets it in the other on the same iPad.
+        static let language = "ablox.language"
     }
 
     private let defaults: UserDefaults
@@ -35,6 +38,24 @@ public final class StudioSettings: ObservableObject {
         didSet { defaults.set(Double(angleSnap), forKey: Key.angleSnap) }
     }
 
+    /// English, Japanese, or whatever the iPad is set to.
+    ///
+    /// Applying it writes a global that every `L(...)` reads, including the
+    /// ones in `EditorCore` that have no SwiftUI to reach into. SwiftUI does
+    /// not observe that global, so `AbloxStudioApp` hangs `.id(language)` on
+    /// the view below its state objects.
+    @Published public var language: LanguagePreference {
+        didSet {
+            defaults.set(language.rawValue, forKey: Key.language)
+            applyLanguage()
+        }
+    }
+
+    /// Pushes the current preference into the global the whole app reads.
+    public func applyLanguage() {
+        Localization.language = language.language(preferredCodes: Locale.preferredLanguages)
+    }
+
     public let peerID: PeerID
 
     public init(defaults: UserDefaults = .standard) {
@@ -50,6 +71,11 @@ public final class StudioSettings: ObservableObject {
         self.gridSize = Float(defaults.object(forKey: Key.gridSize) as? Double ?? 0.5)
         self.angleSnap = Float(defaults.object(forKey: Key.angleSnap) as? Double ?? 15)
 
+        // Nothing saved means a first launch, which should look like the rest
+        // of the iPad rather than like an American default.
+        self.language = defaults.string(forKey: Key.language)
+            .flatMap(LanguagePreference.init(rawValue:)) ?? .system
+
         // Shares the key the client uses, so both apps on one iPad present the
         // same builder.
         if let stored = defaults.string(forKey: Key.peerID), let uuid = UUID(uuidString: stored) {
@@ -59,6 +85,9 @@ public final class StudioSettings: ObservableObject {
             defaults.set(fresh.raw.uuidString, forKey: Key.peerID)
             self.peerID = fresh
         }
+
+        // Before anything reads a string: `didSet` does not run during init.
+        applyLanguage()
 
         if profile.displayName.isEmpty || profile == .default {
             var generated = AvatarProfile.generated(for: peerID, name: Self.suggestedName())

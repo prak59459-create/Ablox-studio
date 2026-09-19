@@ -150,6 +150,48 @@ final class MapGuideTests: XCTestCase {
         )
     }
 
+    func testTheJapaneseMarkdownFileMatchesTheGuide() throws {
+        // The Japanese guide in Studio and docs/making-maps.ja.md come from the
+        // same call with the language switched, so this failing means one of
+        // them is stale — and the app's copy is the one nobody would notice.
+        Localization.language = .japanese
+        defer { Localization.language = .english }
+
+        let url = repositoryRoot().appendingPathComponent("docs/making-maps.ja.md")
+        let onDisk = try String(contentsOf: url, encoding: .utf8)
+
+        XCTAssertEqual(onDisk, MapGuide.markdown, "docs/making-maps.ja.md has drifted; run scripts/regenerate-docs.sh")
+    }
+
+    func testTheWholeGuideIsTranslated() throws {
+        // Walks the rendered Japanese guide and fails on any line still in
+        // English. A half-translated guide is the failure this catches: it
+        // compiles, it renders, and it reads as unfinished.
+        Localization.language = .japanese
+        defer { Localization.language = .english }
+
+        for section in MapGuide.sections {
+            assertJapanese(section.title, "a section title")
+            assertJapanese(section.summary, "a section summary")
+            for step in section.steps {
+                assertJapanese(step.text, "a step")
+                if let aside = step.aside { assertJapanese(aside, "an aside") }
+            }
+        }
+    }
+
+    private func assertJapanese(
+        _ text: String,
+        _ what: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let hasJapanese = text.unicodeScalars.contains { scalar in
+            (0x3040...0x30FF).contains(scalar.value) || (0x4E00...0x9FFF).contains(scalar.value)
+        }
+        XCTAssertTrue(hasJapanese, "\(what) is still English: \(text)", file: file, line: line)
+    }
+
     func testTheMarkdownRendersAsidesUnderTheirStep() {
         let markdown = MapGuide.markdown
         XCTAssertTrue(markdown.hasPrefix("# Making a map in Ablox Studio"))

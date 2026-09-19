@@ -47,7 +47,7 @@ struct ExplorerPanel: View {
     private var header: some View {
         VStack(spacing: 9) {
             HStack {
-                Label("Explorer", systemImage: "list.bullet.indent")
+                Label(L("Explorer"), systemImage: "list.bullet.indent")
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(Ablox.Palette.ink)
                 Spacer()
@@ -60,7 +60,7 @@ struct ExplorerPanel: View {
                 Image(systemName: "magnifyingglass")
                     .font(.caption)
                     .foregroundStyle(Ablox.Palette.inkFaint)
-                TextField("Find a part", text: $searchText)
+                TextField(L("Find a part"), text: $searchText)
                     .textFieldStyle(.plain)
                     .font(.caption)
                 if !searchText.isEmpty {
@@ -163,7 +163,7 @@ struct ExplorerPanel: View {
                 Image(systemName: "arrow.down.circle")
                     .font(.system(size: 9))
                     .foregroundStyle(Ablox.Palette.warning)
-                    .help("Falls under gravity in Play mode")
+                    .help(L("Falls under gravity in Play mode"))
             }
         }
         .padding(.leading, CGFloat(row.depth) * 13)
@@ -188,7 +188,7 @@ struct ExplorerPanel: View {
         ))
         .contextMenu {
             Button { session.select(row.block.id); session.duplicateSelection() } label: {
-                Label("Duplicate", systemImage: "doc.on.doc")
+                Label(L("Duplicate"), systemImage: "doc.on.doc")
             }
             Button {
                 session.edit { $0.mutateSelection(label: "Toggle visibility") { $0.isVisible.toggle() } }
@@ -199,7 +199,7 @@ struct ExplorerPanel: View {
                 Button {
                     session.edit { $0.reparent(row.block.id, to: nil) }
                 } label: {
-                    Label("Move to top level", systemImage: "arrow.up.to.line")
+                    Label(L("Move to top level"), systemImage: "arrow.up.to.line")
                 }
             }
             Divider()
@@ -207,7 +207,7 @@ struct ExplorerPanel: View {
                 session.select(row.block.id)
                 session.deleteSelection()
             } label: {
-                Label("Delete", systemImage: "trash")
+                Label(L("Delete"), systemImage: "trash")
             }
         }
     }
@@ -226,7 +226,7 @@ struct ExplorerPanel: View {
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.seal.fill")
                     .foregroundStyle(Ablox.Palette.success)
-                Text("No problems")
+                Text(L("No problems"))
                     .foregroundStyle(Ablox.Palette.inkMuted)
             }
             .font(.caption2)
@@ -251,7 +251,7 @@ struct ExplorerPanel: View {
                     .buttonStyle(.plain)
                 }
                 if issues.count > 3 {
-                    Text("+\(issues.count - 3) more")
+                    Text(L("+{} more", issues.count - 3))
                         .font(.system(size: 9))
                         .foregroundStyle(Ablox.Palette.inkFaint)
                 }

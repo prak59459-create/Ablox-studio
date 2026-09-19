@@ -25,11 +25,11 @@ struct MapGuideSheet: View {
                 .padding(18)
             }
             .background(Color(red: 0.05, green: 0.06, blue: 0.11))
-            .navigationTitle("Making a map")
+            .navigationTitle(L("Making a map"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button(L("Done")) { dismiss() }
                 }
             }
         }
@@ -38,7 +38,7 @@ struct MapGuideSheet: View {
     }
 
     private var intro: some View {
-        Text("Ten steps from an empty grid to something people can play. Tap a heading to open it.")
+        Text(L("Ten steps from an empty grid to something people can play. Tap a heading to open it."))
             .font(.callout)
             .foregroundStyle(Ablox.Palette.inkMuted)
             .fixedSize(horizontal: false, vertical: true)

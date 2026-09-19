@@ -87,7 +87,7 @@ struct StudioView: View {
 
     private var leftPane: some View {
         VStack(spacing: 0) {
-            Picker("Panel", selection: $leftTab) {
+            Picker(L("Panel"), selection: $leftTab) {
                 ForEach(LeftTab.allCases) { tab in
                     Label(tab.rawValue, systemImage: tab.symbolName).tag(tab)
                 }
@@ -128,7 +128,7 @@ struct StudioView: View {
     private var playModeHint: some View {
         VStack {
             Spacer()
-            Text("Testing — tap Stop to keep building")
+            Text(L("Testing — tap Stop to keep building"))
                 .font(.caption.weight(.semibold))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 9)
@@ -173,7 +173,7 @@ struct PartPalette: View {
                         .foregroundStyle(Ablox.Palette.ink)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Add \(kind.displayName)")
+                    .accessibilityLabel(L("Add {}", kind.displayName))
                 }
             }
             .padding(.horizontal, 14)
