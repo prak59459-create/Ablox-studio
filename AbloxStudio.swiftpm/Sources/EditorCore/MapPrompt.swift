@@ -103,6 +103,12 @@ public enum MapPrompt {
     /// The complete prompt, ready to paste into an assistant.
     public static func text(for request: Request, movement: MovementConfig = .default) -> String {
         let jumpHeight = round(movement.maximumJumpHeight * 100) / 100
+        // Two different numbers, and they must be presented as two different
+        // things. The first is what a player can do; the second is what this
+        // level should ask of them. Stating the second as though it were the
+        // first tells an assistant the player is weaker than they are, and
+        // produces a level built for someone who does not exist.
+        let jumpReach = round(movement.maximumJumpDistance(running: true) * 10) / 10
         let jumpGap = round(movement.safeJumpDistance * request.difficulty.gapFraction * 10) / 10
 
         var lines: [String] = []
@@ -147,7 +153,8 @@ public enum MapPrompt {
         lines.append(L("## What a player can do"))
         lines.append("")
         lines.append(L("A jump rises {} m. Never make a step taller than that.", jumpHeight))
-        lines.append(L("A running jump crosses about {} m. Keep gaps at or under that.", jumpGap))
+        lines.append(L("A running jump crosses {} m at the very most.", jumpReach))
+        lines.append(L("Keep gaps to {} m or less, so the jump does not have to be perfect.", jumpGap))
         lines.append(L("Players fall off the edge, so put a floor or a platform under every route."))
         lines.append("")
 

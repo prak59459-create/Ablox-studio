@@ -448,7 +448,12 @@ public struct CatalogueSource: Equatable, Sendable {
     }
 
     /// The default the app ships with.
-    public static let `default` = CatalogueSource(repository: "prak59459-create/ablox-games")
+    ///
+    /// Spelled exactly as the repository is, including capitals:
+    /// `raw.githubusercontent.com` does not redirect for a case difference the
+    /// way `github.com` does, so the wrong case is a 404 rather than a
+    /// forgiving redirect.
+    public static let `default` = CatalogueSource(repository: "prak59459-create/AbloxGames")
 
     /// `raw.githubusercontent.com` rather than the API: no token, no rate
     /// limit worth worrying about, and the response is the file itself rather

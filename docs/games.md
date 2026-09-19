@@ -21,7 +21,7 @@ Ablox Studio ──▶ three files ──▶ pull request ──▶ index.json �
 
 `catalogue-template/` in this repository is the repository to create. Copy it
 into a new public repo, then point the app at it in **Settings → Game list**
-(`owner/repo`). The app ships expecting `prak59459-create/ablox-games`.
+(`owner/repo`). The app ships expecting `prak59459-create/AbloxGames`.
 
 The setting exists so a school or a club can run its own list.
 

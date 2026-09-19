@@ -53,7 +53,7 @@ same encrypted local mesh the game uses, and edit with you live.
   platform, including Linux CI.
 
 ```
-swift test        # 453 tests, no device or simulator needed
+swift test        # 457 tests, no device or simulator needed
 ```
 
 Two modules are portable and therefore tested:

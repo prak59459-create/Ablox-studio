@@ -172,6 +172,24 @@ final class GameCatalogueTests: XCTestCase {
         XCTAssertNotNil(CatalogueSource.default.webURL)
     }
 
+    func testTheDefaultPointsAtTheRealRepository() throws {
+        // Pinned, because the first spelling shipped was a guess and was
+        // wrong. `raw.githubusercontent.com` does not redirect for a case
+        // difference, so "ablox-games" is a 404 on a repository called
+        // "AbloxGames" — and the Games tab would simply look empty.
+        XCTAssertEqual(CatalogueSource.default.repository, "prak59459-create/AbloxGames")
+        XCTAssertEqual(
+            try XCTUnwrap(CatalogueSource.default.indexURL).absoluteString,
+            "https://raw.githubusercontent.com/prak59459-create/AbloxGames/main/index.json"
+        )
+    }
+
+    func testCapitalsInARepositoryNameAreAllowed() {
+        // GitHub allows them, so refusing them would make a real repository
+        // unreachable.
+        XCTAssertTrue(CatalogueSource(repository: "prak59459-create/AbloxGames").isValidRepository)
+    }
+
     // MARK: Decoding
 
     private func indexData(_ json: String) -> Data { Data(json.utf8) }

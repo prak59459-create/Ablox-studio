@@ -57,6 +57,37 @@ final class MapPromptTests: XCTestCase {
                       "the prompt should state the jump height of \(height)")
     }
 
+    func testTheJumpReachIsStatedAsAFactAndTheGapAsAnInstruction() {
+        // These are two different numbers and must read as two different
+        // things. The first draft quoted the *gap* in the sentence describing
+        // the jump — "a running jump crosses about 3.1 m" — which is simply
+        // false: it crosses 6.0 m. An assistant reading that builds a level
+        // for a player half as capable as the real one.
+        let movement = MovementConfig.default
+        let prompt = MapPrompt.text(for: MapPrompt.Request(difficulty: .normal), movement: movement)
+
+        let reach = round(movement.maximumJumpDistance(running: true) * 10) / 10
+        let gap = round(movement.safeJumpDistance * MapPrompt.Difficulty.normal.gapFraction * 10) / 10
+
+        XCTAssertNotEqual(reach, gap, "the test is meaningless if the two figures coincide")
+        XCTAssertTrue(prompt.contains("\(reach)"), "the prompt must state the real reach of \(reach) m")
+        XCTAssertTrue(prompt.contains("\(gap)"), "the prompt must state the advised gap of \(gap) m")
+    }
+
+    func testNoDifficultyQuotesTheGapAsThoughItWereTheJump() {
+        // The same slip at any setting.
+        let movement = MovementConfig.default
+        let reach = round(movement.maximumJumpDistance(running: true) * 10) / 10
+
+        for difficulty in MapPrompt.Difficulty.allCases {
+            let prompt = MapPrompt.text(for: MapPrompt.Request(difficulty: difficulty), movement: movement)
+            // Whatever wording is used, the true reach has to appear
+            // somewhere — a prompt that only ever names the smaller number is
+            // understating the player.
+            XCTAssertTrue(prompt.contains("\(reach)"), "\(difficulty) never states the real jump reach")
+        }
+    }
+
     func testAHarderLevelIsAllowedWiderGapsThanAGentleOne() {
         let gentle = MapPrompt.text(for: MapPrompt.Request(difficulty: .gentle))
         let hard = MapPrompt.text(for: MapPrompt.Request(difficulty: .hard))
