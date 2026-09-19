@@ -237,8 +237,11 @@ public final class WorldScene {
             entity.components.remove(CollisionComponent.self)
             entity.components.remove(PhysicsBodyComponent.self)
 
-        case .teleportPlayer, .awardPoints, .announce, .playSound, .endRound:
-            // Not scene-level: handled by the viewport and the HUD.
+        case .teleportPlayer, .bouncePlayer, .awardPoints, .announce, .playSound, .endRound:
+            // Not scene-level: these act on the player or the HUD, and the
+            // viewport owns both. Listed rather than a `default:` so that
+            // adding an action forces this decision again — which is exactly
+            // how `.bouncePlayer` was caught after Task 4 added it.
             break
         }
     }

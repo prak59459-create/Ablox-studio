@@ -45,9 +45,9 @@ public enum BlockEntityFactory {
         case .sphere:
             mesh = .generateSphere(radius: 0.5)
         case .cylinder:
-            mesh = .generateCylinder(height: 1, radius: 0.5)
+            mesh = .abloxCylinder(height: 1, radius: 0.5)
         case .cone:
-            mesh = .generateCone(height: 1, radius: 0.5)
+            mesh = .abloxCone(height: 1, radius: 0.5)
         case .plane:
             mesh = .generatePlane(width: 1, depth: 1)
         }

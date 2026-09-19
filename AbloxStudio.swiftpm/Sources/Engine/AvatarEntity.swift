@@ -133,13 +133,13 @@ public final class AvatarEntity: Entity {
             mesh = .generateBox(size: SIMD3<Float>(0.5, 0.12, 0.5), cornerRadius: 0.04)
             offset = SIMD3<Float>(0, 1.8, 0)
         case .crown:
-            mesh = .generateCylinder(height: 0.2, radius: 0.26)
+            mesh = .abloxCylinder(height: 0.2, radius: 0.26)
             offset = SIMD3<Float>(0, 1.86, 0)
         case .antenna:
-            mesh = .generateCylinder(height: 0.5, radius: 0.03)
+            mesh = .abloxCylinder(height: 0.5, radius: 0.03)
             offset = SIMD3<Float>(0, 2.0, 0)
         case .halo:
-            mesh = .generateCylinder(height: 0.04, radius: 0.32)
+            mesh = .abloxCylinder(height: 0.04, radius: 0.32)
             offset = SIMD3<Float>(0, 2.05, 0)
         }
 

@@ -62,11 +62,18 @@ public struct ColorRGBA: Codable, Hashable, Sendable {
 
     public static func lerp(_ from: ColorRGBA, _ to: ColorRGBA, _ t: Float) -> ColorRGBA {
         let clamped = Swift.max(0, Swift.min(1, t))
+        // Written out rather than calling the free `lerp(_:_:_:)` in Math.swift.
+        // Inside a type that has its own static `lerp`, the free one can only be
+        // reached by naming its module — and the module has two names: the app
+        // target (`AbloxApp`) on device, `AbloxCore` in the off-device test
+        // package. Hard-coding either breaks the other build, and only the iPad
+        // can report the one it breaks.
+        func mix(_ a: Float, _ b: Float) -> Float { a + (b - a) * clamped }
         return ColorRGBA(
-            r: AbloxCore.lerp(from.r, to.r, clamped),
-            g: AbloxCore.lerp(from.g, to.g, clamped),
-            b: AbloxCore.lerp(from.b, to.b, clamped),
-            a: AbloxCore.lerp(from.a, to.a, clamped)
+            r: mix(from.r, to.r),
+            g: mix(from.g, to.g),
+            b: mix(from.b, to.b),
+            a: mix(from.a, to.a)
         )
     }
 
