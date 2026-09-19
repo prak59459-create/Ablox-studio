@@ -30,11 +30,12 @@ let package = Package(
             teamIdentifier: "",
             displayVersion: "1.0",
             bundleVersion: "1",
-            // `PlaceholderIcon` has no hammer, so this is the cube the client
-            // uses. The inverted Studio mark is in `design/AppIcon.png`; set it
-            // from Swift Playgrounds' own app-settings screen, which writes the
+            // No `appIcon:` on purpose, matching the client: the parameter is
+            // optional, and a wrong `PlaceholderIcon` member name stops the
+            // manifest compiling rather than falling back to a default icon.
+            // The inverted Studio mark is in `design/AppIcon.png`; set it from
+            // Swift Playgrounds' own app-settings screen, which writes the
             // asset catalogue itself.
-            appIcon: .placeholder(icon: .cube),
             accentColor: .presetColor(.cyan),
             supportedDeviceFamilies: [
                 .pad

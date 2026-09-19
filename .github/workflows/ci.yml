@@ -19,6 +19,20 @@ jobs:
       - name: Test
         run: swift test
 
+  manifest:
+    name: App manifest has no known-bad patterns
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # AbloxStudio.swiftpm/Package.swift imports AppleProductTypes, which
+      # exists only inside Swift Playgrounds and Xcode — it cannot be compiled
+      # here, and a mistake in it stops the project opening on iPad rather than
+      # producing a warning. This is a ratchet on spellings a device has
+      # already rejected; see docs/swift-playgrounds-manifest.md.
+      - name: Check
+        run: scripts/check-app-manifest.sh
+
   mirror:
     name: Shared layers match the Ablox client
     runs-on: ubuntu-latest
