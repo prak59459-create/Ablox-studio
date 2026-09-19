@@ -139,7 +139,7 @@ struct InspectorPanel: View {
                 // the field appears only when it means something.
                 if block.behavior == .collectible || block.behavior == .hazard {
                     HStack {
-                        Text(block.behavior == .collectible ? "Points" : "Penalty")
+                        Text(block.behavior == .collectible ? L("Points") : L("Penalty"))
                             .font(.caption2)
                             .foregroundStyle(Ablox.Palette.inkMuted)
                         Spacer()

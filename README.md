@@ -53,7 +53,7 @@ same encrypted local mesh the game uses, and edit with you live.
   platform, including Linux CI.
 
 ```
-swift test        # 350 tests, no device or simulator needed
+swift test        # 453 tests, no device or simulator needed
 ```
 
 Two modules are portable and therefore tested:
@@ -111,6 +111,7 @@ them: undoing someone else's edit out of your own history would be baffling.
 - [`docs/making-maps.md`](docs/making-maps.md) — how to build a map, start to finish. Studio shows the same guide in the app, behind the **?** button in the toolbar; both come from `EditorCore/MapGuide.swift`, so edit that and run `scripts/regenerate-docs.sh`
 - [`docs/making-maps.ja.md`](docs/making-maps.ja.md) — the same guide in Japanese, from the same source
 - [`docs/editor.md`](docs/editor.md) — gestures, tools, and the rule vocabulary
+- [`docs/games.md`](docs/games.md) — publishing to the game list, and making a map with an assistant
 - [`docs/localization.md`](docs/localization.md) — English and Japanese, and why there is no `.lproj`
 - [`docs/ipad-build.md`](docs/ipad-build.md) — the errors only an iPad can report, and what the device has actually said
 - [Ablox `docs/networking.md`](https://github.com/prak59459-create/Ablox/blob/main/docs/networking.md) — the protocol and its security model

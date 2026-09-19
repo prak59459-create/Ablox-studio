@@ -193,7 +193,7 @@ struct ExplorerPanel: View {
             Button {
                 session.edit { $0.mutateSelection(label: "Toggle visibility") { $0.isVisible.toggle() } }
             } label: {
-                Label(row.block.isVisible ? "Hide" : "Show", systemImage: row.block.isVisible ? "eye.slash" : "eye")
+                Label(row.block.isVisible ? L("Hide") : L("Show"), systemImage: row.block.isVisible ? "eye.slash" : "eye")
             }
             if row.block.parentID != nil {
                 Button {

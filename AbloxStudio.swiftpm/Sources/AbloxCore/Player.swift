@@ -233,6 +233,43 @@ public struct MovementConfig: Codable, Hashable, Sendable {
         self.turnSpeedDegreesPerSecond = turnSpeedDegreesPerSecond
     }
 
+    // MARK: What a player can actually reach
+    //
+    // Derived from the numbers above rather than written down beside them, so
+    // they cannot drift apart. Studio quotes these when it asks an assistant
+    // for a level: an assistant told "you can jump 1 m" does not place a 3 m
+    // step, and a level nobody can finish is the failure that matters here.
+    //
+    // `CharacterSolverTests` checks them against the simulation itself.
+
+    /// How high a standing jump reaches, in metres: v² / 2g.
+    public var maximumJumpHeight: Float {
+        guard gravity < 0 else { return 0 }
+        return (jumpSpeed * jumpSpeed) / (2 * -gravity)
+    }
+
+    /// How long a jump lasts, take-off to landing on the same height.
+    public var airTime: Float {
+        guard gravity < 0 else { return 0 }
+        return 2 * jumpSpeed / -gravity
+    }
+
+    /// How far a jump carries horizontally on flat ground.
+    ///
+    /// The real figure is a little shorter, because air control is partial and
+    /// the stick is rarely held perfectly — so a gap built to exactly this is
+    /// a gap that is missed half the time. `safeJumpDistance` is what Studio
+    /// quotes.
+    public func maximumJumpDistance(running: Bool) -> Float {
+        (running ? walkSpeed * runMultiplier : walkSpeed) * airTime
+    }
+
+    /// The gap a player clears reliably rather than occasionally: three
+    /// quarters of a running jump.
+    public var safeJumpDistance: Float {
+        maximumJumpDistance(running: true) * 0.75
+    }
+
     public static let `default` = MovementConfig()
 }
 

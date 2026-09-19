@@ -18,6 +18,7 @@ public final class StudioSettings: ObservableObject {
         // Shares the client's key, so setting the language in one app
         // sets it in the other on the same iPad.
         static let language = "ablox.language"
+        static let catalogue = "ablox.catalogueRepository"
     }
 
     private let defaults: UserDefaults
@@ -56,6 +57,20 @@ public final class StudioSettings: ObservableObject {
         Localization.language = language.language(preferredCodes: Locale.preferredLanguages)
     }
 
+    /// Which GitHub repository the published game list lives in.
+    ///
+    /// Shares the client's key, so a school that points Ablox at its own list
+    /// only has to say so once. Studio uses it for the "open the repository"
+    /// link on the publish sheet.
+    @Published public var catalogueRepository: String {
+        didSet { defaults.set(catalogueRepository, forKey: Key.catalogue) }
+    }
+
+    public var catalogueSource: CatalogueSource {
+        let chosen = CatalogueSource(repository: catalogueRepository)
+        return chosen.isValidRepository ? chosen : .default
+    }
+
     public let peerID: PeerID
 
     public init(defaults: UserDefaults = .standard) {
@@ -75,6 +90,9 @@ public final class StudioSettings: ObservableObject {
         // of the iPad rather than like an American default.
         self.language = defaults.string(forKey: Key.language)
             .flatMap(LanguagePreference.init(rawValue:)) ?? .system
+
+        self.catalogueRepository = defaults.string(forKey: Key.catalogue)
+            ?? CatalogueSource.default.repository
 
         // Shares the key the client uses, so both apps on one iPad present the
         // same builder.

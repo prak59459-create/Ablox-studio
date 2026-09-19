@@ -8,6 +8,7 @@ struct StudioToolbar: View {
 
     @State private var showShareSheet = false
     @State private var showGuide = false
+    @State private var showPublish = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -46,6 +47,7 @@ struct StudioToolbar: View {
 
             collaboratorBadge
             guideButton
+            publishButton
             shareButton
             playButton
         }
@@ -55,6 +57,7 @@ struct StudioToolbar: View {
         .animation(.easeInOut(duration: 0.2), value: session.statusMessage)
         .sheet(isPresented: $showShareSheet) { shareSheet }
         .sheet(isPresented: $showGuide) { MapGuideSheet() }
+        .sheet(isPresented: $showPublish) { PublishSheet(world: session.document.world) }
     }
 
     // MARK: Pieces
@@ -209,6 +212,24 @@ struct StudioToolbar: View {
         .buttonStyle(.plain)
         .foregroundStyle(Ablox.Palette.inkMuted)
         .accessibilityLabel(L("How to make a map"))
+    }
+
+    private var publishButton: some View {
+        Button {
+            // Saved first, so the exported file is what is on screen rather
+            // than whatever was last written a few seconds ago.
+            session.save()
+            showPublish = true
+        } label: {
+            Image(systemName: "arrow.up.doc")
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 34, height: 32)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Ablox.Palette.inkMuted)
+        .accessibilityLabel(L("Publish this world"))
+        .disabled(session.mode == .play)
     }
 
     private var shareButton: some View {

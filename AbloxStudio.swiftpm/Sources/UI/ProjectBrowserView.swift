@@ -15,6 +15,7 @@ struct ProjectBrowserView: View {
     @StateObject private var browser = BrowserModel()
     @State private var joiningPeer: DiscoveredPeer?
     @State private var joinCode = ""
+    @State private var isAsking = false
 
     var body: some View {
         ZStack {
@@ -42,6 +43,19 @@ struct ProjectBrowserView: View {
             }
         }
         .sheet(isPresented: $isCreating) { createSheet }
+        .sheet(isPresented: $isAsking) {
+            MapAISheet { world in
+                // Straight into the editor: the point of generating a level is
+                // to look at it, and a world that lands silently in a list is
+                // a world nobody opens.
+                openSession = StudioSession(
+                    world: world,
+                    store: store,
+                    localPeerID: settings.peerID,
+                    profile: settings.profile
+                )
+            }
+        }
         .sheet(item: $joiningPeer) { peer in
             joinSheet(peer)
         }
@@ -69,6 +83,13 @@ struct ProjectBrowserView: View {
             Spacer()
 
             languageMenu
+
+            Button {
+                isAsking = true
+            } label: {
+                Label(L("Make with AI"), systemImage: "wand.and.stars")
+            }
+            .buttonStyle(NeonButtonStyle(.secondary))
 
             Button {
                 newName = store.uniqueName(basedOn: "My World")
