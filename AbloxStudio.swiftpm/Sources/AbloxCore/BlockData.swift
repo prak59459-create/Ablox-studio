@@ -153,6 +153,27 @@ public enum BlockBehavior: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// One sentence on what this does to a player who touches the block.
+    ///
+    /// Written once here rather than in the Inspector, because Studio's
+    /// map-making guide explains the same list — and a behaviour explained two
+    /// different ways in the same app is worse than one explained badly.
+    /// Adding a case forces a sentence to be written for it.
+    public var guidance: String {
+        switch self {
+        case .none: return "Ordinary scenery. Players can stand on it and nothing else happens."
+        case .spawn: return "Players start on top of this block."
+        case .checkpoint: return "Touching it sets where the player respawns. Players walk through it."
+        case .hazard: return "Touching it sends the player back to their last checkpoint."
+        case .collectible: return "Each player can collect it once. Players walk through it."
+        case .goal: return "Touching it ends the round for everyone."
+        case .trigger: return "Does nothing by itself — add a rule that listens for it."
+        case .bounce: return "Launches anyone who lands on it. A trampoline."
+        case .disappear: return "Vanishes shortly after it is stepped on, then comes back."
+        case .teleport: return "Moves the player to another block. Players walk through it."
+        }
+    }
+
     /// Whether the runtime must be told when a player touches this block.
     public var needsTouchDetection: Bool {
         switch self {
@@ -460,6 +481,26 @@ public extension BlockData {
             case .checkpoint: return "flag.fill"
             case .goal: return "flag.checkered"
             case .spawn: return "figure.stand"
+            }
+        }
+
+        /// What tapping this in the palette actually drops into the world.
+        ///
+        /// Read by Studio's map-making guide. Deliberately describes the part
+        /// that `preset(_:at:)` builds — size, colour and behaviour — rather
+        /// than what the name suggests, so the guide cannot promise something
+        /// the palette does not produce.
+        public var guidance: String {
+            switch self {
+            case .block: return "A plain 2×1×2 box. The everyday building material."
+            case .platform: return "A wide, thin 6×0.5×6 slab. Floors and floating islands."
+            case .pillar: return "A tall thin cylinder, 4 high. Posts, columns, poles."
+            case .ramp: return "A long box already tilted 25°, so players can walk up it."
+            case .orb: return "A glowing yellow sphere worth 10 points, collectible once per player."
+            case .hazard: return "A flat slab of lava. Touching it sends players back to their checkpoint."
+            case .checkpoint: return "A green pad that saves where a player respawns."
+            case .goal: return "A purple glass gate. Touching it ends the round."
+            case .spawn: return "A cyan pad players start on. Every world needs at least one."
             }
         }
     }

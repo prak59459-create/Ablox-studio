@@ -224,7 +224,12 @@ public final class StudioSession: ObservableObject, Identifiable {
         client.onStateChange = { [weak self] state in
             Task { @MainActor in
                 guard case let .disconnected(reason) = state else { return }
-                self?.statusMessage = reason
+                // `reason` is a `DisconnectReason`, not a string. It was a
+                // string until reconnection needed to tell a transient network
+                // fault apart from a wrong room code, and this is the only
+                // place outside the mirrored layers that reads it — so it was
+                // the only one the change missed.
+                self?.statusMessage = reason.message
                 self?.collaborators = []
             }
         }

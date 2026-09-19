@@ -7,6 +7,7 @@ struct StudioToolbar: View {
     var onExit: () -> Void
 
     @State private var showShareSheet = false
+    @State private var showGuide = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -44,6 +45,7 @@ struct StudioToolbar: View {
             }
 
             collaboratorBadge
+            guideButton
             shareButton
             playButton
         }
@@ -52,6 +54,7 @@ struct StudioToolbar: View {
         .background(.ultraThinMaterial)
         .animation(.easeInOut(duration: 0.2), value: session.statusMessage)
         .sheet(isPresented: $showShareSheet) { shareSheet }
+        .sheet(isPresented: $showGuide) { MapGuideSheet() }
     }
 
     // MARK: Pieces
@@ -192,6 +195,20 @@ struct StudioToolbar: View {
         if others > 1 {
             Badge("\(others) editing", color: Ablox.Palette.success, systemImage: "person.2.fill")
         }
+    }
+
+    private var guideButton: some View {
+        Button {
+            showGuide = true
+        } label: {
+            Image(systemName: "questionmark.circle")
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 34, height: 32)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Ablox.Palette.inkMuted)
+        .accessibilityLabel("How to make a map")
     }
 
     private var shareButton: some View {

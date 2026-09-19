@@ -108,6 +108,8 @@ them: undoing someone else's edit out of your own history would be baffling.
 
 ## Further reading
 
+- [`docs/making-maps.md`](docs/making-maps.md) — how to build a map, start to finish. Studio shows the same guide in the app, behind the **?** button in the toolbar; both come from `EditorCore/MapGuide.swift`, so edit that and run `scripts/regenerate-docs.sh`
 - [`docs/editor.md`](docs/editor.md) — gestures, tools, and the rule vocabulary
+- [`docs/ipad-build.md`](docs/ipad-build.md) — the errors only an iPad can report, and what the device has actually said
 - [Ablox `docs/networking.md`](https://github.com/prak59459-create/Ablox/blob/main/docs/networking.md) — the protocol and its security model
 - [Ablox `docs/architecture.md`](https://github.com/prak59459-create/Ablox/blob/main/docs/architecture.md) — how the layers fit together

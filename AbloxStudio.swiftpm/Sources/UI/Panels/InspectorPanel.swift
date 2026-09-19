@@ -251,19 +251,13 @@ struct InspectorPanel: View {
 
     private var world: WorldDocument { session.document.world }
 
+    /// The one-line explanation under the behaviour picker.
+    ///
+    /// The sentences live on `BlockBehavior` itself, because Studio's
+    /// map-making guide lists the same ten behaviours — and explaining one
+    /// two different ways in the same app is worse than explaining it badly.
     private func behaviorHint(_ behavior: BlockBehavior) -> String {
-        switch behavior {
-        case .none: return ""
-        case .spawn: return "Players start on top of this block."
-        case .checkpoint: return "Touching it sets where the player respawns. Players walk through it."
-        case .hazard: return "Touching it sends the player back to their last checkpoint."
-        case .collectible: return "Each player can collect it once. Players walk through it."
-        case .goal: return "Touching it ends the round for everyone."
-        case .trigger: return "Does nothing by itself — add a rule that listens for it."
-        case .bounce: return "Launches anyone who lands on it. A trampoline."
-        case .disappear: return "Vanishes shortly after it is stepped on, then comes back."
-        case .teleport: return "Moves the player to another block. Players walk through it."
-        }
+        behavior == .none ? "" : behavior.guidance
     }
 
     private func flagsSection(_ block: BlockData) -> some View {
