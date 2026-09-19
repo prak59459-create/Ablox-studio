@@ -11,7 +11,7 @@ public final class AbloxClient {
         /// Connected, but the world has not arrived yet.
         case handshaking
         case playing
-        case disconnected(String)
+        case disconnected(DisconnectReason)
     }
 
     public var onStateChange: ((State) -> Void)?
@@ -42,6 +42,12 @@ public final class AbloxClient {
     private var profile: AvatarProfile
     private var pingTimer: DispatchSourceTimer?
 
+    /// Where this client was connected, kept so a reconnect can be attempted
+    /// without sending the player back to the lobby to re-enter a code they
+    /// already typed.
+    private var lastEndpoint: NWEndpoint?
+    private var lastRoomCode: String?
+
     public init(localPeerID: PeerID, profile: AvatarProfile) {
         self.localPeerID = localPeerID
         self.profile = profile
@@ -54,10 +60,23 @@ public final class AbloxClient {
         connect(to: peer.endpoint, roomCode: roomCode)
     }
 
+    /// Reconnects to the session this client was last in.
+    ///
+    /// - Returns: false when there is nothing to reconnect to, so the caller
+    ///   can stop trying rather than spin.
+    @discardableResult
+    public func reconnect() -> Bool {
+        guard let endpoint = lastEndpoint, let code = lastRoomCode else { return false }
+        connect(to: endpoint, roomCode: code)
+        return true
+    }
+
     public func connect(to endpoint: NWEndpoint, roomCode: String) {
         queue.async { [weak self] in
             guard let self else { return }
             self.disconnectOnQueue(reason: nil)
+            self.lastEndpoint = endpoint
+            self.lastRoomCode = roomCode
             self.state = .connecting
 
             let connection = PeerConnection(endpoint: endpoint, roomCode: roomCode, codec: self.codec, queue: self.queue)
@@ -75,7 +94,7 @@ public final class AbloxClient {
                     self.stopPinging()
                 case .cancelled:
                     if case .disconnected = self.state {} else {
-                        self.state = .disconnected("Disconnected from the host.")
+                        self.state = .disconnected(.networkLost)
                     }
                     self.stopPinging()
                 case .setup, .connecting:
@@ -92,13 +111,18 @@ public final class AbloxClient {
         }
     }
 
+    /// Leaves deliberately. Clears the remembered session, so nothing tries
+    /// to reconnect afterwards.
     public func disconnect() {
         queue.async { [weak self] in
-            self?.disconnectOnQueue(reason: "You left the world.")
+            guard let self else { return }
+            self.lastEndpoint = nil
+            self.lastRoomCode = nil
+            self.disconnectOnQueue(reason: .userLeft)
         }
     }
 
-    private func disconnectOnQueue(reason: String?) {
+    private func disconnectOnQueue(reason: DisconnectReason?) {
         stopPinging()
         if let connection {
             connection.sendEmpty(.leave)
@@ -116,6 +140,12 @@ public final class AbloxClient {
         switch packet.kind {
         case .handshake:
             guard let payload = try? codec.decodePayload(HandshakePayload.self, from: packet) else { return }
+            guard payload.protocolVersion == AbloxProtocol.version else {
+                // Retrying would fail identically; say so instead.
+                state = .disconnected(.protocolMismatch)
+                connection?.cancel()
+                return
+            }
             hostPeerID = payload.peerID
             worldName = payload.worldName
 
@@ -152,7 +182,11 @@ public final class AbloxClient {
 
         case .leave:
             if let payload = try? codec.decodePayload(LeavePayload.self, from: packet), payload.peerID == hostPeerID {
-                state = .disconnected("The host closed the world.")
+                // Deliberate on the host's part: there is nothing to come back
+                // to, so this must not trigger a reconnect.
+                lastEndpoint = nil
+                lastRoomCode = nil
+                state = .disconnected(.hostClosed)
             }
 
         case .eventTrigger, .ping, .pong:

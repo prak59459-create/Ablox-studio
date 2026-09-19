@@ -23,9 +23,16 @@ public final class SessionCoordinator: ObservableObject {
         case searching
         case connecting
         case active
+        /// Dropped, but trying to get back in. Carries the progress line.
+        case reconnecting(String)
         case error(String)
 
         public var isBusy: Bool { self == .connecting || self == .searching }
+
+        public var isReconnecting: Bool {
+            if case .reconnecting = self { return true }
+            return false
+        }
     }
 
     // MARK: Published state
@@ -104,6 +111,14 @@ public final class SessionCoordinator: ObservableObject {
     private var client: AbloxClient?
     private let browser = AbloxBrowser()
     private var announcementTask: Task<Void, Never>?
+
+    /// Drives getting back in after a drop. A host has nothing to reconnect
+    /// to, so only the client side ever uses it.
+    private var reconnection = ReconnectCoordinator()
+    private var reconnectTask: Task<Void, Never>?
+    private var sessionClock: Date = Date()
+
+    private var now: Double { Date().timeIntervalSince(sessionClock) }
 
     public init(localPeerID: PeerID = PeerID(), profile: AvatarProfile = .default) {
         self.localPeerID = localPeerID
@@ -219,6 +234,8 @@ public final class SessionCoordinator: ObservableObject {
 
         leave()
         roomCode = RoomCode.normalize(code)
+        sessionClock = Date()
+        reconnection = ReconnectCoordinator()
         status = .connecting
 
         let client = AbloxClient(localPeerID: localPeerID, profile: profile)
@@ -230,9 +247,13 @@ public final class SessionCoordinator: ObservableObject {
                 case .playing:
                     self.status = .active
                     self.role = .joined
+                    // Back in: clear the backoff so a later drop starts from
+                    // attempt one rather than inheriting this one's.
+                    self.reconnection.succeeded()
+                    self.reconnectTask?.cancel()
+                    self.reconnectTask = nil
                 case let .disconnected(reason):
-                    self.status = .error(reason)
-                    self.role = .offline
+                    self.handleDisconnect(reason)
                 case .connecting, .handshaking:
                     self.status = .connecting
                 case .idle:
@@ -274,7 +295,84 @@ public final class SessionCoordinator: ObservableObject {
         client.connect(to: peer, roomCode: roomCode)
     }
 
+    // MARK: Reconnection
+
+    /// A drop: either start trying to get back in, or report it.
+    private func handleDisconnect(_ reason: DisconnectReason) {
+        guard role == .joined else {
+            status = .error(reason.message)
+            role = .offline
+            return
+        }
+
+        // A failed *attempt* arrives here as another disconnect. Treating it
+        // as a fresh drop would reset the attempt counter to one, so the
+        // backoff would never escalate and the give-up would never fire — an
+        // infinite retry loop that looks like it is working.
+        let outcome = reconnection.isReconnecting
+            ? reconnection.attemptFailed(at: now)
+            : reconnection.disconnected(reason: reason, at: now)
+
+        switch outcome {
+        case .gaveUp(let reason):
+            status = .error(reason.message)
+            role = .offline
+            stopReconnecting()
+        case .waiting, .attempting:
+            // The world and roster are kept on screen: coming back to the
+            // world you were in beats being thrown to the lobby and having to
+            // find it again.
+            status = .reconnecting(reconnection.progressDescription ?? "Reconnecting…")
+            startReconnecting()
+        case .idle:
+            break
+        }
+    }
+
+    /// Polls the coordinator and makes attempts when they come due.
+    ///
+    /// A poll rather than a scheduled timer, because the wait can be cut short
+    /// — `applicationDidBecomeActive` brings the next attempt forward, and a
+    /// timer would have to be torn down and rebuilt to notice.
+    private func startReconnecting() {
+        guard reconnectTask == nil else { return }
+        reconnectTask = Task { @MainActor [weak self] in
+            while let self, self.reconnection.isReconnecting, !Task.isCancelled {
+                if self.reconnection.shouldAttemptNow(at: self.now) {
+                    self.status = .reconnecting(self.reconnection.progressDescription ?? "Reconnecting…")
+                    if self.client?.reconnect() != true {
+                        // Nothing to reconnect to — the session is gone.
+                        self.reconnection.cancel()
+                        self.status = .error(DisconnectReason.hostClosed.message)
+                        self.role = .offline
+                        break
+                    }
+                }
+                try? await Task.sleep(nanoseconds: 200_000_000)
+            }
+            self?.reconnectTask = nil
+        }
+    }
+
+    private func stopReconnecting() {
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        reconnection.cancel()
+    }
+
+    /// Called when the app returns to the foreground.
+    ///
+    /// The iPad has just regained its network, so a backoff scheduled while it
+    /// was asleep is pure delay. This is the single most likely moment for a
+    /// session to need recovering — backgrounding is what kills the TCP
+    /// connection in the first place.
+    public func applicationDidBecomeActive() {
+        guard reconnection.isReconnecting else { return }
+        reconnection.retryImmediately(at: now)
+    }
+
     public func leave() {
+        stopReconnecting()
         host?.stop()
         host = nil
         client?.disconnect()

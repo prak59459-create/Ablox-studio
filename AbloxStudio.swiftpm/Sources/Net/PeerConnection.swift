@@ -14,7 +14,7 @@ public final class PeerConnection {
         case connecting
         /// TLS handshake finished and the Ablox handshake has been exchanged.
         case ready
-        case failed(String)
+        case failed(DisconnectReason)
         case cancelled
 
         public var isTerminal: Bool {
@@ -80,12 +80,12 @@ public final class PeerConnection {
                 self.state = .ready
                 self.receiveNext()
             case let .failed(error):
-                self.state = .failed(Self.describe(error))
+                self.state = .failed(Self.classify(error))
             case let .waiting(error):
                 // `waiting` on a local mesh usually means the peer is not
                 // reachable yet. Surface it rather than spinning silently —
                 // Network.framework will keep retrying underneath.
-                self.state = .failed(Self.describe(error))
+                self.state = .failed(Self.classify(error))
             case .cancelled:
                 self.state = .cancelled
             case .setup, .preparing:
@@ -104,6 +104,32 @@ public final class PeerConnection {
     /// The Security framework's SSL/TLS error block, `errSSLProtocol` (-9800)
     /// down to `errSSLUnexpectedRecord` and friends near -9860.
     private static let tlsErrorRange: ClosedRange<OSStatus> = (-9860)...(-9800)
+
+    /// Classifies a transport error into something the app can decide from.
+    ///
+    /// The distinction that matters is retryable versus not: a Wi-Fi blip
+    /// deserves a quiet reconnect, a wrong room code deserves a message. See
+    /// `DisconnectReason`.
+    static func classify(_ error: NWError) -> DisconnectReason {
+        if case let .tls(status) = error {
+            return Self.tlsErrorRange.contains(status) ? .authenticationFailed : .networkLost
+        }
+        if case let .posix(code) = error {
+            switch code {
+            case .ETIMEDOUT:
+                return .timedOut
+            case .ECONNREFUSED, .ECONNRESET, .ECONNABORTED, .EHOSTUNREACH, .EHOSTDOWN:
+                return .networkLost
+            case .ENETDOWN, .ENETUNREACH, .ENETRESET:
+                return .networkLost
+            case .ECANCELED:
+                return .userLeft
+            default:
+                return .unknown(Self.describe(error))
+            }
+        }
+        return .unknown(Self.describe(error))
+    }
 
     /// Human-readable reason, with the PSK mismatch called out specifically —
     /// "-9847" tells a 12-year-old nothing, "wrong room code" tells them
@@ -143,7 +169,7 @@ public final class PeerConnection {
             let packet = try codec.encode(kind, payload, sender: sender)
             send(packet)
         } catch {
-            state = .failed("Could not encode \(kind): \(error.localizedDescription)")
+            state = .failed(.unknown("Could not encode \(kind): \(error.localizedDescription)"))
         }
     }
 
@@ -160,7 +186,7 @@ public final class PeerConnection {
             // completion handler.
             completion: packet.kind.isHighFrequency ? .idempotent : .contentProcessed { [weak self] error in
                 guard let error else { return }
-                self?.state = .failed(PeerConnection.describe(error))
+                self?.state = .failed(PeerConnection.classify(error))
             }
         )
     }
@@ -176,7 +202,7 @@ public final class PeerConnection {
             guard let self else { return }
 
             if let error {
-                self.state = .failed(PeerConnection.describe(error))
+                self.state = .failed(PeerConnection.classify(error))
                 return
             }
 

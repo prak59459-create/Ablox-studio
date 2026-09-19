@@ -19,18 +19,26 @@ public struct GameViewport: UIViewRepresentable {
     @Binding var cameraYaw: Float
     @Binding var cameraPitch: Float
     var onBlockTapped: ((UUID) -> Void)?
+    /// Mirrors the Settings toggles, which had nothing to switch off until
+    /// sound existed.
+    var soundEnabled: Bool
+    var hapticsEnabled: Bool
 
     public init(
         session: SessionCoordinator,
         input: Binding<MovementInput>,
         cameraYaw: Binding<Float>,
         cameraPitch: Binding<Float>,
+        soundEnabled: Bool = true,
+        hapticsEnabled: Bool = true,
         onBlockTapped: ((UUID) -> Void)? = nil
     ) {
         self.session = session
         self._input = input
         self._cameraYaw = cameraYaw
         self._cameraPitch = cameraPitch
+        self.soundEnabled = soundEnabled
+        self.hapticsEnabled = hapticsEnabled
         self.onBlockTapped = onBlockTapped
     }
 
@@ -56,6 +64,7 @@ public struct GameViewport: UIViewRepresentable {
 
     public func updateUIView(_ view: ARView, context: Context) {
         context.coordinator.parent = self
+        context.coordinator.setFeedbackEnabled(sound: soundEnabled, haptics: hapticsEnabled)
         context.coordinator.syncWorld(session.world)
         context.coordinator.syncRoster(session.roster, localPeerID: session.localPeerID)
         // Effects are drained in the render loop, not here: `drainEffects()`
@@ -92,6 +101,9 @@ public struct GameViewport: UIViewRepresentable {
         /// Decides which ticks are worth a packet — see `TransformPublisher`.
         private var publisher = TransformPublisher()
         private var elapsed: TimeInterval = 0
+        /// Sound and haptics. `playSound` effects have been arriving and going
+        /// nowhere since the first phase; this is what finally plays them.
+        private let feedback = FeedbackPlayer()
         private var lastWorldRevision: Date?
 
         /// Blocks currently overlapped, so a touch is reported on entry rather
@@ -116,6 +128,8 @@ public struct GameViewport: UIViewRepresentable {
             cameraAnchor.addChild(camera)
             view.scene.addAnchor(cameraAnchor)
 
+            feedback.prepare()
+
             let local = AvatarEntity(
                 peerID: parent.session.localPeerID,
                 profile: parent.session.profile,
@@ -132,6 +146,11 @@ public struct GameViewport: UIViewRepresentable {
                     self?.tick(deltaTime: Float(event.deltaTime))
                 }
             }
+        }
+
+        func setFeedbackEnabled(sound: Bool, haptics: Bool) {
+            feedback.isSoundEnabled = sound
+            feedback.isHapticsEnabled = haptics
         }
 
         func detach() {
@@ -205,9 +224,8 @@ public struct GameViewport: UIViewRepresentable {
                     )
                     localSnapshot.isGrounded = false
                     publisher.reset()
-                case .playSound:
-                    // Hooked up by the HUD, which owns the audio session.
-                    break
+                case let .playSound(name):
+                    feedback.play(named: name)
                 default:
                     worldScene.apply(effect: effect)
                 }

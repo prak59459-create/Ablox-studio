@@ -226,6 +226,33 @@ struct RulesPanel: View {
                         Text(action.displayName)
                             .font(.system(size: 11))
                             .foregroundStyle(Ablox.Palette.ink)
+
+                        if case let .playSound(name) = action {
+                            Picker("Sound", selection: Binding(
+                                get: { SoundCue.named(name) ?? .collect },
+                                set: { cue in
+                                    update(rule) { $0.actions[index] = .playSound(name: cue.rawValue) }
+                                }
+                            )) {
+                                ForEach(SoundCue.allCases, id: \.self) { cue in
+                                    Text(cue.displayName).tag(cue)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .labelsHidden()
+                            .font(.caption2)
+                            .tint(Ablox.Palette.accent)
+
+                            // An authored name the client cannot play would
+                            // otherwise just be silence with no explanation.
+                            if SoundCue.named(name) == nil {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(Ablox.Palette.warning)
+                                    .help("Unknown sound — nothing will play")
+                            }
+                        }
+
                         Spacer(minLength: 4)
                         Button {
                             update(rule) { $0.actions.remove(at: index) }
