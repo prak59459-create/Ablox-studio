@@ -301,6 +301,15 @@ public struct EditorDocument: Sendable {
         perform(.setRules(before: world.rules, after: rules))
     }
 
+    /// Replaces the world's script. An empty or blank script is stored as
+    /// nil, so a world whose script was deleted is a rules-only world again.
+    public mutating func setScript(_ source: String?) {
+        let trimmed = source?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let stored = trimmed.isEmpty ? nil : source
+        guard stored != world.script else { return }
+        perform(.setScript(before: world.script, after: stored))
+    }
+
     public mutating func renameWorld(_ name: String) {
         world.name = name
         hasUnsavedChanges = true

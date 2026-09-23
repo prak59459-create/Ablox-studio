@@ -23,6 +23,8 @@ public struct GameViewport: UIViewRepresentable {
     /// sound existed.
     var soundEnabled: Bool
     var hapticsEnabled: Bool
+    /// The fire button is held. Shots go out at the weapon's rate while it is.
+    var isFiring: Bool
 
     public init(
         session: SessionCoordinator,
@@ -31,6 +33,7 @@ public struct GameViewport: UIViewRepresentable {
         cameraPitch: Binding<Float>,
         soundEnabled: Bool = true,
         hapticsEnabled: Bool = true,
+        isFiring: Bool = false,
         onBlockTapped: ((UUID) -> Void)? = nil
     ) {
         self.session = session
@@ -39,6 +42,7 @@ public struct GameViewport: UIViewRepresentable {
         self._cameraPitch = cameraPitch
         self.soundEnabled = soundEnabled
         self.hapticsEnabled = hapticsEnabled
+        self.isFiring = isFiring
         self.onBlockTapped = onBlockTapped
     }
 
@@ -109,6 +113,19 @@ public struct GameViewport: UIViewRepresentable {
         /// Blocks currently overlapped, so a touch is reported on entry rather
         /// than every frame the player stands there.
         private var currentlyTouching: Set<UUID> = []
+
+        // MARK: Script-driven play
+
+        /// Where the camera looks, kept for aiming.
+        private var viewDirection = Vec3(0, 0, -1)
+        /// The weapon drawn at the bottom of a first-person view.
+        private var viewModel: Entity?
+        private var viewModelKind: String?
+        private var lastShotTime: Double = -.infinity
+        /// 1 just after a shot, easing to 0: the view model's kick.
+        private var recoil: Float = 0
+        /// Shot lines, which fade in a tenth of a second.
+        private var tracers: [(entity: ModelEntity, age: Float)] = []
 
         init(parent: GameViewport) {
             self.parent = parent
@@ -226,6 +243,12 @@ public struct GameViewport: UIViewRepresentable {
                     publisher.reset()
                 case let .playSound(name):
                     feedback.play(named: name)
+                case let .script(scriptEffect):
+                    // Everything else a script sends is state the session
+                    // already folded into `scripted`; only shots are drawn.
+                    if case let .tracer(from, to) = scriptEffect {
+                        spawnTracer(from: from, to: to)
+                    }
                 default:
                     worldScene.apply(effect: effect)
                 }
@@ -239,12 +262,22 @@ public struct GameViewport: UIViewRepresentable {
             let dt = min(deltaTime, 1.0 / 20)
             elapsed += Double(dt)
 
-            // 1. Intent → velocity.
+            // 1. Intent → velocity, scaled by whatever the script allows.
+            let scripted = parent.session.scripted
             var input = parent.input
             input.cameraYawDegrees = parent.cameraYaw
-            let motion = CharacterSolver.step(snapshot: localSnapshot, input: input, deltaTime: dt)
+            var movement = MovementConfig.default
+            movement.walkSpeed *= scripted.speedMultiplier
+            movement.jumpSpeed *= scripted.jumpMultiplier
+            let motion = CharacterSolver.step(snapshot: localSnapshot, input: input, config: movement, deltaTime: dt)
             localSnapshot.velocity = motion.velocity
             localSnapshot.yawDegrees = motion.yawDegrees
+            if scripted.camera == .firstPerson || scripted.weapon != nil {
+                // Aiming: the body faces where the camera looks, so walking
+                // sideways strafes instead of turning away from the target.
+                let forward = Quat.yaw(degrees: parent.cameraYaw).act(Vec3(0, 0, -1))
+                localSnapshot.yawDegrees = atan2(forward.x, -forward.z) * 180 / .pi
+            }
 
             // 2. Velocity → position, resolved against the world.
             //    Deterministic and shared with the host — see WorldCollider.
@@ -279,11 +312,30 @@ public struct GameViewport: UIViewRepresentable {
             if !effects.isEmpty { apply(effects: effects) }
 
             updateCamera(dt: dt)
+            updateWeapons(dt: dt)
+            if parent.isFiring { fireIfReady() }
+            fadeTracers(dt: dt)
             publishIfDue()
         }
 
-        /// Third-person orbit camera, pulled in when a wall is in the way.
+        /// Third-person orbit camera, pulled in when a wall is in the way —
+        /// or, when the world's script asks for it, the player's own eyes.
         private func updateCamera(dt: Float) {
+            if parent.session.scripted.camera == .firstPerson {
+                let pitch = max(-80, min(80, parent.cameraPitch))
+                let look = Quat.euler(degrees: Vec3(pitch, parent.cameraYaw, 0)).act(Vec3(0, 0, -1))
+                let eye = localSnapshot.position + Vec3(0, PlayerHitBody.eyeHeight, 0)
+                // No easing: in first person any lag between thumb and view
+                // reads as the game being slow.
+                cameraAnchor.position = eye.simd
+                camera.look(at: (eye + look).simd, from: eye.simd, relativeTo: nil)
+                viewDirection = look
+                // Your own head would fill the screen.
+                localAvatar?.isEnabled = false
+                return
+            }
+            localAvatar?.isEnabled = true
+
             let pitch = max(-75, min(20, parent.cameraPitch))
             let orbit = Quat.euler(degrees: Vec3(pitch, parent.cameraYaw, 0))
 
@@ -307,6 +359,115 @@ public struct GameViewport: UIViewRepresentable {
             // Ease toward the target so wall-clipping corrections do not snap.
             cameraAnchor.position = Vec3.lerp(current, target, 1 - exp(-14 * dt)).simd
             camera.look(at: focus.simd, from: cameraAnchor.position, relativeTo: nil)
+            let looking = focus - Vec3(cameraAnchor.position)
+            if looking.lengthSquared > 1e-4 { viewDirection = looking.normalized }
+        }
+
+        // MARK: Weapons
+
+        /// Puts the script's weapon in the local avatar's hand, and at the
+        /// bottom of the screen in first person.
+        private func updateWeapons(dt: Float) {
+            let scripted = parent.session.scripted
+            let model = scripted.weapon?.model
+            localAvatar?.hold(weaponModel: model)
+
+            let wanted = scripted.camera == .firstPerson ? model : nil
+            if wanted != viewModelKind {
+                viewModel?.removeFromParent()
+                viewModel = nil
+                viewModelKind = wanted
+                if let wanted {
+                    let weapon = WeaponModel.make(wanted)
+                    camera.addChild(weapon)
+                    viewModel = weapon
+                }
+            }
+
+            recoil = max(0, recoil - dt * 9)
+            if let viewModel {
+                // Lower right, like every shooter; knocked back by each shot.
+                viewModel.position = SIMD3<Float>(0.2, -0.2 + recoil * 0.02, -0.42 + recoil * 0.06)
+                viewModel.orientation = simd_quatf(angle: recoil * 0.12, axis: SIMD3<Float>(1, 0, 0))
+            }
+        }
+
+        /// Sends a shot when the weapon is ready. Only a request: the host
+        /// checks the rate, the ammo and where we are, and decides the hit.
+        private func fireIfReady() {
+            let scripted = parent.session.scripted
+            guard scripted.canFire, let weapon = scripted.weapon else { return }
+            let interval = 1 / max(weapon.fireRate, 0.2)
+            guard elapsed - lastShotTime >= interval else { return }
+            lastShotTime = elapsed
+            recoil = 1
+
+            let eyes = localSnapshot.position + Vec3(0, PlayerHitBody.eyeHeight, 0)
+            parent.session.send(input: .fire(origin: eyes, direction: aimDirection(from: eyes, range: weapon.range)))
+        }
+
+        /// The shot leaves the eyes but must land under the crosshair, which
+        /// in third person sits on a ray from the camera several metres
+        /// behind them. So: find what the crosshair is on, then aim at that.
+        private func aimDirection(from eyes: Vec3, range: Float) -> Vec3 {
+            let world = parent.session.world
+            let origin = Vec3(camera.position(relativeTo: nil))
+            let blocks: [(id: UUID, bounds: BoundingBox)] = world.blocks.compactMap { block in
+                guard block.isVisible, block.hasCollision, let bounds = world.worldBounds(of: block.id) else { return nil }
+                return (block.id, bounds)
+            }
+            let players: [(peer: PeerID, position: Vec3)] = avatars.map { ($0.key, $0.value.targetPosition) }
+            let crosshair = Hitscan.cast(
+                from: origin, direction: viewDirection, range: range + origin.distance(to: eyes),
+                shooter: parent.session.localPeerID, players: players, blocks: blocks
+            )
+            let direction = crosshair.point - eyes
+            // Something right in front of the camera but behind the eyes
+            // would flip the shot round; fall back to the view direction.
+            guard direction.lengthSquared > 0.25, direction.normalized.dot(viewDirection) > 0 else { return viewDirection }
+            return direction.normalized
+        }
+
+        private func spawnTracer(from start: Vec3, to end: Vec3) {
+            var from = start
+            // Our own shot starts at our eyes, which in first person is the
+            // camera — a line straight away from the viewer is invisible.
+            // Draw it from the gun instead.
+            let eyes = localSnapshot.position + Vec3(0, PlayerHitBody.eyeHeight, 0)
+            if start.distance(to: eyes) < 0.8 {
+                if let viewModel, let kind = viewModelKind {
+                    from = Vec3(viewModel.convert(position: WeaponModel.muzzle(kind), to: nil))
+                } else if let muzzle = localAvatar?.muzzlePosition {
+                    from = muzzle
+                }
+            }
+
+            let length = from.distance(to: end)
+            guard length > 0.05 else { return }
+            if tracers.count >= 32, let oldest = tracers.first {
+                oldest.entity.removeFromParent()
+                tracers.removeFirst()
+            }
+            let line = ModelEntity(
+                mesh: .generateBox(size: SIMD3<Float>(0.03, 0.03, length)),
+                materials: [UnlitMaterial(color: UIColor(red: 1, green: 0.86, blue: 0.35, alpha: 1))]
+            )
+            // Parented first, so "relative to nothing" means the world the
+            // line is actually in.
+            worldScene.anchor.addChild(line)
+            line.look(at: end.simd, from: ((from + end) * 0.5).simd, relativeTo: nil)
+            tracers.append((line, 0))
+        }
+
+        private func fadeTracers(dt: Float) {
+            guard !tracers.isEmpty else { return }
+            for index in tracers.indices {
+                tracers[index].age += dt
+            }
+            for tracer in tracers where tracer.age > 0.12 {
+                tracer.entity.removeFromParent()
+            }
+            tracers.removeAll { $0.age > 0.12 }
         }
 
         /// Publishes only when peers could not have predicted where we are.

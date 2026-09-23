@@ -99,6 +99,12 @@ public struct EventMachine: Sendable {
         players[snapshot.peerID] = snapshot
     }
 
+    /// A new name or look for someone already playing. Leaves their score
+    /// and position alone, which `addPlayer` with a fresh snapshot would not.
+    public mutating func updateProfile(_ profile: AvatarProfile, for peer: PeerID) {
+        players[peer]?.profile = profile
+    }
+
     public mutating func removePlayer(_ peer: PeerID) {
         players.removeValue(forKey: peer)
         consumedBlocks.removeValue(forKey: peer)
@@ -142,6 +148,12 @@ public struct EventMachine: Sendable {
         fireCounts = fireCounts.filter { liveRuleIDs.contains($0.key) }
         lastFiredAt = lastFiredAt.filter { liveRuleIDs.contains($0.key) }
         lastTimerFireAt = lastTimerFireAt.filter { liveRuleIDs.contains($0.key) }
+    }
+
+    /// Ends the round from outside the rules — a script's `end_round`. Rules
+    /// stop firing until the next `.roundStarted`, exactly as for a goal.
+    public mutating func endRound() {
+        isRoundOver = true
     }
 
     // MARK: Time
@@ -535,6 +547,11 @@ public struct EventMachine: Sendable {
             case .bouncePlayer:
                 // Personal, like a teleport: only whoever set it off is moved.
                 guard let peer else { continue }
+                effects.append(Effect(ruleID: rule.id, targetPeerID: peer, action: action))
+
+            case .script:
+                // Screen and camera changes belong to whoever set the rule
+                // off; a rule with nobody behind it (a timer) shows everyone.
                 effects.append(Effect(ruleID: rule.id, targetPeerID: peer, action: action))
             }
         }

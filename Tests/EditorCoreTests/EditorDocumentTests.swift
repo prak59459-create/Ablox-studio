@@ -491,4 +491,36 @@ final class EditorDocumentTests: XCTestCase {
         XCTAssertEqual(EditCommand.insert(block).deltas.count, 1)
         XCTAssertEqual(EditCommand.group(label: "g", commands: [.insert(block), .delete(block)]).deltas.count, 2)
     }
+
+    // MARK: Script
+
+    func testScriptEditsUndoAndTravelToCoEditors() {
+        var doc = makeDocument()
+        doc.setScript("on start()\nend")
+        XCTAssertEqual(doc.world.script, "on start()\nend")
+        XCTAssertEqual(doc.drainDeltas(), [.scriptReplaced("on start()\nend")])
+
+        XCTAssertTrue(doc.undo())
+        XCTAssertNil(doc.world.script)
+        XCTAssertEqual(doc.drainDeltas(), [.scriptReplaced(nil)], "an undo reaches co-editors too")
+    }
+
+    func testABlankScriptIsNoScript() {
+        var doc = makeDocument()
+        doc.setScript("print(1)")
+        doc.setScript("  \n ")
+        XCTAssertNil(doc.world.script, "a world whose script was emptied is a rules-only world again")
+    }
+
+    func testTypingIsOneUndoStep() {
+        var doc = makeDocument()
+        doc.beginGesture()
+        for text in ["o", "on", "on s", "on start()"] {
+            doc.setScript(text)
+        }
+        doc.endGesture()
+        XCTAssertTrue(doc.undo())
+        XCTAssertNil(doc.world.script, "one undo takes back the whole visit to the editor")
+        XCTAssertFalse(doc.history.canUndo)
+    }
 }

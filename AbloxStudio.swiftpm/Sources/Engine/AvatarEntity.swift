@@ -21,6 +21,8 @@ public final class AvatarEntity: Entity {
     private let leftLeg = ModelEntity()
     private let rightLeg = ModelEntity()
     private var hatEntity: ModelEntity?
+    private var heldWeapon: Entity?
+    public private(set) var heldWeaponModel: String?
 
     /// Where the network says this avatar is. The entity eases toward it
     /// rather than snapping, which hides the 15 Hz transform rate.
@@ -148,6 +150,28 @@ public final class AvatarEntity: Entity {
         entity.name = "ablox.avatar.hat"
         addChild(entity)
         hatEntity = entity
+    }
+
+    // MARK: Weapon
+
+    /// Puts a script-given weapon in the right hand, or empties it.
+    public func hold(weaponModel model: String?) {
+        guard model != heldWeaponModel else { return }
+        heldWeapon?.removeFromParent()
+        heldWeapon = nil
+        heldWeaponModel = model
+        guard let model else { return }
+        let weapon = WeaponModel.make(model)
+        // The hand is the bottom of the arm; the arm's origin is its middle.
+        weapon.position = SIMD3<Float>(0, -0.3, -0.1)
+        rightArm.addChild(weapon)
+        heldWeapon = weapon
+    }
+
+    /// Where a shot from this avatar's weapon starts, in world space.
+    public var muzzlePosition: Vec3? {
+        guard let heldWeapon, let model = heldWeaponModel else { return nil }
+        return Vec3(heldWeapon.convert(position: WeaponModel.muzzle(model), to: nil))
     }
 
     // MARK: Animation

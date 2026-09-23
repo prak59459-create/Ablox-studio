@@ -143,13 +143,18 @@ public enum EventAction: Codable, Hashable, Sendable {
     /// Launches the triggering player upward at `speed` m/s. The client owns
     /// the impulse — the host has no simulation to apply it to.
     case bouncePlayer(speed: Float)
+    /// Something a world's script did: a HUD element, a weapon, a camera
+    /// change. One case rather than a dozen so the existing delivery — who it
+    /// is for, and applying it on the host's own screen — carries all of them,
+    /// and so the many exhaustive switches over this type change once.
+    case script(ScriptEffect)
 
     private enum CodingKeys: String, CodingKey {
-        case type, blockID, color, duration, offset, visible, enabled, position, points, message, name, speed
+        case type, blockID, color, duration, offset, visible, enabled, position, points, message, name, speed, effect
     }
 
     private enum Kind: String, Codable {
-        case tint, move, setVisible, setCollision, teleportPlayer, awardPoints, announce, playSound, endRound, bouncePlayer
+        case tint, move, setVisible, setCollision, teleportPlayer, awardPoints, announce, playSound, endRound, bouncePlayer, script
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -192,6 +197,9 @@ public enum EventAction: Codable, Hashable, Sendable {
         case let .bouncePlayer(speed):
             try c.encode(Kind.bouncePlayer, forKey: .type)
             try c.encode(speed, forKey: .speed)
+        case let .script(effect):
+            try c.encode(Kind.script, forKey: .type)
+            try c.encode(effect, forKey: .effect)
         }
     }
 
@@ -235,6 +243,8 @@ public enum EventAction: Codable, Hashable, Sendable {
             self = .endRound(message: try c.decodeIfPresent(String.self, forKey: .message) ?? "Round over")
         case .bouncePlayer:
             self = .bouncePlayer(speed: try c.decodeIfPresent(Float.self, forKey: .speed) ?? 14)
+        case .script:
+            self = .script(try c.decode(ScriptEffect.self, forKey: .effect))
         }
     }
 }
@@ -252,6 +262,7 @@ public extension EventAction {
         case .playSound: return "Play sound"
         case .endRound: return "End round"
         case let .bouncePlayer(speed): return String(format: "Bounce player (%.0f m/s)", speed)
+        case .script: return "Script"
         }
     }
 
@@ -267,6 +278,7 @@ public extension EventAction {
         case .playSound: return "speaker.wave.2.fill"
         case .endRound: return "flag.checkered"
         case .bouncePlayer: return "arrow.up.circle.fill"
+        case .script: return "curlybraces"
         }
     }
 
@@ -274,7 +286,7 @@ public extension EventAction {
         switch self {
         case let .tint(id, _, _), let .move(id, _, _), let .setVisible(id, _), let .setCollision(id, _):
             return [id]
-        case .teleportPlayer, .awardPoints, .announce, .playSound, .endRound, .bouncePlayer:
+        case .teleportPlayer, .awardPoints, .announce, .playSound, .endRound, .bouncePlayer, .script:
             return []
         }
     }
@@ -282,9 +294,10 @@ public extension EventAction {
 
 // MARK: - EventRule
 
-/// One trigger plus the actions it runs. The whole scripting surface of Ablox
-/// — no text scripting language, because typing code on an iPad is miserable
-/// and a fixed vocabulary can be edited with pickers.
+/// One trigger plus the actions it runs — the no-code half of Ablox, edited
+/// with pickers because typing is the hard part on an iPad. What rules cannot
+/// say (first-person cameras, weapons, on-screen buttons, rounds) is what a
+/// world's script is for; see `GameRuntime`. Both run on the host.
 public struct EventRule: Codable, Hashable, Identifiable, Sendable {
     public var id: UUID
     public var name: String

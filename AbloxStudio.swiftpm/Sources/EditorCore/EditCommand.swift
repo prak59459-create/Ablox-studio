@@ -19,6 +19,8 @@ public enum EditCommand: Hashable, Sendable {
     case reparent(blockID: UUID, from: UUID?, to: UUID?)
     case setEnvironment(before: EnvironmentSettings, after: EnvironmentSettings)
     case setRules(before: [EventRule], after: [EventRule])
+    /// The world's AbloxScript. Nil is "no script".
+    case setScript(before: String?, after: String?)
     /// Several edits that undo as one — a multi-selection drag, say.
     indirect case group(label: String, commands: [EditCommand])
 
@@ -51,6 +53,11 @@ public enum EditCommand: Hashable, Sendable {
             world.modifiedAt = Date()
             return true
 
+        case let .setScript(_, after):
+            world.script = after
+            world.modifiedAt = Date()
+            return true
+
         case let .group(_, commands):
             var anyApplied = false
             for command in commands where command.apply(to: &world) {
@@ -75,6 +82,8 @@ public enum EditCommand: Hashable, Sendable {
             return .setEnvironment(before: after, after: before)
         case let .setRules(before, after):
             return .setRules(before: after, after: before)
+        case let .setScript(before, after):
+            return .setScript(before: after, after: before)
         case let .group(label, commands):
             // Reversed: undoing a group must unwind it in the opposite order,
             // or a delete-then-insert pair would resurrect in the wrong place.
@@ -91,6 +100,7 @@ public enum EditCommand: Hashable, Sendable {
         case .reparent: return "Move in tree"
         case .setEnvironment: return "Change environment"
         case .setRules: return "Edit rules"
+        case .setScript: return "Edit script"
         case let .group(label, _): return label
         }
     }
@@ -106,6 +116,7 @@ public enum EditCommand: Hashable, Sendable {
         case let .reparent(blockID, _, to): return [.reparent(blockID: blockID, newParent: to)]
         case let .setEnvironment(_, after): return [.environment(after)]
         case let .setRules(_, after): return [.rulesReplaced(after)]
+        case let .setScript(_, after): return [.scriptReplaced(after)]
         case let .group(_, commands): return commands.flatMap(\.deltas)
         }
     }
@@ -116,17 +127,28 @@ public enum EditCommand: Hashable, Sendable {
     /// undo would step back through sixty intermediate positions instead of
     /// returning the block to where it started.
     public func canCoalesce(with next: EditCommand) -> Bool {
-        guard case let .modify(_, after) = self,
-              case let .modify(nextBefore, _) = next else { return false }
-        return after.id == nextBefore.id
+        switch (self, next) {
+        case let (.modify(_, after), .modify(nextBefore, _)):
+            return after.id == nextBefore.id
+        case (.setScript, .setScript):
+            // A burst of typing is one undo step, like a drag.
+            return true
+        default:
+            return false
+        }
     }
 
     /// Merges a coalescable pair, keeping this command's original `before`.
     public func coalesced(with next: EditCommand) -> EditCommand {
-        guard case let .modify(before, _) = self,
-              case let .modify(_, after) = next,
-              canCoalesce(with: next) else { return next }
-        return .modify(before: before, after: after)
+        guard canCoalesce(with: next) else { return next }
+        switch (self, next) {
+        case let (.modify(before, _), .modify(_, after)):
+            return .modify(before: before, after: after)
+        case let (.setScript(before, _), .setScript(_, after)):
+            return .setScript(before: before, after: after)
+        default:
+            return next
+        }
     }
 }
 

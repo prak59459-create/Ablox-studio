@@ -13,13 +13,24 @@ struct StudioView: View {
     private enum LeftTab: String, CaseIterable, Identifiable {
         case explorer = "Explorer"
         case rules = "Rules"
+        case script = "Script"
 
         var id: String { rawValue }
+
+        /// The raw value is an identifier; this is what the tab says.
+        var title: String {
+            switch self {
+            case .explorer: return L("Explorer")
+            case .rules: return L("Rules")
+            case .script: return L("Script")
+            }
+        }
 
         var symbolName: String {
             switch self {
             case .explorer: return "list.bullet.indent"
             case .rules: return "bolt.fill"
+            case .script: return "curlybraces"
             }
         }
     }
@@ -89,7 +100,7 @@ struct StudioView: View {
         VStack(spacing: 0) {
             Picker(L("Panel"), selection: $leftTab) {
                 ForEach(LeftTab.allCases) { tab in
-                    Label(tab.rawValue, systemImage: tab.symbolName).tag(tab)
+                    Label(tab.title, systemImage: tab.symbolName).tag(tab)
                 }
             }
             .pickerStyle(.segmented)
@@ -100,6 +111,7 @@ struct StudioView: View {
             switch leftTab {
             case .explorer: ExplorerPanel(session: session)
             case .rules: RulesPanel(session: session)
+            case .script: ScriptPanel(session: session)
             }
         }
         .background(.ultraThinMaterial)

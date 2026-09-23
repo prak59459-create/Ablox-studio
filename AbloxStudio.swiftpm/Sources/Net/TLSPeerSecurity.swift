@@ -124,10 +124,7 @@ public enum TLSPeerSecurity {
 /// Generation and normalisation of the short code that secures a session.
 public enum RoomCode {
 
-    /// Crockford-style alphabet: no I, L, O, U, 0 or 1, so a code read aloud
-    /// or squinted at across a table cannot be mistyped into a different valid
-    /// code.
-    private static let alphabet = Array("ABCDEFGHJKMNPQRSTVWXYZ23456789")
+    private static let alphabet = RoomCodeFormat.alphabet
 
     public static let defaultLength = 6
 
@@ -150,21 +147,11 @@ public enum RoomCode {
         return String(bytes.map { alphabet[Int($0) % alphabet.count] })
     }
 
-    /// Uppercases and strips anything that is not part of the alphabet, so
-    /// "abcd ef", "ABCD-EF" and "abcdef" are the same code.
-    public static func normalize(_ raw: String) -> String {
-        String(raw.uppercased().filter { alphabet.contains($0) })
-    }
+    // The pure parts live in the portable core, where they are tested along
+    // with the on-screen code pad that relies on them. These forward, so every
+    // existing caller keeps working.
 
-    public static func isPlausible(_ raw: String) -> Bool {
-        normalize(raw).count >= 4
-    }
-
-    /// Groups a code for display: `ABC DEF`.
-    public static func formatted(_ raw: String) -> String {
-        let normalized = normalize(raw)
-        guard normalized.count > 4 else { return normalized }
-        let mid = normalized.index(normalized.startIndex, offsetBy: normalized.count / 2)
-        return "\(normalized[..<mid]) \(normalized[mid...])"
-    }
+    public static func normalize(_ raw: String) -> String { RoomCodeFormat.normalize(raw) }
+    public static func isPlausible(_ raw: String) -> Bool { RoomCodeFormat.isPlausible(raw) }
+    public static func formatted(_ raw: String) -> String { RoomCodeFormat.formatted(raw) }
 }

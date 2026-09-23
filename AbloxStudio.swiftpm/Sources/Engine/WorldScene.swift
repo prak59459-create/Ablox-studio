@@ -237,7 +237,7 @@ public final class WorldScene {
             entity.components.remove(CollisionComponent.self)
             entity.components.remove(PhysicsBodyComponent.self)
 
-        case .teleportPlayer, .bouncePlayer, .awardPoints, .announce, .playSound, .endRound:
+        case .teleportPlayer, .bouncePlayer, .awardPoints, .announce, .playSound, .endRound, .script:
             // Not scene-level: these act on the player or the HUD, and the
             // viewport owns both. Listed rather than a `default:` so that
             // adding an action forces this decision again — which is exactly

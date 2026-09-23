@@ -52,6 +52,20 @@ public final class SessionCoordinator: ObservableObject {
     /// The viewport drains this each frame.
     @Published public private(set) var pendingEffects: [EventAction] = []
 
+    /// What the world's script has given this player: screen GUI, camera,
+    /// weapon, health, ammo. Only ever changed by effects from the host.
+    @Published public private(set) var scripted = ScriptedPlayerState()
+
+    /// The world script's errors and `print` output, newest last. Only the
+    /// host sees these — it is the host's world, so the host can fix it.
+    @Published public private(set) var scriptLog: [ScriptLogLine] = []
+
+    public struct ScriptLogLine: Identifiable, Hashable {
+        public let id = UUID()
+        public let text: String
+        public let isError: Bool
+    }
+
     public struct ChatEntry: Identifiable, Hashable {
         public let id = UUID()
         public let senderID: PeerID
@@ -115,6 +129,10 @@ public final class SessionCoordinator: ObservableObject {
     /// Drives getting back in after a drop. A host has nothing to reconnect
     /// to, so only the client side ever uses it.
     private var reconnection = ReconnectCoordinator()
+
+    /// Who is here and where, with the same rules for host and client. See
+    /// `RosterState` for the two position bugs this replaced.
+    private var rosterState: RosterState
     private var reconnectTask: Task<Void, Never>?
     private var sessionClock: Date = Date()
 
@@ -123,6 +141,7 @@ public final class SessionCoordinator: ObservableObject {
     public init(localPeerID: PeerID = PeerID(), profile: AvatarProfile = .default) {
         self.localPeerID = localPeerID
         self.profile = profile
+        self.rosterState = RosterState(localPeerID: localPeerID)
         configureBrowser()
     }
 
@@ -195,7 +214,14 @@ public final class SessionCoordinator: ObservableObject {
         }
 
         host.onRosterChange = { [weak self] roster in
-            Task { @MainActor in self?.roster = roster }
+            Task { @MainActor in self?.replaceRoster(roster) }
+        }
+
+        // The host used to receive every joined player's movement and never
+        // show it: its screen only refreshed on join, leave and score, so a
+        // guest stood frozen at their spawn point on the host's iPad.
+        host.onRemoteTransform = { [weak self] payload in
+            Task { @MainActor in self?.applyRemoteTransform(payload) }
         }
 
         host.onChat = { [weak self] sender, payload in
@@ -204,6 +230,10 @@ public final class SessionCoordinator: ObservableObject {
 
         host.onLocalEffects = { [weak self] effects in
             Task { @MainActor in self?.apply(effects: effects.map(\.action)) }
+        }
+
+        host.onScriptDiagnostics = { [weak self] errors, output in
+            Task { @MainActor in self?.appendScriptLog(errors: errors, output: output) }
         }
 
         host.onRemoteDelta = { [weak self] delta in
@@ -263,7 +293,12 @@ public final class SessionCoordinator: ObservableObject {
         }
 
         client.onWorld = { [weak self] world in
-            Task { @MainActor in self?.world = world }
+            Task { @MainActor in
+                // A fresh world means a fresh welcome from the host's script,
+                // so whatever the last one put on screen goes first.
+                self?.scripted.reset()
+                self?.world = world
+            }
         }
 
         client.onDelta = { [weak self] delta in
@@ -276,7 +311,7 @@ public final class SessionCoordinator: ObservableObject {
         }
 
         client.onRoster = { [weak self] roster in
-            Task { @MainActor in self?.roster = roster }
+            Task { @MainActor in self?.replaceRoster(roster) }
         }
 
         client.onTransform = { [weak self] payload in
@@ -379,9 +414,12 @@ public final class SessionCoordinator: ObservableObject {
         client = nil
         role = .offline
         status = .idle
+        rosterState.reset()
         roster = []
         pingMilliseconds = nil
         pendingEffects = []
+        scripted.reset()
+        scriptLog = []
         announcementTask?.cancel()
         announcement = nil
     }
@@ -418,6 +456,20 @@ public final class SessionCoordinator: ObservableObject {
             // — see `startSoloSession`.
             break
         }
+    }
+
+    /// Fire, reload or a screen button. Like touches, only a report: the
+    /// host's script decides what it did.
+    public func send(input: PlayerInputPayload.Input) {
+        switch role {
+        case .hosting: host?.reportLocalInput(input)
+        case .joined: client?.send(input: input)
+        case .offline: break
+        }
+    }
+
+    public func clearScriptLog() {
+        scriptLog = []
     }
 
     public func sendChat(_ text: String) {
@@ -457,6 +509,8 @@ public final class SessionCoordinator: ObservableObject {
                 world.mutate(id: blockID) { $0.hasCollision = enabled }
             case let .endRound(message):
                 show(announcement: message, for: 5)
+            case let .script(effect):
+                scripted.apply(effect)
             default:
                 break
             }
@@ -482,6 +536,14 @@ public final class SessionCoordinator: ObservableObject {
         }
     }
 
+    private func appendScriptLog(errors: [ScriptError], output: [String]) {
+        scriptLog.append(contentsOf: output.map { ScriptLogLine(text: $0, isError: false) })
+        scriptLog.append(contentsOf: errors.map { ScriptLogLine(text: $0.description, isError: true) })
+        if scriptLog.count > 50 {
+            scriptLog.removeFirst(scriptLog.count - 50)
+        }
+    }
+
     private func appendChat(_ payload: ChatPayload, from sender: PeerID) {
         let filtered = moderator.filter(payload.text)
         chatLog.append(ChatEntry(
@@ -497,12 +559,26 @@ public final class SessionCoordinator: ObservableObject {
         }
     }
 
+    /// Another player moved. Host and client both come through here.
     private func applyRemoteTransform(_ payload: PlayerTransformPayload) {
-        guard let index = roster.firstIndex(where: { $0.peerID == payload.peerID }) else { return }
-        roster[index].position = payload.position
-        roster[index].yawDegrees = payload.yawDegrees
-        roster[index].velocity = payload.velocity
-        roster[index].isGrounded = payload.isGrounded
+        rosterState.apply(payload)
+        roster = rosterState.players
+    }
+
+    /// A full roster from the host (or, when hosting, from our own host).
+    private func replaceRoster(_ incoming: [PlayerSnapshot]) {
+        for event in rosterState.replace(with: incoming) {
+            switch event {
+            case let .placeLocalPlayer(at: position):
+                // The host picked a spawn point for us. Going through the
+                // effect queue means the viewport moves us exactly as it does
+                // for a teleport pad — including telling everyone else at
+                // once, since a jump in position is what dead reckoning cannot
+                // predict.
+                pendingEffects.append(.teleportPlayer(to: position))
+            }
+        }
+        roster = rosterState.players
     }
 
     // MARK: Solo
@@ -517,10 +593,10 @@ public final class SessionCoordinator: ObservableObject {
     }
 
     public var localPlayer: PlayerSnapshot? {
-        roster.first { $0.peerID == localPeerID }
+        rosterState.localPlayer
     }
 
     public var otherPlayers: [PlayerSnapshot] {
-        roster.filter { $0.peerID != localPeerID }
+        rosterState.otherPlayers
     }
 }

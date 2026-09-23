@@ -29,6 +29,9 @@ public enum PacketKind: UInt8, Codable, CaseIterable, Sendable {
     /// Sent on a clean disconnect so peers disappear immediately rather than
     /// waiting for a socket timeout.
     case leave = 11
+    /// Client → host. A button press a script cares about: firing a weapon,
+    /// tapping a button on the script's screen GUI.
+    case playerInput = 12
 
     public var isHighFrequency: Bool {
         self == .playerTransform
@@ -163,13 +166,14 @@ public enum WorldDelta: Codable, Hashable, Sendable {
     case reparent(blockID: UUID, newParent: UUID?)
     case environment(EnvironmentSettings)
     case rulesReplaced([EventRule])
+    case scriptReplaced(String?)
 
     private enum CodingKeys: String, CodingKey {
-        case type, block, blockID, newParent, environment, rules
+        case type, block, blockID, newParent, environment, rules, script
     }
 
     private enum Kind: String, Codable {
-        case insert, update, remove, reparent, environment, rulesReplaced
+        case insert, update, remove, reparent, environment, rulesReplaced, scriptReplaced
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -194,6 +198,9 @@ public enum WorldDelta: Codable, Hashable, Sendable {
         case let .rulesReplaced(rules):
             try c.encode(Kind.rulesReplaced, forKey: .type)
             try c.encode(rules, forKey: .rules)
+        case let .scriptReplaced(script):
+            try c.encode(Kind.scriptReplaced, forKey: .type)
+            try c.encodeIfPresent(script, forKey: .script)
         }
     }
 
@@ -210,6 +217,7 @@ public enum WorldDelta: Codable, Hashable, Sendable {
             )
         case .environment: self = .environment(try c.decode(EnvironmentSettings.self, forKey: .environment))
         case .rulesReplaced: self = .rulesReplaced(try c.decode([EventRule].self, forKey: .rules))
+        case .scriptReplaced: self = .scriptReplaced(try c.decodeIfPresent(String.self, forKey: .script))
         }
     }
 
@@ -238,6 +246,10 @@ public enum WorldDelta: Codable, Hashable, Sendable {
             return true
         case let .rulesReplaced(rules):
             world.rules = rules
+            world.modifiedAt = Date()
+            return true
+        case let .scriptReplaced(script):
+            world.script = script
             world.modifiedAt = Date()
             return true
         }
@@ -314,6 +326,28 @@ public struct EventEffectPayload: Codable, Hashable, Sendable {
     }
 }
 
+/// Client → host: "I pressed something". Like `EventTriggerPayload`, a claim
+/// the host checks rather than a result it accepts — a shot says where it
+/// came from and which way it went, never what it hit.
+public struct PlayerInputPayload: Codable, Hashable, Sendable {
+    public enum Input: Codable, Hashable, Sendable {
+        /// The fire button, aimed from `origin` along `direction`.
+        case fire(origin: Vec3, direction: Vec3)
+        /// A button a script put on the screen.
+        case button(id: String)
+        /// Reload before the magazine is empty.
+        case reload
+    }
+
+    public var peerID: PeerID
+    public var input: Input
+
+    public init(peerID: PeerID, input: Input) {
+        self.peerID = peerID
+        self.input = input
+    }
+}
+
 public struct ChatPayload: Codable, Hashable, Sendable {
     public var senderName: String
     public var text: String
@@ -353,7 +387,9 @@ public enum AbloxProtocol {
     /// Bumped when the packet vocabulary changes incompatibly. A handshake
     /// with a different version is rejected with a readable message rather
     /// than left to fail mysteriously later.
-    public static let version = 1
+    ///
+    /// 2: `playerInput` and script effects (screen GUI, weapons, camera).
+    public static let version = 2
 
     /// Bonjour service type advertised by hosts.
     public static let bonjourServiceType = "_ablox._tcp"

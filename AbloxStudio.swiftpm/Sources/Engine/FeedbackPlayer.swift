@@ -95,6 +95,10 @@ public final class FeedbackPlayer {
         case .leave: return 1004        // Sent message
         case .tick: return 1105         // Tock
         case .error: return 1073        // Alert
+        case .shoot: return 1306        // Keyboard click
+        case .hit: return 1104          // End recording
+        case .reload: return 1105       // Tock
+        case .defeat: return 1053       // Low tri-tone
         }
     }
 

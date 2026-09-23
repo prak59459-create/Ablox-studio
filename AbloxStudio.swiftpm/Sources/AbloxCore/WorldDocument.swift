@@ -69,6 +69,11 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
     public var environment: EnvironmentSettings
     public var blocks: [BlockData]
     public var rules: [EventRule]
+    /// The world's AbloxScript source, or nil for a world run by rules alone.
+    ///
+    /// Optional so every world saved before scripts existed still opens:
+    /// the synthesised decoder treats a missing key as nil.
+    public var script: String?
 
     public init(
         id: UUID = UUID(),
@@ -79,7 +84,8 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
         modifiedAt: Date = Date(),
         environment: EnvironmentSettings = .default,
         blocks: [BlockData] = [],
-        rules: [EventRule] = []
+        rules: [EventRule] = [],
+        script: String? = nil
     ) {
         self.id = id
         self.schemaVersion = schemaVersion
@@ -90,6 +96,13 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
         self.environment = environment
         self.blocks = blocks
         self.rules = rules
+        self.script = script
+    }
+
+    /// True when the world has a script with anything in it.
+    var hasScript: Bool {
+        guard let script else { return false }
+        return !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 }
 

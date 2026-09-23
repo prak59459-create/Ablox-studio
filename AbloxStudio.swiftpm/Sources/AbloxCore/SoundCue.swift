@@ -21,6 +21,13 @@ public enum SoundCue: String, CaseIterable, Sendable {
     case leave
     case tick
     case error
+    /// A weapon went off. Played for the shooter only.
+    case shoot
+    /// A shot connected — the shooter's hit marker.
+    case hit
+    case reload
+    /// You were knocked out.
+    case defeat
 
     /// How strongly the cue should be felt, independent of sound.
     ///
@@ -48,6 +55,10 @@ public enum SoundCue: String, CaseIterable, Sendable {
         case .leave: return .light
         case .tick: return .none
         case .error: return .warning
+        case .shoot: return .light
+        case .hit: return .medium
+        case .reload: return .none
+        case .defeat: return .heavy
         }
     }
 
@@ -57,7 +68,7 @@ public enum SoundCue: String, CaseIterable, Sendable {
     /// coin turns into a buzz rather than a series of taps.
     public var minimumInterval: Double {
         switch self {
-        case .collect, .tick: return 0.08
+        case .collect, .tick, .shoot, .hit: return 0.08
         case .bounce: return 0.15
         default: return 0.0
         }
@@ -90,6 +101,10 @@ public enum SoundCue: String, CaseIterable, Sendable {
         case .leave: return L("Player left")
         case .tick: return L("Tick")
         case .error: return L("Error")
+        case .shoot: return L("Shoot")
+        case .hit: return L("Hit")
+        case .reload: return L("Reload")
+        case .defeat: return L("Defeated")
         }
     }
 }

@@ -189,7 +189,7 @@ public final class AbloxClient {
                 state = .disconnected(.hostClosed)
             }
 
-        case .eventTrigger, .ping, .pong:
+        case .eventTrigger, .playerInput, .ping, .pong:
             break
         }
     }
@@ -207,6 +207,14 @@ public final class AbloxClient {
         queue.async { [weak self] in
             guard let self, self.state == .playing else { return }
             self.connection?.send(.eventTrigger, EventTriggerPayload(peerID: self.localPeerID, blockID: blockID, cause: cause))
+        }
+    }
+
+    /// Fire, reload, or a screen button. The host decides what happened.
+    public func send(input: PlayerInputPayload.Input) {
+        queue.async { [weak self] in
+            guard let self, self.state == .playing else { return }
+            self.connection?.send(.playerInput, PlayerInputPayload(peerID: self.localPeerID, input: input))
         }
     }
 

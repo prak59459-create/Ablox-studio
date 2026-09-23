@@ -4,8 +4,9 @@ import Network
 /// Hosts a session: advertises over Bonjour, accepts TLS connections, and
 /// relays the world and player state between everyone connected.
 ///
-/// The host is authoritative for **rules and scores** (`EventMachine`) and a
-/// relay for **avatar transforms**. See `docs/networking.md` for why.
+/// The host is authoritative for **rules, scores and the world's script**
+/// (`GameRuntime`) and a relay for **avatar transforms**. See
+/// `docs/networking.md` for why.
 public final class AbloxHost {
 
     public enum State: Equatable {
@@ -46,6 +47,10 @@ public final class AbloxHost {
 
     /// Called on the host's queue whenever the roster changes.
     public var onRosterChange: (([PlayerSnapshot]) -> Void)?
+    /// A joined player moved. Without this the host's own screen never saw
+    /// it — the transform was stored and relayed to everyone except the one
+    /// device running the host.
+    public var onRemoteTransform: ((PlayerTransformPayload) -> Void)?
     /// Effects the rule engine produced, for the host's own client to apply.
     public var onLocalEffects: (([EventMachine.Effect]) -> Void)?
     /// Sender is passed alongside the payload so the UI can offer a mute
@@ -54,6 +59,9 @@ public final class AbloxHost {
     public var onStateChange: ((State) -> Void)?
     /// A world edit arrived from a co-editing peer.
     public var onRemoteDelta: ((WorldDelta) -> Void)?
+    /// Problems in the world's script, and what it printed. Shown on the
+    /// host's screen only: the host is the one who can fix the world.
+    public var onScriptDiagnostics: (([ScriptError], [String]) -> Void)?
 
     public private(set) var state: State = .idle {
         didSet {
@@ -69,7 +77,7 @@ public final class AbloxHost {
     private let codec: PacketCodec
     private var listener: NWListener?
     private var connections: [ObjectIdentifier: PeerConnection] = [:]
-    private var machine: EventMachine
+    private let game: GameRuntime
     private var localProfile: AvatarProfile
     private var tickTimer: DispatchSourceTimer?
     private let startedAt = Date()
@@ -81,10 +89,10 @@ public final class AbloxHost {
         self.localPeerID = localPeerID
         self.localProfile = localProfile
         self.codec = PacketCodec(localPeerID: localPeerID)
-        self.machine = EventMachine(world: world, startTime: 0)
+        self.game = GameRuntime(world: world, startTime: 0, seed: UInt64.random(in: 1...UInt64.max))
 
         // The host is a player too.
-        machine.addPlayer(PlayerSnapshot(peerID: localPeerID, profile: localProfile))
+        game.addPlayer(PlayerSnapshot(peerID: localPeerID, profile: localProfile))
     }
 
     // MARK: Lifecycle
@@ -156,7 +164,7 @@ public final class AbloxHost {
         var txt = NWTXTRecord()
         txt[AbloxProtocol.TXTKey.worldName] = configuration.worldName
         txt[AbloxProtocol.TXTKey.hostName] = configuration.hostName
-        txt[AbloxProtocol.TXTKey.players] = String(machine.players.count)
+        txt[AbloxProtocol.TXTKey.players] = String(game.players.count)
         txt[AbloxProtocol.TXTKey.capacity] = String(configuration.capacity)
         txt[AbloxProtocol.TXTKey.mode] = configuration.isStudioSession ? "studio" : "play"
         txt[AbloxProtocol.TXTKey.protocolVersion] = String(AbloxProtocol.version)
@@ -174,7 +182,7 @@ public final class AbloxHost {
     // MARK: Connections
 
     private func accept(_ nwConnection: NWConnection) {
-        guard machine.players.count < configuration.capacity else {
+        guard game.players.count < configuration.capacity else {
             // Full. Closing immediately is clearer than letting the handshake
             // hang; the joining player sees "that world is full".
             nwConnection.cancel()
@@ -202,10 +210,11 @@ public final class AbloxHost {
     private func dropConnection(_ peer: PeerConnection) {
         connections.removeValue(forKey: ObjectIdentifier(peer))
         guard let peerID = peer.remotePeerID else { return }
-        machine.removePlayer(peerID)
+        let farewell = game.removePlayer(peerID)
         broadcast(.leave, LeavePayload(peerID: peerID))
         publishRoster()
         refreshAdvertisement()
+        dispatch(farewell)
     }
 
     // MARK: Packet handling
@@ -220,8 +229,9 @@ public final class AbloxHost {
             // A client may only move its own avatar. Without this check any
             // peer could shove everyone else around the world.
             guard payload.peerID == peer.remotePeerID else { return }
-            machine.updateTransform(payload)
+            game.updateTransform(payload)
             relay(packet, excluding: peer)
+            onRemoteTransform?(payload)
 
         case .eventTrigger:
             guard let payload = try? codec.decodePayload(EventTriggerPayload.self, from: packet) else { return }
@@ -233,12 +243,19 @@ public final class AbloxHost {
             case .tapped: observation = .tapped(peer: payload.peerID, blockID: payload.blockID)
             case .proximityEntered: observation = .proximityEntered(peer: payload.peerID, blockID: payload.blockID)
             }
-            dispatch(machine.handle(observation))
+            dispatch(game.handle(observation))
+
+        case .playerInput:
+            guard let payload = try? codec.decodePayload(PlayerInputPayload.self, from: packet) else { return }
+            // Your own trigger finger only, like your own avatar.
+            guard payload.peerID == peer.remotePeerID else { return }
+            guard !configuration.isStudioSession else { return }
+            dispatch(game.handle(payload.input, from: payload.peerID, at: elapsed))
 
         case .worldDelta:
             guard let delta = try? codec.decodePayload(WorldDelta.self, from: packet) else { return }
             guard configuration.isStudioSession else { return }
-            machine.apply(delta)
+            game.apply(delta)
             relay(packet, excluding: peer)
             onRemoteDelta?(delta)
 
@@ -275,11 +292,13 @@ public final class AbloxHost {
             return
         }
 
-        machine.addPlayer(PlayerSnapshot(peerID: payload.peerID, profile: payload.profile))
+        let welcome = game.addPlayer(PlayerSnapshot(peerID: payload.peerID, profile: payload.profile))
 
         // Reply with our own details, then the world, then the roster —
         // in that order, so the client can render the world before it has to
-        // place anyone in it.
+        // place anyone in it. The script's welcome (a weapon, a camera, the
+        // screen GUI) goes last: a client throws effects away until it has a
+        // world to apply them to.
         peer.send(.handshake, HandshakePayload(
             peerID: localPeerID,
             profile: localProfile,
@@ -287,9 +306,10 @@ public final class AbloxHost {
             isHost: true,
             capacity: configuration.capacity
         ))
-        peer.send(.worldSnapshot, machine.world)
+        peer.send(.worldSnapshot, game.world)
         publishRoster()
         refreshAdvertisement()
+        dispatch(welcome)
     }
 
     // MARK: Broadcasting
@@ -306,7 +326,7 @@ public final class AbloxHost {
     }
 
     private func publishRoster() {
-        let roster = machine.roster
+        let roster = game.roster
         broadcast(.roster, RosterPayload(players: roster))
         onRosterChange?(roster)
     }
@@ -314,6 +334,7 @@ public final class AbloxHost {
     /// Routes resolved effects: shared ones to everyone, personal ones only to
     /// the player they concern.
     private func dispatch(_ effects: [EventMachine.Effect]) {
+        reportScriptDiagnostics()
         guard !effects.isEmpty else { return }
         let (broadcastPayload, targeted) = effects.groupedIntoPayloads()
 
@@ -351,7 +372,7 @@ public final class AbloxHost {
     public func publishLocalTransform(_ snapshot: PlayerSnapshot) {
         queue.async { [weak self] in
             guard let self else { return }
-            self.machine.updateTransform(PlayerTransformPayload(snapshot: snapshot))
+            self.game.updateTransform(PlayerTransformPayload(snapshot: snapshot))
             self.broadcast(.playerTransform, PlayerTransformPayload(snapshot: snapshot))
         }
     }
@@ -359,7 +380,16 @@ public final class AbloxHost {
     public func reportLocalObservation(_ observation: EventMachine.Observation) {
         queue.async { [weak self] in
             guard let self, !self.configuration.isStudioSession else { return }
-            self.dispatch(self.machine.handle(observation))
+            self.dispatch(self.game.handle(observation))
+        }
+    }
+
+    /// The host's own fire button and screen buttons. Checked by the same
+    /// rules as everyone else's — the host gets no shortcut.
+    public func reportLocalInput(_ input: PlayerInputPayload.Input) {
+        queue.async { [weak self] in
+            guard let self, !self.configuration.isStudioSession else { return }
+            self.dispatch(self.game.handle(input, from: self.localPeerID, at: self.elapsed))
         }
     }
 
@@ -376,7 +406,7 @@ public final class AbloxHost {
     public func publish(delta: WorldDelta) {
         queue.async { [weak self] in
             guard let self else { return }
-            self.machine.apply(delta)
+            self.game.apply(delta)
             self.broadcast(.worldDelta, delta)
         }
     }
@@ -384,7 +414,7 @@ public final class AbloxHost {
     public func startRound() {
         queue.async { [weak self] in
             guard let self else { return }
-            self.dispatch(self.machine.handle(.roundStarted))
+            self.dispatch(self.game.handle(.roundStarted))
         }
     }
 
@@ -392,7 +422,7 @@ public final class AbloxHost {
         queue.async { [weak self] in
             guard let self else { return }
             self.localProfile = profile
-            self.machine.addPlayer(PlayerSnapshot(peerID: self.localPeerID, profile: profile))
+            self.dispatch(self.game.addPlayer(PlayerSnapshot(peerID: self.localPeerID, profile: profile)))
             self.publishRoster()
         }
     }
@@ -407,11 +437,24 @@ public final class AbloxHost {
         timer.schedule(deadline: .now() + 0.1, repeating: 0.1)
         timer.setEventHandler { [weak self] in
             guard let self else { return }
-            let elapsed = Date().timeIntervalSince(self.startedAt)
-            self.dispatch(self.machine.advance(to: elapsed))
+            self.dispatch(self.game.advance(to: self.elapsed))
         }
         timer.resume()
         tickTimer = timer
+    }
+
+    /// Seconds since the host started: the one clock the rules, the script
+    /// and every shot are measured against.
+    private var elapsed: Double {
+        Date().timeIntervalSince(startedAt)
+    }
+
+    private func reportScriptDiagnostics() {
+        guard let onScriptDiagnostics else { return }
+        let errors = game.drainErrors()
+        let output = game.drainOutput()
+        guard !errors.isEmpty || !output.isEmpty else { return }
+        onScriptDiagnostics(errors, output)
     }
 
     // MARK: Introspection

@@ -351,6 +351,7 @@ struct ProjectBrowserView: View {
     }
 
     private func joinSheet(_ peer: DiscoveredPeer) -> some View {
+        ScrollView {
         VStack(spacing: 20) {
             VStack(spacing: 6) {
                 Text(peer.worldName).font(.title2.weight(.bold))
@@ -364,7 +365,13 @@ struct ProjectBrowserView: View {
                 Text(L("Room code"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Ablox.Palette.inkMuted)
-                TextField("ABC DEF", text: $joinCode)
+                // A hardware keyboard types straight into the field; the pad
+                // below is for every iPad where the on-screen keyboard does not
+                // appear — see `CodePad`.
+                TextField("ABC DEF", text: Binding(
+                    get: { RoomCode.formatted(joinCode) },
+                    set: { joinCode = RoomCode.normalize($0) }
+                ))
                     .textFieldStyle(.plain)
                     .font(.system(size: 28, weight: .bold, design: .monospaced))
                     .multilineTextAlignment(.center)
@@ -374,6 +381,8 @@ struct ProjectBrowserView: View {
                     .frame(maxWidth: 250)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
+
+            CodePad(code: $joinCode)
 
             Button(L("Join and edit together")) {
                 // A joined session starts from a blank world; the host's
@@ -395,7 +404,12 @@ struct ProjectBrowserView: View {
 
             Spacer(minLength: 0)
         }
-        .presentationDetents([.height(330)])
+        .padding(.bottom, 20)
+        }
+        // Tall enough for the code pad. The old fixed 330 pt left no room for
+        // anything but the field, which was no use on an iPad that never
+        // shows its keyboard.
+        .presentationDetents([.large])
         .presentationBackground(.ultraThinMaterial)
     }
 }
