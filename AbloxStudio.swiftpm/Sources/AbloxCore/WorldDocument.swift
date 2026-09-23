@@ -69,11 +69,8 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
     public var environment: EnvironmentSettings
     public var blocks: [BlockData]
     public var rules: [EventRule]
-    /// The world's AbloxScript source, or nil for a world run by rules alone.
-    ///
-    /// Optional so every world saved before scripts existed still opens:
-    /// the synthesised decoder treats a missing key as nil.
-    public var script: String?
+    /// The world's `.absc` script files. Empty for a world run by rules alone.
+    public var scripts: [ScriptFile]
 
     public init(
         id: UUID = UUID(),
@@ -85,7 +82,7 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
         environment: EnvironmentSettings = .default,
         blocks: [BlockData] = [],
         rules: [EventRule] = [],
-        script: String? = nil
+        scripts: [ScriptFile] = []
     ) {
         self.id = id
         self.schemaVersion = schemaVersion
@@ -96,13 +93,55 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
         self.environment = environment
         self.blocks = blocks
         self.rules = rules
-        self.script = script
+        self.scripts = scripts
     }
 
-    /// True when the world has a script with anything in it.
-    var hasScript: Bool {
-        guard let script else { return false }
-        return !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    // MARK: Coding
+    //
+    // Written out so that every world ever saved still opens: one from before
+    // scripts has no `scripts` key, and one saved by the first scripting build
+    // has a single `script` string, which becomes `main.absc`.
+
+    private enum CodingKeys: String, CodingKey {
+        case id, schemaVersion, name, authorName, createdAt, modifiedAt, environment, blocks, rules, scripts
+        case legacyScript = "script"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        schemaVersion = try c.decode(Int.self, forKey: .schemaVersion)
+        name = try c.decode(String.self, forKey: .name)
+        authorName = try c.decode(String.self, forKey: .authorName)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        modifiedAt = try c.decode(Date.self, forKey: .modifiedAt)
+        environment = try c.decode(EnvironmentSettings.self, forKey: .environment)
+        blocks = try c.decode([BlockData].self, forKey: .blocks)
+        rules = try c.decodeIfPresent([EventRule].self, forKey: .rules) ?? []
+        if let files = try c.decodeIfPresent([ScriptFile].self, forKey: .scripts) {
+            scripts = files
+        } else if let legacy = try c.decodeIfPresent(String.self, forKey: .legacyScript) {
+            scripts = [ScriptFile(name: "main", source: legacy)]
+        } else {
+            scripts = []
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(schemaVersion, forKey: .schemaVersion)
+        try c.encode(name, forKey: .name)
+        try c.encode(authorName, forKey: .authorName)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(modifiedAt, forKey: .modifiedAt)
+        try c.encode(environment, forKey: .environment)
+        try c.encode(blocks, forKey: .blocks)
+        try c.encode(rules, forKey: .rules)
+        // Omitted when empty, so a rules-only world's file is unchanged.
+        if !scripts.isEmpty {
+            try c.encode(scripts, forKey: .scripts)
+        }
     }
 }
 

@@ -263,6 +263,10 @@ public final class AbloxHost {
             guard let payload = try? codec.decodePayload(ChatPayload.self, from: packet) else { return }
             relay(packet, excluding: peer)
             onChat?(packet.senderID, payload)
+            // Who sent it is the connection's peer, not the header's claim.
+            if let sender = peer.remotePeerID, !configuration.isStudioSession {
+                dispatch(game.handleChat(from: sender, text: payload.text))
+            }
 
         case .leave:
             dropConnection(peer)
@@ -335,6 +339,10 @@ public final class AbloxHost {
     /// the player they concern.
     private func dispatch(_ effects: [EventMachine.Effect]) {
         reportScriptDiagnostics()
+        // The map and the roster first: an effect may be about a block the
+        // script has only just created, or an NPC that only just appeared.
+        sendWorldChanges()
+        defer { sendNPCMovement() }
         guard !effects.isEmpty else { return }
         let (broadcastPayload, targeted) = effects.groupedIntoPayloads()
 
@@ -399,6 +407,9 @@ public final class AbloxHost {
             let payload = ChatPayload(senderName: self.localProfile.displayName, text: text)
             self.broadcast(.chat, payload)
             self.onChat?(self.localPeerID, payload)
+            if !self.configuration.isStudioSession {
+                self.dispatch(self.game.handleChat(from: self.localPeerID, text: text))
+            }
         }
     }
 
@@ -447,6 +458,25 @@ public final class AbloxHost {
     /// and every shot are measured against.
     private var elapsed: Double {
         Date().timeIntervalSince(startedAt)
+    }
+
+    /// Blocks and settings the script changed, to everyone's copy of the
+    /// world — including this iPad's own screen.
+    private func sendWorldChanges() {
+        for delta in game.drainWorldDeltas() {
+            broadcast(.worldDelta, delta)
+            onRemoteDelta?(delta)
+        }
+        if game.takeRosterChange() { publishRoster() }
+    }
+
+    /// NPCs are moved by the host, so their movement goes out like any
+    /// player's — the same packet, the same smoothing on arrival.
+    private func sendNPCMovement() {
+        for transform in game.drainNPCTransforms() {
+            broadcast(.playerTransform, transform)
+            onRemoteTransform?(transform)
+        }
     }
 
     private func reportScriptDiagnostics() {

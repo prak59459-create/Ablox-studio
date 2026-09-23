@@ -1,34 +1,64 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// The Script tab: what the world's script is doing, the way into editing it,
-/// and ready-made games to start from.
+/// The Script tab: the world's `.absc` files, and the way into editing them.
 ///
-/// Rules are the pickers-only half of making a game; this is the other half,
-/// for what rules cannot say — a first-person shooter, teams, a timer on the
-/// screen, buttons.
+/// Rules are the pickers-only half of making a game; scripts are the other
+/// half, for everything rules cannot say — a first-person shooter, a menu, an
+/// NPC that chases you, a map that builds itself.
 struct ScriptPanel: View {
     @ObservedObject var session: StudioSession
 
-    @State private var showEditor = false
-    @State private var pendingSample: ScriptSample?
+    @State private var editing: ScriptFileSelection?
+    @State private var renaming: ScriptFile?
+    @State private var newName = ""
+    @State private var showImporter = false
+    @State private var exportItem: ScriptExport?
+    @State private var importMessage: String?
 
-    private var script: String? { session.document.world.script }
+    init(session: StudioSession) {
+        self.session = session
+    }
+
+    private var files: [ScriptFile] { session.document.world.scripts }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 12) {
                     statusCard
 
-                    Button {
-                        showEditor = true
-                    } label: {
-                        Label(script == nil ? L("Write a script") : L("Open the script editor"), systemImage: "curlybraces")
-                            .frame(maxWidth: .infinity)
+                    ForEach(files) { file in
+                        fileRow(file)
                     }
-                    .buttonStyle(NeonButtonStyle(.primary))
+
+                    HStack(spacing: 8) {
+                        Button {
+                            if let id = addFile(named: files.isEmpty ? "main" : "script", source: "") {
+                                editing = ScriptFileSelection(id: id)
+                            }
+                        } label: {
+                            Label(L("New file"), systemImage: "doc.badge.plus")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(NeonButtonStyle(.primary))
+
+                        Button {
+                            showImporter = true
+                        } label: {
+                            Label(L("Import"), systemImage: "square.and.arrow.down")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(NeonButtonStyle(.secondary))
+                    }
+
+                    if let importMessage {
+                        Text(verbatim: importMessage)
+                            .font(.caption)
+                            .foregroundStyle(Ablox.Palette.warning)
+                    }
 
                     Text(L("Start from an example"))
                         .font(.caption.weight(.bold))
@@ -43,19 +73,27 @@ struct ScriptPanel: View {
             }
         }
         .background(.ultraThinMaterial)
-        .sheet(isPresented: $showEditor) {
-            ScriptEditorView(session: session)
+        .sheet(item: $editing) { selection in
+            ScriptEditorView(session: session, fileID: selection.id)
         }
-        .alert(L("Replace the current script?"), isPresented: Binding(
-            get: { pendingSample != nil },
-            set: { if !$0 { pendingSample = nil } }
+        .sheet(item: $exportItem) { item in
+            ScriptExportSheet(item: item)
+        }
+        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.data, .plainText], allowsMultipleSelection: true) { result in
+            importFiles(result)
+        }
+        .alert(L("Rename file"), isPresented: Binding(
+            get: { renaming != nil },
+            set: { if !$0 { renaming = nil } }
         )) {
-            Button(L("Replace"), role: .destructive) {
-                if let sample = pendingSample { use(sample) }
+            TextField(L("File name"), text: $newName)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+            Button(L("Rename")) {
+                if let file = renaming { session.edit { $0.renameScript(file.id, to: newName) } }
+                renaming = nil
             }
-            Button(L("Cancel"), role: .cancel) { pendingSample = nil }
-        } message: {
-            Text(L("Your script will be swapped for the example. Undo brings it back."))
+            Button(L("Cancel"), role: .cancel) { renaming = nil }
         }
     }
 
@@ -65,6 +103,9 @@ struct ScriptPanel: View {
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(Ablox.Palette.ink)
             Spacer()
+            Text(verbatim: "." + ScriptFile.fileExtension)
+                .font(.caption.monospaced())
+                .foregroundStyle(Ablox.Palette.inkFaint)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -74,10 +115,16 @@ struct ScriptPanel: View {
     private var statusCard: some View {
         GlassCard(padding: 12) {
             VStack(alignment: .leading, spacing: 6) {
-                if let script {
-                    let problems = GameRuntime.check(script)
-                    let lines = script.split(separator: "\n", omittingEmptySubsequences: false).count
-                    Label(L("{} lines", lines), systemImage: "doc.plaintext")
+                if files.isEmpty {
+                    Text(L("No script yet"))
+                        .font(.subheadline.weight(.semibold))
+                    Text(L("Scripts make the games rules can't: shooters, menus, NPCs, maps that change, anything."))
+                        .font(.caption)
+                        .foregroundStyle(Ablox.Palette.inkMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    let problems = GameRuntime.check(files)
+                    Label(L("{} files", files.count), systemImage: "doc.on.doc")
                         .font(.subheadline.weight(.semibold))
                     if problems.isEmpty {
                         Label(L("No problems found"), systemImage: "checkmark.seal.fill")
@@ -92,22 +139,74 @@ struct ScriptPanel: View {
                             .foregroundStyle(Ablox.Palette.inkMuted)
                             .lineLimit(3)
                     }
-                } else {
-                    Text(L("No script yet"))
-                        .font(.subheadline.weight(.semibold))
-                    Text(L("Scripts make the games rules can't: shooters, teams, timers and buttons on the screen."))
-                        .font(.caption)
-                        .foregroundStyle(Ablox.Palette.inkMuted)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
+    private func fileRow(_ file: ScriptFile) -> some View {
+        HStack(spacing: 10) {
+            Button {
+                editing = ScriptFileSelection(id: file.id)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "doc.plaintext")
+                        .foregroundStyle(file.isEnabled ? Ablox.Palette.accent : Ablox.Palette.inkFaint)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(verbatim: file.name)
+                            .font(.subheadline.weight(.semibold).monospaced())
+                            .foregroundStyle(file.isEnabled ? Ablox.Palette.ink : Ablox.Palette.inkFaint)
+                            .lineLimit(1)
+                        Text(L("{} lines", file.source.split(separator: "\n", omittingEmptySubsequences: false).count))
+                            .font(.caption2)
+                            .foregroundStyle(Ablox.Palette.inkFaint)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Menu {
+                Button {
+                    newName = String(file.name.dropLast(ScriptFile.fileExtension.count + 1))
+                    renaming = file
+                } label: {
+                    Label(L("Rename"), systemImage: "pencil")
+                }
+                Button {
+                    session.edit { $0.setScriptEnabled(file.id, !file.isEnabled) }
+                } label: {
+                    Label(file.isEnabled ? L("Switch off") : L("Switch on"),
+                          systemImage: file.isEnabled ? "pause.circle" : "play.circle")
+                }
+                Button {
+                    exportItem = ScriptExport(file: file)
+                } label: {
+                    Label(L("Export .absc"), systemImage: "square.and.arrow.up")
+                }
+                Button(role: .destructive) {
+                    session.edit { $0.removeScript(file.id) }
+                } label: {
+                    Label(L("Delete"), systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.title3)
+                    .foregroundStyle(Ablox.Palette.inkMuted)
+                    .frame(width: 36, height: 36)
+            }
+        }
+        .padding(10)
+        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
     private func sampleRow(_ sample: ScriptSample) -> some View {
         Button {
-            if script == nil { use(sample) } else { pendingSample = sample }
+            if let id = addFile(named: sample.fileName, source: sample.source) {
+                editing = ScriptFileSelection(id: id)
+            }
         } label: {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: sample.symbolName)
@@ -132,17 +231,92 @@ struct ScriptPanel: View {
         .buttonStyle(.plain)
     }
 
-    private func use(_ sample: ScriptSample) {
-        pendingSample = nil
-        session.edit { $0.setScript(sample.source) }
-        showEditor = true
+    private func addFile(named name: String, source: String) -> UUID? {
+        var id: UUID?
+        session.edit { id = $0.addScript(named: name, source: source) }
+        if id == nil { importMessage = L("A world can have up to {} script files.", ScriptFile.Limits.maximumFiles) }
+        return id
+    }
+
+    /// `.absc` files from the Files app — written on a computer, sent by a
+    /// friend, or exported from another world.
+    private func importFiles(_ result: Result<[URL], Error>) {
+        importMessage = nil
+        guard case let .success(urls) = result else {
+            importMessage = L("Those files could not be opened.")
+            return
+        }
+        for url in urls {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: url), data.count <= ScriptLexer.maximumSourceLength * 4,
+                  let text = String(data: data, encoding: .utf8) else {
+                importMessage = L("“{}” is not a text file.", url.lastPathComponent)
+                continue
+            }
+            _ = addFile(named: url.lastPathComponent, source: text)
+        }
     }
 }
 
-/// The editor itself: a code view, Check and Test run, the examples, and the
-/// reference, side by side.
+/// Which file the editor sheet is showing.
+struct ScriptFileSelection: Identifiable {
+    let id: UUID
+}
+
+/// A file being exported: written to a temporary `.absc` so the share sheet
+/// hands over a real file with the right name.
+struct ScriptExport: Identifiable {
+    let id = UUID()
+    let file: ScriptFile
+    let url: URL?
+
+    init(file: ScriptFile) {
+        self.file = file
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(file.name)
+        self.url = (try? file.source.write(to: url, atomically: true, encoding: .utf8)) != nil ? url : nil
+    }
+}
+
+private struct ScriptExportSheet: View {
+    let item: ScriptExport
+    @Environment(\.dismiss) private var dismiss
+
+    init(item: ScriptExport) {
+        self.item = item
+    }
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "doc.plaintext")
+                .font(.system(size: 44))
+                .foregroundStyle(Ablox.Palette.accent)
+            Text(verbatim: item.file.name)
+                .font(.title3.weight(.bold).monospaced())
+            if let url = item.url {
+                ShareLink(item: url) {
+                    Label(L("Share or save to Files"), systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: 280)
+                }
+                .buttonStyle(NeonButtonStyle(.primary))
+            } else {
+                Text(L("That file could not be written."))
+                    .foregroundStyle(Ablox.Palette.warning)
+            }
+            Button(L("Done")) { dismiss() }
+                .buttonStyle(NeonButtonStyle(.secondary))
+        }
+        .padding(30)
+        .presentationDetents([.medium])
+        .preferredColorScheme(.dark)
+    }
+}
+
+/// The editor: one `.absc` file as code, with Check and Test run for the
+/// whole world, the examples, and the reference beside it.
 struct ScriptEditorView: View {
     @ObservedObject var session: StudioSession
+    let fileID: UUID
     @Environment(\.dismiss) private var dismiss
 
     @State private var draft = ""
@@ -151,6 +325,18 @@ struct ScriptEditorView: View {
     @State private var showReference = true
     @State private var commitTask: Task<Void, Never>?
     @FocusState private var editorFocused: Bool
+
+    init(session: StudioSession, fileID: UUID) {
+        self.session = session
+        self.fileID = fileID
+    }
+
+    private var file: ScriptFile? { session.document.world.scripts.first { $0.id == fileID } }
+
+    /// Every file as it will run, with this one as typed so far.
+    private var filesWithDraft: [ScriptFile] {
+        session.document.world.scripts.map { $0.id == fileID ? ScriptFile(id: $0.id, name: $0.name, source: draft, isEnabled: $0.isEnabled) : $0 }
+    }
 
     var body: some View {
         NavigationStack {
@@ -176,12 +362,12 @@ struct ScriptEditorView: View {
                 if showReference {
                     Divider().background(Color.white.opacity(0.08))
                     ScriptReferenceView()
-                        .frame(width: 320)
+                        .frame(width: 340)
                         .transition(.move(edge: .trailing))
                 }
             }
             .background(Color(red: 0.05, green: 0.06, blue: 0.11))
-            .navigationTitle(L("Script"))
+            .navigationTitle(file?.name ?? L("Script"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -222,7 +408,7 @@ struct ScriptEditorView: View {
         }
         .preferredColorScheme(.dark)
         .onAppear {
-            draft = session.document.world.script ?? ""
+            draft = file?.source ?? ""
             // One undo step for the whole visit, not one per keystroke.
             session.edit { $0.beginGesture() }
             check()
@@ -290,13 +476,13 @@ struct ScriptEditorView: View {
     private func check() {
         commitNow()
         report = nil
-        problems = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? [] : GameRuntime.check(draft)
+        problems = GameRuntime.check(filesWithDraft)
     }
 
     private func testRun() {
         commitNow()
         var world = session.document.world
-        world.script = draft
+        world.scripts = filesWithDraft
         let result = GameRuntime.testRun(world: world, seconds: 5)
         problems = result.problems
         report = result
@@ -316,9 +502,8 @@ struct ScriptEditorView: View {
     private func commitNow() {
         commitTask?.cancel()
         commitTask = nil
-        let current = session.document.world.script ?? ""
-        guard draft != current else { return }
-        session.edit { $0.setScript(draft) }
+        guard let file, draft != file.source else { return }
+        session.edit { $0.updateScript(fileID, source: draft) }
     }
 }
 

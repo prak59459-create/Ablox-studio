@@ -301,13 +301,48 @@ public struct EditorDocument: Sendable {
         perform(.setRules(before: world.rules, after: rules))
     }
 
-    /// Replaces the world's script. An empty or blank script is stored as
-    /// nil, so a world whose script was deleted is a rules-only world again.
-    public mutating func setScript(_ source: String?) {
-        let trimmed = source?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let stored = trimmed.isEmpty ? nil : source
-        guard stored != world.script else { return }
-        perform(.setScript(before: world.script, after: stored))
+    // MARK: Scripts
+
+    public mutating func setScripts(_ scripts: [ScriptFile]) {
+        guard scripts != world.scripts else { return }
+        perform(.setScripts(before: world.scripts, after: scripts))
+    }
+
+    /// Adds a new `.absc` file with a name not already taken. Returns its id,
+    /// or nil when the world already has as many files as it may.
+    @discardableResult
+    public mutating func addScript(named name: String, source: String = "") -> UUID? {
+        guard world.scripts.count < ScriptFile.Limits.maximumFiles else { return nil }
+        let file = ScriptFile(name: ScriptFile.uniqueName(name, among: world.scripts), source: source)
+        setScripts(world.scripts + [file])
+        return file.id
+    }
+
+    public mutating func updateScript(_ id: UUID, source: String) {
+        guard let index = world.scripts.firstIndex(where: { $0.id == id }),
+              world.scripts[index].source != source else { return }
+        var scripts = world.scripts
+        scripts[index].source = source
+        setScripts(scripts)
+    }
+
+    public mutating func renameScript(_ id: UUID, to name: String) {
+        guard let index = world.scripts.firstIndex(where: { $0.id == id }) else { return }
+        var scripts = world.scripts
+        let others = scripts.filter { $0.id != id }
+        scripts[index].name = ScriptFile.uniqueName(name, among: others)
+        setScripts(scripts)
+    }
+
+    public mutating func setScriptEnabled(_ id: UUID, _ enabled: Bool) {
+        guard let index = world.scripts.firstIndex(where: { $0.id == id }) else { return }
+        var scripts = world.scripts
+        scripts[index].isEnabled = enabled
+        setScripts(scripts)
+    }
+
+    public mutating func removeScript(_ id: UUID) {
+        setScripts(world.scripts.filter { $0.id != id })
     }
 
     public mutating func renameWorld(_ name: String) {

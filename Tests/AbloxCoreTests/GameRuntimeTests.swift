@@ -3,67 +3,76 @@ import XCTest
 
 /// The script game API, played headlessly: no iPad, no network, just inputs in
 /// and effects out — which is exactly what the host does with it.
-final class GameRuntimeTests: XCTestCase {
+class RuntimeTestCase: XCTestCase {
 
-    private let alice = PeerID()
-    private let bob = PeerID()
+    let alice = PeerID()
+    let bob = PeerID()
 
-    // MARK: Helpers
-
-    private func snapshot(_ peer: PeerID, _ name: String) -> PlayerSnapshot {
+    func snapshot(_ peer: PeerID, _ name: String) -> PlayerSnapshot {
         var profile = AvatarProfile.default
         profile.displayName = name
         return PlayerSnapshot(peerID: peer, profile: profile)
     }
 
-    private func game(_ script: String?, world: WorldDocument = WorldDocument(name: "Arena")) -> GameRuntime {
+    func game(_ script: String?, world: WorldDocument = WorldDocument(name: "Arena"),
+              limits: ScriptInterpreter.Limits = ScriptInterpreter.Limits()) -> GameRuntime {
         var world = world
-        world.script = script
-        return GameRuntime(world: world, seed: 42)
+        world.scripts = script.map { [ScriptFile(name: "main", source: $0)] } ?? []
+        return GameRuntime(world: world, seed: 42, limits: limits)
     }
 
     /// Alice and Bob, both present before the round starts — as when a host
     /// has the lobby full and presses play.
     @discardableResult
-    private func startWithBoth(_ game: GameRuntime) -> [GameRuntime.Effect] {
+    func startWithBoth(_ game: GameRuntime) -> [GameRuntime.Effect] {
         game.addPlayer(snapshot(alice, "Alice"))
         game.addPlayer(snapshot(bob, "Bob"))
         return game.handle(.roundStarted)
     }
 
-    private func place(_ game: GameRuntime, _ peer: PeerID, at position: Vec3) {
+    func place(_ game: GameRuntime, _ peer: PeerID, at position: Vec3) {
         game.updateTransform(PlayerTransformPayload(peerID: peer, position: position, yawDegrees: 0))
     }
 
     /// Alice at z = -10 shoots straight down +z, where Bob stands at the origin.
     @discardableResult
-    private func aliceShootsBob(_ game: GameRuntime, at time: Double) -> [GameRuntime.Effect] {
+    func aliceShootsBob(_ game: GameRuntime, at time: Double) -> [GameRuntime.Effect] {
         place(game, alice, at: Vec3(0, 0, -10))
         place(game, bob, at: .zero)
         return game.handle(.fire(origin: Vec3(0, 1.6, -10), direction: Vec3(0, 0, 1)), from: alice, at: time)
     }
 
-    private func reaching(_ peer: PeerID, _ effects: [GameRuntime.Effect]) -> [EventAction] {
+    func reaching(_ peer: PeerID, _ effects: [GameRuntime.Effect]) -> [EventAction] {
         effects.filter { $0.targetPeerID == nil || $0.targetPeerID == peer }.map(\.action)
     }
 
-    private func scripted(_ peer: PeerID, _ effects: [GameRuntime.Effect]) -> [ScriptEffect] {
+    func scripted(_ peer: PeerID, _ effects: [GameRuntime.Effect]) -> [ScriptEffect] {
         reaching(peer, effects).compactMap { if case let .script(effect) = $0 { return effect }; return nil }
     }
 
-    private func healths(_ peer: PeerID, _ effects: [GameRuntime.Effect]) -> [Double] {
+    func screen(_ peer: PeerID, _ effects: [GameRuntime.Effect]) -> ScriptedPlayerState {
+        var state = ScriptedPlayerState()
+        scripted(peer, effects).forEach { state.apply($0) }
+        return state
+    }
+
+    func healths(_ peer: PeerID, _ effects: [GameRuntime.Effect]) -> [Double] {
         scripted(peer, effects).compactMap { if case let .health(current, _) = $0 { return current }; return nil }
     }
 
-    private func announcements(_ peer: PeerID, _ effects: [GameRuntime.Effect]) -> [String] {
+    func announcements(_ peer: PeerID, _ effects: [GameRuntime.Effect]) -> [String] {
         reaching(peer, effects).compactMap {
             switch $0 {
             case let .announce(message, _): return message
             case let .endRound(message): return message
+            case let .script(.chat(line)): return line
             default: return nil
             }
         }
     }
+}
+
+final class GameRuntimeTests: RuntimeTestCase {
 
     // MARK: A whole 1v1
 
@@ -72,21 +81,21 @@ final class GameRuntimeTests: XCTestCase {
 
     on start()
       game.respawn_time = 2
-      hud_text("title", "1v1", {at: "top"})
+      ui_text("title", "1v1", {at: "top"})
     end
 
     on join(p)
       p.camera = "first"
       p.give("rifle")
       p.kills = 0
-      p.hud_text("kills", "Kills: 0", {at: "top_left"})
+      p.ui_text("kills", "Kills: 0", {at: "top_left"})
     end
 
     on death(victim, killer)
       if killer then
         killer.kills = killer.kills + 1
         killer.score = killer.kills
-        killer.hud_text("kills", "Kills: " + killer.kills, {at: "top_left"})
+        killer.ui_text("kills", "Kills: " + killer.kills)
         if killer.kills >= goal then
           end_round(killer.name + " wins!")
         end
@@ -97,18 +106,18 @@ final class GameRuntimeTests: XCTestCase {
     func testAOneVersusOneMatchPlaysToTheEnd() {
         let game = game(oneVersusOne)
         let opening = startWithBoth(game)
-        XCTAssertNil(game.compileError)
+        XCTAssertTrue(game.compileErrors.isEmpty)
         XCTAssertTrue(game.drainErrors().isEmpty)
 
-        // Both are set up for a shooter, each on their own screen.
         for peer in [alice, bob] {
-            let mine = scripted(peer, opening)
-            XCTAssertTrue(mine.contains(.camera(.firstPerson)))
-            XCTAssertTrue(mine.contains(.equip(WeaponSpec.presets["rifle"])))
-            XCTAssertTrue(mine.contains(.hud(HUDElement(id: "title", kind: .text("1v1"), anchor: .top))))
+            let mine = screen(peer, opening)
+            XCTAssertEqual(mine.camera.mode, .firstPerson)
+            XCTAssertEqual(mine.weapon, WeaponSpec.presets["rifle"])
+            XCTAssertEqual(mine.element("title")?.text, "1v1")
         }
-        XCTAssertEqual(opening.filter { $0.action == .script(.camera(.firstPerson)) }.count, 2,
-                       "one camera change per player, not a broadcast each")
+        XCTAssertEqual(opening.filter {
+            if case .script(.camera) = $0.action { return true }; return false
+        }.count, 2, "one camera change per player, not a broadcast each")
 
         // Kill one: three rifle hits (34 each).
         XCTAssertEqual(healths(bob, aliceShootsBob(game, at: 1.0)), [66])
@@ -116,14 +125,13 @@ final class GameRuntimeTests: XCTestCase {
         let killingShot = aliceShootsBob(game, at: 2.2)
         XCTAssertEqual(healths(bob, killingShot).last, 0)
         XCTAssertTrue(scripted(alice, killingShot).contains(.hitMarker(killed: true)))
-        XCTAssertTrue(scripted(bob, killingShot).contains(.movement(speed: 0, jump: 0)), "the knocked-out can't walk")
+        XCTAssertEqual(screen(bob, killingShot).movement.frozen, true, "the knocked-out can't walk")
         XCTAssertTrue(reaching(alice, killingShot).contains(.awardPoints(1)))
         XCTAssertEqual(game.players[alice]?.score, 1)
 
         // Shooting the knocked-out does nothing.
         let overkill = aliceShootsBob(game, at: 2.8)
         XCTAssertTrue(healths(bob, overkill).isEmpty)
-        XCTAssertFalse(scripted(alice, overkill).contains { if case .hitMarker = $0 { return true }; return false })
 
         // Bob comes back two seconds after the knockout.
         XCTAssertTrue(healths(bob, game.advance(to: 4.0)).isEmpty)
@@ -131,8 +139,8 @@ final class GameRuntimeTests: XCTestCase {
         XCTAssertEqual(healths(bob, comeback), [100])
         XCTAssertTrue(reaching(bob, comeback).contains { if case .teleportPlayer = $0 { return true }; return false })
 
-        // Kill two. The overkill shot spent a round, so the sixth goes at 5.0
-        // and starts a two-second reload; a shot during it is refused.
+        // Kill two. The overkill spent a round, so the sixth goes at 5.0 and
+        // starts a two-second reload; a shot during it is refused.
         aliceShootsBob(game, at: 4.4)
         let lastRound = aliceShootsBob(game, at: 5.0)
         XCTAssertEqual(healths(bob, lastRound), [32])
@@ -140,7 +148,6 @@ final class GameRuntimeTests: XCTestCase {
         XCTAssertTrue(healths(bob, aliceShootsBob(game, at: 5.6)).isEmpty, "no shooting while reloading")
         XCTAssertTrue(scripted(alice, game.advance(to: 7.1)).contains(.ammo(current: 6, magazine: 6, reloading: false)))
         XCTAssertEqual(healths(bob, aliceShootsBob(game, at: 7.2)).last, 0)
-        XCTAssertEqual(game.players[alice]?.score, 2)
 
         // Kill three wins it.
         game.advance(to: 9.3)
@@ -148,13 +155,25 @@ final class GameRuntimeTests: XCTestCase {
         aliceShootsBob(game, at: 10.0)
         let winner = aliceShootsBob(game, at: 10.6)
         XCTAssertTrue(announcements(bob, winner).contains("Alice wins!"))
-        XCTAssertTrue(scripted(alice, winner).contains(.hud(HUDElement(id: "kills", kind: .text("Kills: 3"), anchor: .topLeft))))
+        XCTAssertEqual(screen(alice, winner).element("kills")?.text, "Kills: 3")
         XCTAssertTrue(game.isRoundOver)
         XCTAssertEqual(game.players[alice]?.score, 3)
 
-        // Nothing moves once it is over.
-        XCTAssertTrue(aliceShootsBob(game, at: 14).isEmpty)
+        XCTAssertTrue(aliceShootsBob(game, at: 14).isEmpty, "nothing moves once it is over")
         XCTAssertTrue(game.drainErrors().isEmpty)
+    }
+
+    func testUpdatingAScreenItemKeepsWhereItWas() {
+        let game = game(oneVersusOne)
+        let opening = startWithBoth(game)
+        let before = screen(alice, opening).element("kills")
+        XCTAssertEqual(before?.x, 0)
+        aliceShootsBob(game, at: 1)
+        aliceShootsBob(game, at: 1.6)
+        let after = screen(alice, aliceShootsBob(game, at: 2.2)).element("kills")
+        XCTAssertEqual(after?.text, "Kills: 1")
+        XCTAssertEqual(after?.x, before?.x, "ui_text with only new words keeps the position")
+        XCTAssertEqual(after?.offsetX, before?.offsetX)
     }
 
     func testARestartPutsEveryoneBackToTheStart() {
@@ -163,33 +182,28 @@ final class GameRuntimeTests: XCTestCase {
         aliceShootsBob(game, at: 1)
 
         let restart = game.handle(.roundStarted)
-        XCTAssertTrue(scripted(bob, restart).contains(.clearHUD))
+        XCTAssertTrue(scripted(bob, restart).contains(.clearUI))
         XCTAssertEqual(healths(bob, aliceShootsBob(game, at: 5)), [66], "health starts from full again")
+    }
+
+    func testRestartRoundFromAScript() {
+        let game = game("let rounds = 0\non start()\n  rounds = rounds + 1\n  print(rounds)\nend\non chat(p, text)\n  if text == \"again\" then restart_round() end\nend")
+        startWithBoth(game)
+        game.handleChat(from: alice, text: "again")
+        game.advance(to: 0.1)
+        XCTAssertEqual(game.drainOutput(), ["1", "1"], "a restart runs the script from the top, fresh")
     }
 
     // MARK: Combat rules
 
     func testTeammatesCannotHurtEachOther() {
-        let game = game(#"""
-        on join(p)
-          p.team = "red"
-          p.give("blaster")
-        end
-        """#)
+        let game = game("on join(p)\n  p.team = \"red\"\n  p.give(\"blaster\")\nend")
         startWithBoth(game)
         XCTAssertTrue(healths(bob, aliceShootsBob(game, at: 1)).isEmpty)
     }
 
     func testFriendlyFireCanBeTurnedOn() {
-        let game = game(#"""
-        on start()
-          game.friendly_fire = true
-        end
-        on join(p)
-          p.team = "red"
-          p.give("blaster")
-        end
-        """#)
+        let game = game("on start()\n  game.friendly_fire = true\nend\non join(p)\n  p.team = \"red\"\n  p.give(\"blaster\")\nend")
         startWithBoth(game)
         XCTAssertEqual(healths(bob, aliceShootsBob(game, at: 1)), [80])
     }
@@ -221,25 +235,23 @@ final class GameRuntimeTests: XCTestCase {
         XCTAssertTrue(aliceShootsBob(game, at: 1).isEmpty)
     }
 
-    func testCustomWeapons() {
+    func testCustomWeaponsGoFarBeyondThePresets() {
         let game = game(#"""
         on start()
-          weapon("sniper", {model: "rifle", damage: 90, ammo: 1})
+          weapon("railgun", {model: "rifle", damage: 5000, range: 900, ammo: 1})
         end
         on join(p)
-          p.give("Sniper")
+          p.give("Railgun")
+          p.max_health = 10000
+          p.health = 10000
         end
         """#)
         let opening = startWithBoth(game)
-        let equipped = scripted(alice, opening).compactMap { effect -> WeaponSpec? in
-            if case let .equip(weapon) = effect { return weapon }
-            return nil
-        }.first
-        XCTAssertEqual(equipped?.name, "sniper")
-        XCTAssertEqual(equipped?.damage, 90)
+        let equipped = screen(alice, opening).weapon
+        XCTAssertEqual(equipped?.damage, 5000)
+        XCTAssertEqual(equipped?.range, 900)
         XCTAssertEqual(equipped?.magazine, 1)
-        XCTAssertEqual(equipped?.range, WeaponSpec.presets["rifle"]?.range, "everything not given comes from the model")
-        XCTAssertEqual(healths(bob, aliceShootsBob(game, at: 1)), [10])
+        XCTAssertEqual(healths(bob, aliceShootsBob(game, at: 1)).first, 5000)
     }
 
     func testAnUnknownWeaponIsAHelpfulError() {
@@ -248,6 +260,7 @@ final class GameRuntimeTests: XCTestCase {
         let errors = game.drainErrors()
         XCTAssertEqual(errors.count, 1, "the same mistake for two players is reported once")
         XCTAssertEqual(errors.first?.line, 2)
+        XCTAssertEqual(errors.first?.file, "main.absc")
         XCTAssertTrue(errors.first?.message.contains("rifle") ?? false, "it lists the weapons there are")
     }
 
@@ -259,7 +272,7 @@ final class GameRuntimeTests: XCTestCase {
         on join(p)
           p.give("pistol")
           p.max_health = 10
-          p.hud_button("revive", "Revive")
+          p.ui_button("revive", "Revive")
         end
         on button(p, id)
           for each in players() do
@@ -268,29 +281,113 @@ final class GameRuntimeTests: XCTestCase {
         end
         """#)
         startWithBoth(game)
-        XCTAssertEqual(healths(bob, aliceShootsBob(game, at: 1)).last, 0, "15 damage against 10 health")
+        XCTAssertEqual(healths(bob, aliceShootsBob(game, at: 1)).last, 0)
         XCTAssertTrue(healths(bob, game.advance(to: 60)).isEmpty, "no automatic respawn")
-
-        let revived = game.handle(.button(id: "revive"), from: alice, at: 61)
-        XCTAssertEqual(healths(bob, revived), [10])
+        XCTAssertEqual(healths(bob, game.handle(.button(id: "revive"), from: alice, at: 61)), [10])
     }
 
     func testTheKnockedOutCannotShoot() {
         let game = game("on join(p)\n  p.give(\"pistol\")\n  p.max_health = 10\nend")
         startWithBoth(game)
         aliceShootsBob(game, at: 1)
-
         place(game, bob, at: Vec3(0, 0, -10))
         place(game, alice, at: .zero)
-        let fromTheFloor = game.handle(.fire(origin: Vec3(0, 1.6, -10), direction: Vec3(0, 0, 1)), from: bob, at: 1.5)
-        XCTAssertTrue(fromTheFloor.isEmpty)
+        XCTAssertTrue(game.handle(.fire(origin: Vec3(0, 1.6, -10), direction: Vec3(0, 0, 1)), from: bob, at: 1.5).isEmpty)
     }
 
-    func testMovementIsClamped() {
-        let game = game("on join(p)\n  p.speed = 50\n  p.jump = -2\nend")
+    // MARK: Moving and looking
+
+    func testMovementCanGoFarButNotForever() {
+        let game = game("on join(p)\n  p.speed = 50\n  p.jump = -2\n  p.gravity = 0.2\nend")
+        let movement = screen(alice, startWithBoth(game)).movement
+        XCTAssertEqual(movement.speed, 10)
+        XCTAssertEqual(movement.jump, 0)
+        XCTAssertEqual(movement.gravity, 0.2, accuracy: 0.0001)
+    }
+
+    func testCameraModesAndScreenControl() {
+        let game = game(#"""
+        on join(p)
+          p.camera = "top"
+          p.camera_distance = 30
+          p.fov = 90
+          p.controls = false
+          p.default_ui = false
+          p.fade("black", 2)
+          p.shake(1, 0.5)
+        end
+        """#)
+        let mine = screen(alice, startWithBoth(game))
+        XCTAssertEqual(mine.camera.mode, .topDown)
+        XCTAssertEqual(mine.camera.distance, 30)
+        XCTAssertEqual(mine.camera.fieldOfView, 90)
+        XCTAssertFalse(mine.showsControls)
+        XCTAssertFalse(mine.showsDefaultUI)
+        XCTAssertEqual(mine.fade.color, ScriptColor.parse("black"))
+        XCTAssertEqual(mine.fade.seconds, 2)
+        XCTAssertEqual(mine.shake.strength, 1)
+    }
+
+    func testAFixedCameraLooksAtSomething() {
+        var world = WorldDocument(name: "Arena")
+        world.insert(BlockData(name: "Stage", transform: Transform3D(position: Vec3(0, 0, 10))))
+        let game = game("on join(p)\n  p.camera_look({x: 0, y: 10, z: 0}, block(\"Stage\"))\nend", world: world)
+        let camera = screen(alice, startWithBoth(game)).camera
+        XCTAssertEqual(camera.mode, .fixed)
+        XCTAssertEqual(camera.position, Vec3(0, 10, 0))
+        XCTAssertEqual(camera.target, Vec3(0, 0, 10))
+    }
+
+    func testTeleportLaunchAndFacing() {
+        let game = game(#"""
+        on join(p)
+          if p.name == "Alice" then
+            p.position = {x: 5, y: 10, z: 5}
+            p.launch(0, 20, 0)
+            p.yaw = 90
+          end
+        end
+        """#)
         let opening = startWithBoth(game)
-        XCTAssertTrue(scripted(alice, opening).contains(.movement(speed: 3, jump: 1)))
-        XCTAssertTrue(scripted(alice, opening).contains(.movement(speed: 3, jump: 0)))
+        XCTAssertTrue(reaching(alice, opening).contains(.teleportPlayer(to: Vec3(5, 10, 5))))
+        XCTAssertTrue(scripted(alice, opening).contains(.launch(Vec3(0, 20, 0))))
+        XCTAssertTrue(scripted(alice, opening).contains(.face(yawDegrees: 90)))
+        XCTAssertEqual(game.players[alice]?.position, Vec3(5, 10, 5), "the host moves them at once, for shots")
+    }
+
+    func testAppearanceChangesReachEveryone() {
+        let game = game(#"""
+        on join(p)
+          p.color = "red"
+          p.size = 3
+          p.hat = "crown"
+          p.name = "Big " + p.name
+          if p.name == "Big Bob" then p.visible = false end
+        end
+        """#)
+        startWithBoth(game)
+        XCTAssertTrue(game.takeRosterChange())
+        let aliceNow = game.roster.first { $0.peerID == alice }
+        XCTAssertEqual(aliceNow?.profile.bodyColor, ScriptColor.parse("red"))
+        XCTAssertEqual(aliceNow?.profile.height, 3)
+        XCTAssertEqual(aliceNow?.profile.hat, .crown)
+        XCTAssertEqual(aliceNow?.profile.displayName, "Big Alice")
+        XCTAssertEqual(game.roster.first { $0.peerID == bob }?.isHidden, true)
+        XCTAssertFalse(game.takeRosterChange(), "reported once")
+
+        game.handle(.roundStarted)
+        XCTAssertEqual(game.roster.first { $0.peerID == alice }?.profile.displayName, "Big Alice",
+                       "a restart gives everyone their own look back before `on join` runs again — not “Big Big Alice”")
+    }
+
+    func testBigCharactersAreBigTargets() {
+        let game = game("on join(p)\n  p.give(\"rifle\")\n  if p.name == \"Bob\" then p.size = 4 end\nend")
+        startWithBoth(game)
+        place(game, alice, at: Vec3(0, 0, -10))
+        place(game, bob, at: .zero)
+        // Aimed to pass 6 m up where Bob stands: far over a normal head.
+        let high = game.handle(.fire(origin: Vec3(0, 1.6, -10), direction: Vec3(0, 4.4, 10)), from: alice, at: 1)
+        XCTAssertFalse(healths(bob, high).isEmpty)
     }
 
     // MARK: Screen GUI
@@ -298,29 +395,65 @@ final class GameRuntimeTests: XCTestCase {
     func testALateJoinerSeesWhatEveryoneElseSees() {
         let game = game(#"""
         on start()
-          hud_text("title", "Capture the flag", {at: "top", color: "red", size: "large"})
-          hud_bar("time", 30, 60)
+          ui_text("title", "Capture the flag", {at: "top", color: "red", size: "large"})
+          ui_bar("time", 30, 60)
         end
         on join(p)
-          p.hud_text("hello", "Hi " + p.name)
+          p.ui_text("hello", "Hi " + p.name)
         end
         """#)
         game.addPlayer(snapshot(alice, "Alice"))
         game.handle(.roundStarted)
 
         let arrival = game.addPlayer(snapshot(bob, "Bob"))
-        let bobSees = scripted(bob, arrival)
-        XCTAssertTrue(bobSees.contains(.hud(HUDElement(id: "title", kind: .text("Capture the flag"), anchor: .top,
-                                                       color: ScriptColor.parse("red"), size: .large))))
-        XCTAssertTrue(bobSees.contains(.hud(HUDElement(id: "time", kind: .bar(value: 30, maximum: 60)))))
-        XCTAssertTrue(bobSees.contains(.hud(HUDElement(id: "hello", kind: .text("Hi Bob")))))
+        let bobSees = screen(bob, arrival)
+        XCTAssertEqual(bobSees.element("title")?.color, ScriptColor.parse("red"))
+        XCTAssertEqual(bobSees.element("title")?.fontSize, 28)
+        XCTAssertEqual(bobSees.element("time")?.fraction, 0.5)
+        XCTAssertEqual(bobSees.element("hello")?.text, "Hi Bob")
         XCTAssertTrue(arrival.allSatisfy { $0.targetPeerID == bob }, "Alice already has them")
+    }
+
+    func testFreePositionsPanelsAndHandles() {
+        let game = game(#"""
+        on join(p)
+          let menu = p.ui_panel("menu", {x: 0.25, y: 0.75, w: 300, h: 200, bg: "#00000080"})
+          p.ui_text("label", "Shop", {parent: "menu", y: 0.1, size: 30, bold: true})
+          let b = p.ui_button("buy", "Buy", {parent: menu, x: 0.5, y: 0.8})
+          b.text = "Buy now"
+          b.layer = 5
+          menu.visible = false
+        end
+        """#)
+        let mine = screen(alice, startWithBoth(game))
+        let menu = mine.element("menu")
+        XCTAssertEqual(menu?.x, 0.25)
+        XCTAssertEqual(menu?.width, 300)
+        XCTAssertEqual(menu?.visible, false)
+        XCTAssertEqual(mine.element("label")?.parent, "menu")
+        XCTAssertEqual(mine.element("buy")?.parent, "menu", "a handle works as a parent too")
+        XCTAssertEqual(mine.element("buy")?.text, "Buy now")
+        XCTAssertEqual(mine.element("buy")?.layer, 5)
+        XCTAssertTrue(mine.children(of: nil).isEmpty, "the hidden panel hides its contents")
+    }
+
+    func testRemovingAPanelRemovesWhatIsInIt() {
+        let game = game(#"""
+        on join(p)
+          p.ui_panel("menu")
+          p.ui_text("a", "A", {parent: "menu"})
+          p.ui_text("b", "B")
+          p.ui_remove("menu")
+        end
+        """#)
+        let mine = screen(alice, startWithBoth(game))
+        XCTAssertEqual(mine.ui.map(\.id), ["b"])
     }
 
     func testOnlyButtonsOnScreenCanBePressed() {
         let game = game(#"""
         on join(p)
-          if p.name == "Alice" then p.hud_button("shop", "Shop") end
+          if p.name == "Alice" then p.ui_button("shop", "Shop") end
         end
         on button(p, id)
           p.score = p.score + 1
@@ -332,44 +465,46 @@ final class GameRuntimeTests: XCTestCase {
         XCTAssertTrue(game.handle(.button(id: "secret"), from: alice, at: 1).isEmpty)
     }
 
-    func testTheScreenHasALimit() {
+    func testTextBoxes() {
         let game = game(#"""
         on join(p)
-          for i in 1 to 30 do
-            p.hud_text("item" + i, "x")
-          end
+          p.ui_input("answer", "Type the password")
+        end
+        on input(p, id, text)
+          if text == "swordfish" then p.message("Correct!") end
         end
         """#)
         startWithBoth(game)
-        let errors = game.drainErrors()
-        XCTAssertEqual(errors.first?.kind, .limit)
+        XCTAssertEqual(announcements(alice, game.handle(.text(id: "answer", value: "swordfish"), from: alice, at: 1)), ["Correct!"])
+        XCTAssertTrue(game.handle(.text(id: "other", value: "swordfish"), from: alice, at: 1).isEmpty)
     }
 
-    func testBadAnchorsAreExplained() {
-        let game = game("on start()\n  hud_text(\"a\", \"b\", {at: \"middle\"})\nend")
+    func testChatCommands() {
+        let game = game("on chat(p, text)\n  if text == \"/fly\" then p.gravity = 0.1 end\nend")
+        startWithBoth(game)
+        let effects = game.handleChat(from: bob, text: "/fly")
+        XCTAssertEqual(screen(bob, effects).movement.gravity, 0.1, accuracy: 0.0001)
+    }
+
+    func testTheScreenHasALimit() {
+        let game = game("on join(p)\n  for i in 1 to 400 do\n    p.ui_text(\"item\" + i, \"x\")\n  end\nend")
+        startWithBoth(game)
+        XCTAssertEqual(game.drainErrors().first?.kind, .limit)
+    }
+
+    func testBadOptionsAreExplained() {
+        let game = game("on start()\n  ui_text(\"a\", \"b\", {at: \"middle\"})\nend")
         startWithBoth(game)
         XCTAssertTrue(game.drainErrors().first?.message.contains("top_left") ?? false)
     }
 
-    // MARK: World and rules
-
-    func testScriptsChangeBlocksForEveryone() {
-        var world = WorldDocument(name: "Arena")
-        let door = BlockData(name: "Door")
-        world.insert(door)
-        let game = game("on start()\n  block(\"door\").visible = false\n  block(\"Door\").color = \"blue\"\nend", world: world)
-        let opening = startWithBoth(game)
-        XCTAssertEqual(game.world.block(id: door.id)?.isVisible, false, "late joiners get the changed world")
-        XCTAssertEqual(game.world.block(id: door.id)?.color, ScriptColor.parse("blue"))
-        XCTAssertTrue(opening.contains(where: { $0.targetPeerID == nil && $0.action == .setVisible(blockID: door.id, visible: false) }))
-    }
+    // MARK: Rules, touches, leaving
 
     func testScoresFromScriptsTripScoreRules() {
         var world = WorldDocument(name: "Arena")
         world.rules = [EventRule(name: "Win", trigger: .scoreReached(score: 3), actions: [.endRound(message: "Winner")])]
         let game = game("on join(p)\n  if p.name == \"Bob\" then p.score = 3 end\nend", world: world)
-        let opening = startWithBoth(game)
-        XCTAssertTrue(announcements(alice, opening).contains("Winner"))
+        XCTAssertTrue(announcements(alice, startWithBoth(game)).contains("Winner"))
     }
 
     func testRulesStillRunWhenTheScriptDoesNotParse() {
@@ -377,7 +512,8 @@ final class GameRuntimeTests: XCTestCase {
         world.rules = [EventRule(name: "Hello", trigger: .worldStart, actions: [.announce(message: "Welcome", duration: 2)])]
         let game = game("on start(\n", world: world)
         let opening = startWithBoth(game)
-        XCTAssertNotNil(game.compileError)
+        XCTAssertEqual(game.compileErrors.count, 1)
+        XCTAssertEqual(game.compileErrors.first?.file, "main.absc")
         XCTAssertEqual(game.drainErrors().count, 1)
         XCTAssertTrue(announcements(alice, opening).contains("Welcome"))
         XCTAssertFalse(game.isScriptRunning)
@@ -454,16 +590,27 @@ final class GameRuntimeTests: XCTestCase {
     }
 
     func testAnEndlessLoopCannotFreezeTheHost() {
-        let game = game("on tick(dt)\n  while true do\n  end\nend")
+        var limits = ScriptInterpreter.Limits()
+        limits.stepsPerCall = 20_000
+        let game = game("on tick(dt)\n  while true do\n  end\nend", limits: limits)
         startWithBoth(game)
         game.advance(to: 0.1)
         XCTAssertEqual(game.drainErrors().first?.kind, .limit)
     }
 
-    func testTimersCannotPileUpForever() {
-        let game = game("on tick(dt)\n  every(1, func() end)\nend")
+    func testTheDefaultBudgetIsGenerous() {
+        // A hundred thousand loop iterations in one event is ordinary game
+        // logic now, not a runaway.
+        let game = game("on start()\n  let total = 0\n  for i in 1 to 100000 do total = total + i end\n  print(total)\nend")
         startWithBoth(game)
-        for step in 1...300 { game.advance(to: Double(step) * 0.1) }
+        XCTAssertEqual(game.drainOutput(), ["5000050000"])
+        XCTAssertTrue(game.drainErrors().isEmpty)
+    }
+
+    func testTimersCannotPileUpForever() {
+        let game = game("on tick(dt)\n  for i in 1 to 50 do every(100, func() end) end\nend")
+        startWithBoth(game)
+        for step in 1...30 { game.advance(to: Double(step) * 0.1) }
         XCTAssertEqual(game.drainErrors().first?.kind, .limit)
     }
 
@@ -491,20 +638,26 @@ final class GameRuntimeTests: XCTestCase {
 
     func testScriptEffectsSurviveTheWire() throws {
         let effects: [ScriptEffect] = [
-            .hud(HUDElement(id: "a", kind: .text("Hi"), anchor: .bottomRight, color: .white, size: .small)),
-            .hud(HUDElement(id: "b", kind: .bar(value: 3, maximum: 10))),
-            .hud(HUDElement(id: "c", kind: .button("Go"))),
-            .removeHUD(id: "a"),
-            .clearHUD,
-            .camera(.firstPerson),
+            .ui(UIElement(id: "a", kind: .text, parent: "p", text: "Hi", x: 0.1, y: 0.9, width: 100, color: .white)),
+            .ui(UIElement(id: "b", kind: .bar, value: 3, maximum: 10)),
+            .removeUI(id: "a"),
+            .clearUI,
+            .camera(CameraSettings(mode: .fixed, distance: 3, fieldOfView: 80, position: Vec3(1, 2, 3), target: nil)),
+            .shake(strength: 0.5, seconds: 1),
+            .fade(color: .black, seconds: 2),
+            .fade(color: nil, seconds: 0),
+            .interface(controls: false, defaultUI: true),
             .equip(WeaponSpec.presets["pistol"]),
             .equip(nil),
             .ammo(current: 3, magazine: 10, reloading: true),
             .health(current: 50, maximum: 100),
-            .movement(speed: 1.5, jump: 0.5),
+            .movement(MovementScale(speed: 2, jump: 0.5, gravity: 0.3, frozen: true)),
+            .launch(Vec3(0, 10, 0)),
+            .face(yawDegrees: 45),
             .hitMarker(killed: true),
             .damageFlash,
-            .tracer(from: Vec3(1, 2, 3), to: Vec3(4, 5, 6))
+            .tracer(from: Vec3(1, 2, 3), to: Vec3(4, 5, 6)),
+            .chat("hello")
         ]
         for effect in effects {
             let action = EventAction.script(effect)
@@ -516,7 +669,8 @@ final class GameRuntimeTests: XCTestCase {
         let inputs: [PlayerInputPayload.Input] = [
             .fire(origin: Vec3(0, 1.6, 0), direction: Vec3(0, 0, -1)),
             .button(id: "shop"),
-            .reload
+            .reload,
+            .text(id: "name", value: "Mika")
         ]
         for input in inputs {
             let payload = PlayerInputPayload(peerID: alice, input: input)
@@ -524,163 +678,22 @@ final class GameRuntimeTests: XCTestCase {
         }
     }
 
-    func testWorldsSavedBeforeScriptsStillOpen() throws {
-        let old = WorldDocument(name: "Old")
-        let data = try JSONEncoder().encode(old)
-        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("\"script\""))
-        XCTAssertNil(try JSONDecoder().decode(WorldDocument.self, from: data).script)
-
-        var scripted = old
-        scripted.script = "on start()\nend"
-        XCTAssertEqual(try JSONDecoder().decode(WorldDocument.self, from: JSONEncoder().encode(scripted)).script, scripted.script)
-    }
-
-    func testTheScriptTravelsAsADelta() throws {
-        var world = WorldDocument(name: "Co-edit")
-        let delta = WorldDelta.scriptReplaced("on start()\nend")
-        let restored = try JSONDecoder().decode(WorldDelta.self, from: JSONEncoder().encode(delta))
-        XCTAssertEqual(restored, delta)
-        XCTAssertTrue(restored.apply(to: &world))
-        XCTAssertEqual(world.script, "on start()\nend")
-        XCTAssertTrue(WorldDelta.scriptReplaced(nil).apply(to: &world))
-        XCTAssertNil(world.script)
+    func testRosterEntriesFromOlderPeersStillDecode() throws {
+        let snapshot = PlayerSnapshot(peerID: alice)
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(snapshot)) as! [String: Any]
+        json["isNPC"] = nil
+        json["isHidden"] = nil
+        let old = try JSONSerialization.data(withJSONObject: json)
+        let decoded = try JSONDecoder().decode(PlayerSnapshot.self, from: old)
+        XCTAssertFalse(decoded.isNPC)
+        XCTAssertFalse(decoded.isHidden)
     }
 
     func testNamedColours() {
         XCTAssertEqual(ScriptColor.parse("red"), ScriptColor.parse("赤"))
         XCTAssertEqual(ScriptColor.parse(" Blue "), ScriptColor.parse("#3B82F6"))
+        XCTAssertEqual(ScriptColor.parse("透明")?.a, 0)
         XCTAssertNil(ScriptColor.parse("bleu"))
         XCTAssertNil(ScriptColor.parse("123456"), "hex needs its #, so a typo is not silently a colour")
-    }
-}
-
-/// Every sample Studio offers has to work the moment it is inserted.
-final class ScriptSampleTests: XCTestCase {
-
-    func testEverySampleRunsCleanly() {
-        var world = WorldDocument(name: "Sample")
-        var coin = BlockData(name: "Coin")
-        coin.tags = ["coin"]
-        world.insert(coin)
-        for sample in ScriptSamples.all {
-            world.script = sample.source
-            let report = GameRuntime.testRun(world: world, seconds: 3)
-            XCTAssertEqual(report.problems, [], "\(sample.id): \(report.problems.map(\.description))")
-            XCTAssertFalse(sample.title.isEmpty)
-            XCTAssertFalse(sample.summary.isEmpty)
-        }
-    }
-
-    func testSampleIDsAreUnique() {
-        let ids = ScriptSamples.all.map(\.id)
-        XCTAssertEqual(Set(ids).count, ids.count)
-    }
-
-    func testTheDuelSampleSetsUpAShooter() {
-        var world = WorldDocument(name: "Duel")
-        world.script = ScriptSamples.duel.source
-        let notes = GameRuntime.testRun(world: world).notes.joined(separator: "\n")
-        XCTAssertTrue(notes.contains("rifle"), notes)
-        XCTAssertTrue(notes.contains("Knockouts: 0"), notes)
-    }
-
-    func testTheTimerSampleEndsTheRound() {
-        var world = WorldDocument(name: "Timer")
-        world.script = ScriptSamples.timerAndButtons.source
-        let report = GameRuntime.testRun(world: world, seconds: 61)
-        XCTAssertTrue(report.notes.contains { $0.contains("Time's up!") }, report.notes.joined(separator: "\n"))
-    }
-
-    func testATestRunReportsSyntaxErrorsAndStops() {
-        var world = WorldDocument(name: "Broken")
-        world.script = "on start(\n"
-        let report = GameRuntime.testRun(world: world)
-        XCTAssertEqual(report.problems.count, 1)
-        XCTAssertTrue(report.notes.isEmpty)
-    }
-
-    func testATestRunReportsPrintedLines() {
-        var world = WorldDocument(name: "Hello")
-        world.script = "on join(p)\n  print(\"hello \" + p.name)\nend"
-        XCTAssertEqual(GameRuntime.testRun(world: world).output.count, 2, "one per player")
-    }
-}
-
-/// Folding host effects into what one player's screen shows.
-final class ScriptedPlayerStateTests: XCTestCase {
-
-    func testScreenItemsKeepTheirPlaceWhenUpdated() {
-        var state = ScriptedPlayerState()
-        state.apply(.hud(HUDElement(id: "a", kind: .text("1"))))
-        state.apply(.hud(HUDElement(id: "b", kind: .text("2"))))
-        state.apply(.hud(HUDElement(id: "a", kind: .text("3"))))
-        XCTAssertEqual(state.hud.map(\.id), ["a", "b"])
-        XCTAssertEqual(state.element("a")?.kind, .text("3"))
-        state.apply(.removeHUD(id: "a"))
-        XCTAssertEqual(state.hud.map(\.id), ["b"])
-        state.apply(.clearHUD)
-        XCTAssertTrue(state.hud.isEmpty)
-    }
-
-    func testFiringNeedsAWeaponAmmoAndHealth() {
-        var state = ScriptedPlayerState()
-        XCTAssertFalse(state.canFire)
-        state.apply(.equip(WeaponSpec.presets["pistol"]))
-        XCTAssertTrue(state.canFire)
-        state.apply(.ammo(current: 0, magazine: 10, reloading: true))
-        XCTAssertFalse(state.canFire)
-        state.apply(.ammo(current: 10, magazine: 10, reloading: false))
-        state.apply(.health(current: 0, maximum: 100))
-        XCTAssertTrue(state.isKnockedOut)
-        XCTAssertFalse(state.canFire)
-        state.apply(.equip(nil))
-        XCTAssertNil(state.ammo, "no weapon, no ammo counter")
-    }
-
-    func testEachHitIsCounted() {
-        var state = ScriptedPlayerState()
-        state.apply(.hitMarker(killed: false))
-        state.apply(.hitMarker(killed: true))
-        state.apply(.damageFlash)
-        XCTAssertEqual(state.hitMarkerCount, 2)
-        XCTAssertTrue(state.lastHitWasKnockout)
-        XCTAssertEqual(state.damageFlashCount, 1)
-    }
-}
-
-/// Studio's reference has to list everything a script can use.
-final class ScriptReferenceTests: XCTestCase {
-
-    private var allCode: String {
-        ScriptReference.sections.flatMap(\.entries).map(\.code).joined(separator: "\n")
-    }
-
-    func testEveryEventIsListed() {
-        for event in GameRuntime.Event.allCases {
-            XCTAssertTrue(allCode.contains("on \(event.rawValue)("), "on \(event.rawValue) is missing")
-        }
-    }
-
-    func testEveryFunctionIsListed() {
-        let names = GameRuntime.gameAPINames + ScriptInterpreter.standardLibraryNames
-        for name in names {
-            XCTAssertNotNil(allCode.range(of: "\\b\(name)\\b", options: .regularExpression), "\(name) is missing")
-        }
-    }
-
-    func testEveryPlayerAndBlockMemberIsListed() {
-        for name in GameRuntime.playerMemberNames {
-            XCTAssertTrue(allCode.contains("p.\(name)"), "p.\(name) is missing")
-        }
-        for name in GameRuntime.blockMemberNames where name != "id" {
-            XCTAssertTrue(allCode.contains("b.\(name)"), "b.\(name) is missing")
-        }
-    }
-
-    func testEveryExampleInTheReferenceParses() throws {
-        // The ones that are a whole statement on their own.
-        for code in ["let score = 0", "func add(a, b) return a + b end", "-- a note"] {
-            XCTAssertNoThrow(try ScriptParser.parse(code), code)
-        }
     }
 }

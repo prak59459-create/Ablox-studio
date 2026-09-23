@@ -131,8 +131,18 @@ public final class GameLibrary: ObservableObject {
             // overwrite anything the player made.
             world.id = UUID()
 
+            // `.absc` files kept beside the world in the repository. One with
+            // the same name as a script inside the world replaces it, so the
+            // repository copy is the one that counts.
+            for script in source.scriptURLs(for: listing) {
+                let bytes = try await fetch(script.url, limit: GameCatalogue.Limits.maximumScriptBytes)
+                guard let text = String(data: bytes, encoding: .utf8) else { continue }
+                world.scripts.removeAll { $0.name.lowercased() == script.name.lowercased() }
+                world.scripts.append(ScriptFile(name: script.name, source: text))
+            }
+
             let destination = worldCacheURL(for: listing.id)
-            try data.write(to: destination, options: .atomic)
+            try world.encodedForFile().write(to: destination, options: .atomic)
             refreshInstalledList()
             status = .idle
             return world

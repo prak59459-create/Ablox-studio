@@ -19,8 +19,9 @@ public enum EditCommand: Hashable, Sendable {
     case reparent(blockID: UUID, from: UUID?, to: UUID?)
     case setEnvironment(before: EnvironmentSettings, after: EnvironmentSettings)
     case setRules(before: [EventRule], after: [EventRule])
-    /// The world's AbloxScript. Nil is "no script".
-    case setScript(before: String?, after: String?)
+    /// The world's `.absc` files, all at once: adding, renaming, deleting
+    /// and editing a file are each one of these.
+    case setScripts(before: [ScriptFile], after: [ScriptFile])
     /// Several edits that undo as one — a multi-selection drag, say.
     indirect case group(label: String, commands: [EditCommand])
 
@@ -53,8 +54,8 @@ public enum EditCommand: Hashable, Sendable {
             world.modifiedAt = Date()
             return true
 
-        case let .setScript(_, after):
-            world.script = after
+        case let .setScripts(_, after):
+            world.scripts = after
             world.modifiedAt = Date()
             return true
 
@@ -82,8 +83,8 @@ public enum EditCommand: Hashable, Sendable {
             return .setEnvironment(before: after, after: before)
         case let .setRules(before, after):
             return .setRules(before: after, after: before)
-        case let .setScript(before, after):
-            return .setScript(before: after, after: before)
+        case let .setScripts(before, after):
+            return .setScripts(before: after, after: before)
         case let .group(label, commands):
             // Reversed: undoing a group must unwind it in the opposite order,
             // or a delete-then-insert pair would resurrect in the wrong place.
@@ -100,7 +101,7 @@ public enum EditCommand: Hashable, Sendable {
         case .reparent: return "Move in tree"
         case .setEnvironment: return "Change environment"
         case .setRules: return "Edit rules"
-        case .setScript: return "Edit script"
+        case .setScripts: return "Edit scripts"
         case let .group(label, _): return label
         }
     }
@@ -116,7 +117,7 @@ public enum EditCommand: Hashable, Sendable {
         case let .reparent(blockID, _, to): return [.reparent(blockID: blockID, newParent: to)]
         case let .setEnvironment(_, after): return [.environment(after)]
         case let .setRules(_, after): return [.rulesReplaced(after)]
-        case let .setScript(_, after): return [.scriptReplaced(after)]
+        case let .setScripts(_, after): return [.scriptsReplaced(after)]
         case let .group(_, commands): return commands.flatMap(\.deltas)
         }
     }
@@ -130,7 +131,7 @@ public enum EditCommand: Hashable, Sendable {
         switch (self, next) {
         case let (.modify(_, after), .modify(nextBefore, _)):
             return after.id == nextBefore.id
-        case (.setScript, .setScript):
+        case (.setScripts, .setScripts):
             // A burst of typing is one undo step, like a drag.
             return true
         default:
@@ -144,8 +145,8 @@ public enum EditCommand: Hashable, Sendable {
         switch (self, next) {
         case let (.modify(before, _), .modify(_, after)):
             return .modify(before: before, after: after)
-        case let (.setScript(before, _), .setScript(_, after)):
-            return .setScript(before: before, after: after)
+        case let (.setScripts(before, _), .setScripts(_, after)):
+            return .setScripts(before: before, after: after)
         default:
             return next
         }
@@ -166,6 +167,11 @@ public struct EditHistory: Sendable {
     /// Set while a continuous gesture is in progress, so its per-frame
     /// commands coalesce into one entry instead of fifty.
     private var isCoalescing = false
+    /// How deep the stack was when the gesture began. Only a command recorded
+    /// during the gesture may be merged into: otherwise opening the script
+    /// editor straight after creating a file would fold the typing into the
+    /// creation, and one undo would delete the file.
+    private var gestureBase = 0
 
     public init(limit: Int = EditHistory.defaultLimit) {
         self.limit = limit
@@ -183,14 +189,16 @@ public struct EditHistory: Sendable {
         // model, which is what people expect from Cmd-Z.
         redoStack.removeAll()
 
-        if isCoalescing, let last = undoStack.last, last.canCoalesce(with: command) {
+        if isCoalescing, undoStack.count > gestureBase, let last = undoStack.last, last.canCoalesce(with: command) {
             undoStack[undoStack.count - 1] = last.coalesced(with: command)
             return
         }
 
         undoStack.append(command)
         if undoStack.count > limit {
-            undoStack.removeFirst(undoStack.count - limit)
+            let dropped = undoStack.count - limit
+            undoStack.removeFirst(dropped)
+            gestureBase = max(0, gestureBase - dropped)
         }
     }
 
@@ -198,6 +206,7 @@ public struct EditHistory: Sendable {
     /// `endCoalescing()` merge into a single undo step.
     public mutating func beginCoalescing() {
         isCoalescing = true
+        gestureBase = undoStack.count
     }
 
     public mutating func endCoalescing() {

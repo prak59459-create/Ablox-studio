@@ -492,35 +492,52 @@ final class EditorDocumentTests: XCTestCase {
         XCTAssertEqual(EditCommand.group(label: "g", commands: [.insert(block), .delete(block)]).deltas.count, 2)
     }
 
-    // MARK: Script
+    // MARK: Scripts
 
-    func testScriptEditsUndoAndTravelToCoEditors() {
+    func testScriptFilesAreUndoableAndTravelToCoEditors() {
         var doc = makeDocument()
-        doc.setScript("on start()\nend")
-        XCTAssertEqual(doc.world.script, "on start()\nend")
-        XCTAssertEqual(doc.drainDeltas(), [.scriptReplaced("on start()\nend")])
+        let id = doc.addScript(named: "main", source: "on start()\nend")
+        XCTAssertNotNil(id)
+        XCTAssertEqual(doc.world.scripts.map(\.name), ["main.absc"])
+        guard case let .scriptsReplaced(files)? = doc.drainDeltas().last else {
+            return XCTFail("co-editors must be sent the files")
+        }
+        XCTAssertEqual(files.map(\.name), ["main.absc"])
 
         XCTAssertTrue(doc.undo())
-        XCTAssertNil(doc.world.script)
-        XCTAssertEqual(doc.drainDeltas(), [.scriptReplaced(nil)], "an undo reaches co-editors too")
+        XCTAssertTrue(doc.world.scripts.isEmpty)
+        XCTAssertEqual(doc.drainDeltas(), [.scriptsReplaced([])], "an undo reaches co-editors too")
     }
 
-    func testABlankScriptIsNoScript() {
+    func testFileNamesStayUnique() {
         var doc = makeDocument()
-        doc.setScript("print(1)")
-        doc.setScript("  \n ")
-        XCTAssertNil(doc.world.script, "a world whose script was emptied is a rules-only world again")
+        doc.addScript(named: "main")
+        doc.addScript(named: "main")
+        let third = doc.addScript(named: "ui")!
+        doc.renameScript(third, to: "main.absc")
+        XCTAssertEqual(doc.world.scripts.map(\.name), ["main.absc", "main 2.absc", "main 3.absc"])
+    }
+
+    func testEditingSwitchingAndRemovingFiles() {
+        var doc = makeDocument()
+        let id = doc.addScript(named: "main")!
+        doc.updateScript(id, source: "print(1)")
+        doc.setScriptEnabled(id, false)
+        XCTAssertEqual(doc.world.scripts.first?.source, "print(1)")
+        XCTAssertEqual(doc.world.scripts.first?.isEnabled, false)
+        doc.removeScript(id)
+        XCTAssertTrue(doc.world.scripts.isEmpty)
     }
 
     func testTypingIsOneUndoStep() {
         var doc = makeDocument()
+        let id = doc.addScript(named: "main")!
         doc.beginGesture()
         for text in ["o", "on", "on s", "on start()"] {
-            doc.setScript(text)
+            doc.updateScript(id, source: text)
         }
         doc.endGesture()
         XCTAssertTrue(doc.undo())
-        XCTAssertNil(doc.world.script, "one undo takes back the whole visit to the editor")
-        XCTAssertFalse(doc.history.canUndo)
+        XCTAssertEqual(doc.world.scripts.first?.source, "", "one undo takes back the whole visit to the editor")
     }
 }

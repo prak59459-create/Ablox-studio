@@ -71,19 +71,22 @@ public enum Symbol: String, CaseIterable, Sendable {
 /// Turns source text into tokens.
 public enum ScriptLexer {
 
-    /// The longest a script may be. A world file carries its script, and the
-    /// catalogue limits worlds to 8 MB; a script is a small part of that.
-    public static let maximumSourceLength = 200_000
+    /// The longest one `.absc` file may be. Generous — a whole game fits in
+    /// one — and still bounded, because a world file carries its scripts and
+    /// the catalogue limits worlds to 8 MB.
+    public static let maximumSourceLength = 1_000_000
 
-    public static func tokens(from source: String) throws -> [ScriptToken] {
+    /// - Parameter file: which file of a bundle this is, so every line
+    ///   number can say which file it is in. See `ScriptLocation`.
+    public static func tokens(from source: String, file: Int? = nil) throws -> [ScriptToken] {
         guard source.count <= maximumSourceLength else {
-            throw ScriptError(line: 1, kind: .syntax, message: L("The script is too long."))
+            throw ScriptError(line: ScriptLocation.pack(line: 1, file: file), kind: .syntax, message: L("The script is too long."))
         }
 
         var tokens: [ScriptToken] = []
         let characters = Array(source)
         var index = 0
-        var line = 1
+        var line = ScriptLocation.pack(line: 1, file: file)
 
         func peek(_ offset: Int = 0) -> Character? {
             let position = index + offset
@@ -257,14 +260,52 @@ public struct ScriptError: Error, Equatable, Sendable {
     public let line: Int
     public let kind: Kind
     public let message: String
+    /// The `.absc` file it is in, once known.
+    public let file: String?
 
-    public init(line: Int, kind: Kind, message: String) {
+    public init(line: Int, kind: Kind, message: String, file: String? = nil) {
         self.line = line
         self.kind = kind
         self.message = message
+        self.file = file
     }
 
     public var description: String {
-        L("Line {}: {}", line, message)
+        if let file { return L("{}, line {}: {}", file, line, message) }
+        return L("Line {}: {}", line, message)
+    }
+
+    /// Unpacks a bundle location into the file's name and its own line.
+    public func resolved(files: [String]) -> ScriptError {
+        guard file == nil, let index = ScriptLocation.file(line), index < files.count else { return self }
+        return ScriptError(line: ScriptLocation.line(line), kind: kind, message: message, file: files[index])
+    }
+}
+
+/// Where a token came from, packed into the one `Int` every syntax node
+/// already carries.
+///
+/// A world has several `.absc` files, run as one program. Giving every node a
+/// file field as well would touch every line of the parser and interpreter;
+/// packing the file into the high bits of the line touches neither, and a
+/// script with no file (the tests, a single snippet) keeps plain line numbers.
+public enum ScriptLocation {
+    static let shift = 20
+    static let mask = (1 << 20) - 1
+
+    public static func pack(line: Int, file: Int?) -> Int {
+        guard let file else { return line }
+        return ((file + 1) << shift) | (line & mask)
+    }
+
+    /// The line within its own file.
+    public static func line(_ packed: Int) -> Int {
+        packed & mask
+    }
+
+    /// Which file, or nil for a script that is not part of a bundle.
+    public static func file(_ packed: Int) -> Int? {
+        let index = packed >> shift
+        return index == 0 ? nil : index - 1
     }
 }

@@ -24,15 +24,16 @@ public protocol ScriptObjectResolver: AnyObject {
 public final class ScriptInterpreter {
 
     public struct Limits: Sendable {
-        /// Steps per handler call. Generous for game logic — a loop over
-        /// every block in a large world fits — and small enough that a
-        /// runaway loop is stopped within a frame or two.
-        public var stepsPerCall = 50_000
-        public var maximumCallDepth = 100
-        public var maximumCollectionSize = 10_000
-        public var maximumTextLength = 100_000
+        /// Steps per handler call. Two million is far more than any game
+        /// needs in one event — a loop over ten thousand blocks is a fraction
+        /// of it — and is only here as a fuse: `while true do end` must stop
+        /// eventually rather than freeze the host for everyone.
+        public var stepsPerCall = 2_000_000
+        public var maximumCallDepth = 200
+        public var maximumCollectionSize = 100_000
+        public var maximumTextLength = 1_000_000
         /// `print` output kept for Studio's console.
-        public var maximumOutputLines = 200
+        public var maximumOutputLines = 500
 
         public init() {}
     }
@@ -72,7 +73,7 @@ public final class ScriptInterpreter {
     }
 
     public func hasHandler(_ event: String) -> Bool {
-        program.handlers[event] != nil
+        !(program.handlers[event] ?? []).isEmpty
     }
 
     /// Calls `on <event>(…)`, if the script has one.
@@ -85,20 +86,25 @@ public final class ScriptInterpreter {
         try run(event, arguments) != nil
     }
 
-    /// Like `fire`, but hands back what the handler returned: nil when there
-    /// is no handler, `.null` when it returned nothing. `on hit` uses this to
-    /// let a script change the damage.
+    /// Like `fire`, but hands back what the handlers returned: nil when there
+    /// is no handler, `.null` when none returned anything, otherwise the last
+    /// value one of them returned. `on hit` uses this to change the damage.
+    ///
+    /// Every file's handler for the event runs, in file order. Each gets its
+    /// own budget: one file's heavy `on tick` must not starve another's.
     public func run(_ event: String, _ arguments: [ScriptValue] = []) throws -> ScriptValue? {
-        guard let handler = program.handlers[event] else { return nil }
+        guard let handlers = program.handlers[event], !handlers.isEmpty else { return nil }
         var result = ScriptValue.null
-        try withBudget {
-            let scope = ScriptScope(parent: globals)
-            for (index, name) in handler.parameters.enumerated() {
-                scope.declare(name, index < arguments.count ? arguments[index] : .null)
+        for handler in handlers {
+            try withBudget {
+                let scope = ScriptScope(parent: globals)
+                for (index, name) in handler.parameters.enumerated() {
+                    scope.declare(name, index < arguments.count ? arguments[index] : .null)
+                }
+                let flow = try execute(handler.body, in: scope, isTopLevel: false)
+                try checkFlowAtBoundary(flow, line: handler.line)
+                if case let .returned(value) = flow, !value.isNull { result = value }
             }
-            let flow = try execute(handler.body, in: scope, isTopLevel: false)
-            try checkFlowAtBoundary(flow, line: handler.line)
-            if case let .returned(value) = flow { result = value }
         }
         return result
     }
@@ -376,7 +382,9 @@ public final class ScriptInterpreter {
             let value = try evaluate(operand, in: scope)
             switch op {
             case .not: return .bool(!value.isTruthy)
-            case .negate: return .number(-(try number(value, what: "-", line: line)))
+            case .negate:
+                if let vector = ScriptVector(value) { return (vector * -1).value }
+                return .number(-(try number(value, what: "-", line: line)))
             }
 
         case let .logical(isAnd, left, right):
@@ -451,7 +459,10 @@ public final class ScriptInterpreter {
         }
     }
 
-    private func call(_ callee: ScriptValue, _ arguments: [ScriptValue], line: Int) throws -> ScriptValue {
+    /// Calls a function value. Internal rather than private so the standard
+    /// library's `sort`, `map` and `filter` can call back into the script —
+    /// spending from the same budget, since they run inside a call already.
+    func call(_ callee: ScriptValue, _ arguments: [ScriptValue], line: Int) throws -> ScriptValue {
         switch callee {
         case let .native(native):
             return try native.body(arguments, line)
@@ -492,13 +503,22 @@ public final class ScriptInterpreter {
             // what everyone writes first, and refusing it teaches nothing.
             if case .string = left { return .string(try text(left.displayText + right.displayText, line: line)) }
             if case .string = right { return .string(try text(left.displayText + right.displayText, line: line)) }
+            // Positions add like arrows: p.position + {x: 0, y: 5, z: 0}.
+            if let a = ScriptVector(left), let b = ScriptVector(right) { return (a + b).value }
             return .number(try number(left, what: "+", line: line) + number(right, what: "+", line: line))
 
         case .subtract:
+            if let a = ScriptVector(left), let b = ScriptVector(right) { return (a - b).value }
             return .number(try number(left, what: "-", line: line) - number(right, what: "-", line: line))
         case .multiply:
+            if let a = ScriptVector(left), case let .number(n) = right { return (a * n).value }
+            if case let .number(n) = left, let b = ScriptVector(right) { return (b * n).value }
             return .number(try number(left, what: "*", line: line) * number(right, what: "*", line: line))
         case .divide:
+            if let a = ScriptVector(left), case let .number(n) = right {
+                guard n != 0 else { throw ScriptError(line: line, kind: .runtime, message: L("Cannot divide by zero.")) }
+                return (a * (1 / n)).value
+            }
             let divisor = try number(right, what: "/", line: line)
             guard divisor != 0 else {
                 throw ScriptError(line: line, kind: .runtime, message: L("Cannot divide by zero."))

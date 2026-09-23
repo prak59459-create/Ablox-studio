@@ -23,17 +23,32 @@ public struct ScriptedPlayerState: Equatable, Sendable {
         public var isReloading: Bool
     }
 
-    /// In the order the script first showed them, so a layout does not
-    /// reshuffle every time a score changes.
-    public private(set) var hud: [HUDElement] = []
-    public private(set) var camera: CameraMode = .thirdPerson
+    public struct Fade: Equatable, Sendable {
+        public var color: ColorRGBA?
+        public var seconds: Double
+        /// Bumped per fade, so the same fade twice still animates.
+        public var serial: Int
+    }
+
+    public struct Shake: Equatable, Sendable {
+        public var strength: Float
+        public var seconds: Double
+        public var serial: Int
+    }
+
+    /// In the order the script first showed them.
+    public private(set) var ui: [UIElement] = []
+    public private(set) var camera: CameraSettings = .standard
     public private(set) var weapon: WeaponSpec?
     public private(set) var ammo: Ammo?
     /// Nil until the script first involves health — a parkour world with a
     /// script has no health bar.
     public private(set) var health: Health?
-    public private(set) var speedMultiplier: Float = 1
-    public private(set) var jumpMultiplier: Float = 1
+    public private(set) var movement: MovementScale = .normal
+    public private(set) var showsControls = true
+    public private(set) var showsDefaultUI = true
+    public private(set) var fade = Fade(color: nil, seconds: 0, serial: 0)
+    public private(set) var shake = Shake(strength: 0, seconds: 0, serial: 0)
     /// Bumped per hit marker and per hit taken, so the UI can animate each
     /// one even when two arrive with the same content.
     public private(set) var hitMarkerCount = 0
@@ -55,28 +70,50 @@ public struct ScriptedPlayerState: Equatable, Sendable {
         return !ammo.isReloading && ammo.current > 0
     }
 
-    public func element(_ id: String) -> HUDElement? {
-        hud.first { $0.id == id }
+    public func element(_ id: String) -> UIElement? {
+        ui.first { $0.id == id }
     }
 
-    public func elements(at anchor: HUDElement.Anchor) -> [HUDElement] {
-        hud.filter { $0.anchor == anchor }
+    /// The visible elements directly inside `parent` (nil: the screen),
+    /// bottom layer first.
+    public func children(of parent: String?) -> [UIElement] {
+        ui.filter { $0.parent == parent && $0.visible }
+            .enumerated()
+            .sorted { $0.element.layer != $1.element.layer ? $0.element.layer < $1.element.layer : $0.offset < $1.offset }
+            .map(\.element)
     }
 
     public mutating func apply(_ effect: ScriptEffect) {
         switch effect {
-        case let .hud(element):
-            if let index = hud.firstIndex(where: { $0.id == element.id }) {
-                hud[index] = element
-            } else if hud.count < HUDElement.Limits.maximumElements {
-                hud.append(element)
+        case let .ui(element):
+            if let index = ui.firstIndex(where: { $0.id == element.id }) {
+                ui[index] = element
+            } else if ui.count < UIElement.Limits.maximumElements {
+                ui.append(element)
             }
-        case let .removeHUD(id):
-            hud.removeAll { $0.id == id }
-        case .clearHUD:
-            hud.removeAll()
-        case let .camera(mode):
-            camera = mode
+        case let .removeUI(id):
+            // Removing a panel removes what is inside it.
+            var doomed: Set<String> = [id]
+            var grew = true
+            while grew {
+                let before = doomed.count
+                for element in ui where element.parent.map(doomed.contains) == true {
+                    doomed.insert(element.id)
+                }
+                grew = doomed.count > before
+            }
+            ui.removeAll { doomed.contains($0.id) }
+        case .clearUI:
+            ui.removeAll()
+        case let .camera(settings):
+            camera = settings
+        case let .shake(strength, seconds):
+            shake = Shake(strength: strength, seconds: seconds, serial: shake.serial &+ 1)
+        case let .fade(color, seconds):
+            fade = Fade(color: color, seconds: seconds, serial: fade.serial &+ 1)
+        case let .interface(controls, defaultUI):
+            showsControls = controls
+            showsDefaultUI = defaultUI
         case let .equip(newWeapon):
             weapon = newWeapon
             if newWeapon == nil { ammo = nil }
@@ -84,16 +121,15 @@ public struct ScriptedPlayerState: Equatable, Sendable {
             ammo = Ammo(current: current, magazine: magazine, isReloading: reloading)
         case let .health(current, maximum):
             health = Health(current: current, maximum: maximum)
-        case let .movement(speed, jump):
-            speedMultiplier = speed
-            jumpMultiplier = jump
-        case let .hitMarker(killed):
+        case let .movement(scale):
+            movement = scale
+        case .hitMarker(let killed):
             hitMarkerCount &+= 1
             lastHitWasKnockout = killed
         case .damageFlash:
             damageFlashCount &+= 1
-        case .tracer:
-            // Drawn by the viewport; nothing to remember.
+        case .launch, .face, .tracer, .chat:
+            // Acted on by the viewport and the chat log; nothing to remember.
             break
         }
     }

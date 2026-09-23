@@ -118,21 +118,23 @@ across every iPad in the room.
 
 ## Scripts
 
-The **Script** tab, beside Explorer and Rules, is for what the rule pickers
-cannot say: first-person shooters, teams, weapons, timers and buttons on the
-screen. It opens a full-screen editor with:
+The **Script** tab, beside Explorer and Rules, is for everything the rule
+pickers cannot say: shooters, menus and shops, cameras, NPCs, maps that build
+and change themselves. A world holds any number of `.absc` files (up to 32):
 
-- **Check** — finds syntax errors, and handlers for events that never happen
-  (`on joni` → "did you mean `on join`?"), with line numbers.
-- **Test run** — plays the script for five seconds with two idle players and
-  lists what it did: camera, weapon, screen items, messages, `print` output.
-- **Examples** — complete games (1v1 shooter, team battle, timer and buttons,
-  coin rush) that run as inserted.
-- **Reference** — every event and function, with one sentence each.
+- **New file**, or tap an example to add it as a file of its own.
+- **Import** reads `.absc` files from the Files app — written on a computer,
+  sent by a friend. The **…** menu on a file renames it, switches it off
+  without deleting it, exports it through the share sheet, or deletes it.
+- Tapping a file opens the editor, with **Check** (syntax errors and misspelled
+  events across every file, each naming its file and line), **Test run** (plays
+  every file for five seconds with two idle players and lists the camera,
+  weapon, screen items, NPCs, created blocks, messages and `print` output),
+  **Examples** and the **Reference** beside the code.
 
-The whole visit to the editor is one undo step. The script is saved into the
-world, travels to co-editors as a `scriptReplaced` delta, and runs on whichever
-iPad hosts the game in Ablox. The language and its limits are described in
+A visit to the editor is one undo step. The files are saved in the world,
+travel to co-editors as a `scriptsReplaced` delta, and run on whichever iPad
+hosts the game in Ablox. The language and API are described in
 [Ablox `docs/scripting.md`](https://github.com/prak59459-create/Ablox/blob/main/docs/scripting.md)
 (日本語: [`scripting.ja.md`](https://github.com/prak59459-create/Ablox/blob/main/docs/scripting.ja.md)).
 

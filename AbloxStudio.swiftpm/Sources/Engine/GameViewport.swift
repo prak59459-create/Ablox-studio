@@ -126,6 +126,10 @@ public struct GameViewport: UIViewRepresentable {
         private var recoil: Float = 0
         /// Shot lines, which fade in a tenth of a second.
         private var tracers: [(entity: ModelEntity, age: Float)] = []
+        private var lastSky: ColorRGBA?
+        private var shakeSerial = 0
+        private var shakeRemaining: Float = 0
+        private var shakeStrength: Float = 0
 
         init(parent: GameViewport) {
             self.parent = parent
@@ -186,6 +190,15 @@ public struct GameViewport: UIViewRepresentable {
             guard world.modifiedAt != lastWorldRevision else { return }
             lastWorldRevision = world.modifiedAt
             worldScene.sync(to: world, physicsEnabled: true)
+
+            // A script can repaint the sky mid-game.
+            let sky = world.environment.skyBottom
+            if sky != lastSky {
+                lastSky = sky
+                view?.environment.background = .color(UIColor(
+                    red: CGFloat(sky.r), green: CGFloat(sky.g), blue: CGFloat(sky.b), alpha: 1
+                ))
+            }
         }
 
         func syncRoster(_ roster: [PlayerSnapshot], localPeerID: PeerID) {
@@ -199,8 +212,10 @@ public struct GameViewport: UIViewRepresentable {
                     if existing.profile != player.profile {
                         existing.apply(profile: player.profile)
                     }
+                    existing.isEnabled = !player.isHidden
                 } else {
                     let avatar = AvatarEntity(peerID: player.peerID, profile: player.profile, position: player.position)
+                    avatar.isEnabled = !player.isHidden
                     worldScene.anchor.addChild(avatar)
                     avatars[player.peerID] = avatar
                 }
@@ -211,8 +226,11 @@ public struct GameViewport: UIViewRepresentable {
                 avatars.removeValue(forKey: peerID)
             }
 
-            if let local = localAvatar, local.profile != parent.session.profile {
-                local.apply(profile: parent.session.profile)
+            // As the host last said: a script may have recoloured or resized
+            // us, and we should see it too.
+            let appearance = parent.session.localAppearance
+            if let local = localAvatar, local.profile != appearance {
+                local.apply(profile: appearance)
             }
         }
 
@@ -244,10 +262,26 @@ public struct GameViewport: UIViewRepresentable {
                 case let .playSound(name):
                     feedback.play(named: name)
                 case let .script(scriptEffect):
-                    // Everything else a script sends is state the session
-                    // already folded into `scripted`; only shots are drawn.
-                    if case let .tracer(from, to) = scriptEffect {
+                    // Most of what a script sends is state the session has
+                    // already folded into `scripted`. These act on the body.
+                    switch scriptEffect {
+                    case let .tracer(from, to):
                         spawnTracer(from: from, to: to)
+                    case let .launch(velocity):
+                        localSnapshot.velocity = velocity
+                        localSnapshot.isGrounded = false
+                        publisher.reset()
+                    case let .face(yaw):
+                        localSnapshot.yawDegrees = yaw
+                        // The camera turns with them, or the next frame's
+                        // "face where the camera looks" would undo it.
+                        parent.cameraYaw = -yaw
+                        publisher.reset()
+                    case let .shake(strength, seconds):
+                        shakeStrength = strength
+                        shakeRemaining = Float(seconds)
+                    default:
+                        break
                     }
                 default:
                     worldScene.apply(effect: effect)
@@ -264,15 +298,23 @@ public struct GameViewport: UIViewRepresentable {
 
             // 1. Intent → velocity, scaled by whatever the script allows.
             let scripted = parent.session.scripted
+            let scale = scripted.movement
             var input = parent.input
             input.cameraYawDegrees = parent.cameraYaw
+            if scale.frozen {
+                input.stick = .zero
+                input.isJumping = false
+            }
             var movement = MovementConfig.default
-            movement.walkSpeed *= scripted.speedMultiplier
-            movement.jumpSpeed *= scripted.jumpMultiplier
+            movement.walkSpeed *= scale.speed
+            movement.jumpSpeed *= scale.jump
+            // The world's gravity (Earth's by default) times the player's own.
+            let worldGravity = world.environment.gravity / -9.81
+            movement.gravity *= scale.gravity * (worldGravity.isFinite ? max(0, min(5, worldGravity)) : 1)
             let motion = CharacterSolver.step(snapshot: localSnapshot, input: input, config: movement, deltaTime: dt)
             localSnapshot.velocity = motion.velocity
             localSnapshot.yawDegrees = motion.yawDegrees
-            if scripted.camera == .firstPerson || scripted.weapon != nil {
+            if scripted.camera.mode == .firstPerson || scripted.weapon != nil {
                 // Aiming: the body faces where the camera looks, so walking
                 // sideways strafes instead of turning away from the target.
                 let forward = Quat.yaw(degrees: parent.cameraYaw).act(Vec3(0, 0, -1))
@@ -281,10 +323,11 @@ public struct GameViewport: UIViewRepresentable {
 
             // 2. Velocity → position, resolved against the world.
             //    Deterministic and shared with the host — see WorldCollider.
+            let size = parent.session.localAppearance.height
             let collision = WorldCollider.resolve(
                 position: localSnapshot.position,
                 velocity: localSnapshot.velocity,
-                body: .default,
+                body: CharacterBody(radius: 0.4 * size, height: 1.8 * size),
                 world: world,
                 deltaTime: dt
             )
@@ -318,29 +361,68 @@ public struct GameViewport: UIViewRepresentable {
             publishIfDue()
         }
 
-        /// Third-person orbit camera, pulled in when a wall is in the way —
-        /// or, when the world's script asks for it, the player's own eyes.
+        /// The camera the world's script asked for: behind the player (the
+        /// default, pulled in when a wall is in the way), at their eyes,
+        /// looking down from above, or fixed in the world.
         private func updateCamera(dt: Float) {
-            if parent.session.scripted.camera == .firstPerson {
+            let settings = parent.session.scripted.camera
+            let size = parent.session.localAppearance.height
+            camera.camera.fieldOfViewInDegrees = max(10, min(150, settings.fieldOfView))
+
+            // A shake is a small random offset that dies away.
+            var jitter = Vec3.zero
+            if shakeRemaining > 0 {
+                shakeRemaining -= dt
+                let amount = shakeStrength * max(0, min(1, shakeRemaining * 3)) * 0.25
+                jitter = Vec3(Float.random(in: -amount...amount), Float.random(in: -amount...amount), Float.random(in: -amount...amount))
+            }
+
+            let hidden = parent.session.localPlayer?.isHidden ?? false
+            // Your own head would fill a first-person screen.
+            localAvatar?.isEnabled = settings.mode != .firstPerson && !hidden
+
+            switch settings.mode {
+            case .firstPerson:
                 let pitch = max(-80, min(80, parent.cameraPitch))
                 let look = Quat.euler(degrees: Vec3(pitch, parent.cameraYaw, 0)).act(Vec3(0, 0, -1))
-                let eye = localSnapshot.position + Vec3(0, PlayerHitBody.eyeHeight, 0)
+                let eye = localSnapshot.position + Vec3(0, PlayerHitBody.eyeHeight * size, 0) + jitter
                 // No easing: in first person any lag between thumb and view
                 // reads as the game being slow.
                 cameraAnchor.position = eye.simd
                 camera.look(at: (eye + look).simd, from: eye.simd, relativeTo: nil)
                 viewDirection = look
-                // Your own head would fill the screen.
-                localAvatar?.isEnabled = false
                 return
+
+            case .topDown:
+                let focus = localSnapshot.position + Vec3(0, 1 * size, 0)
+                // Tipped slightly, and turned with the camera yaw, so "up" on
+                // the stick is still "away from the camera".
+                let offset = Quat.yaw(degrees: parent.cameraYaw).act(Vec3(0, settings.distance, settings.distance * 0.3))
+                let eye = focus + offset + jitter
+                cameraAnchor.position = Vec3.lerp(Vec3(cameraAnchor.position), eye, 1 - exp(-12 * dt)).simd
+                camera.look(at: focus.simd, from: cameraAnchor.position, relativeTo: nil)
+                viewDirection = (focus - Vec3(cameraAnchor.position)).normalized
+                return
+
+            case .fixed:
+                let eye = (settings.position ?? localSnapshot.position + Vec3(0, 5, 8)) + jitter
+                let target = settings.target ?? localSnapshot.position + Vec3(0, 1 * size, 0)
+                cameraAnchor.position = eye.simd
+                if (target - eye).lengthSquared > 1e-4 {
+                    camera.look(at: target.simd, from: eye.simd, relativeTo: nil)
+                    viewDirection = (target - eye).normalized
+                }
+                return
+
+            case .thirdPerson:
+                break
             }
-            localAvatar?.isEnabled = true
 
             let pitch = max(-75, min(20, parent.cameraPitch))
             let orbit = Quat.euler(degrees: Vec3(pitch, parent.cameraYaw, 0))
 
-            let focus = localSnapshot.position + Vec3(0, 1.4, 0)
-            let desiredDistance: Float = 6.5
+            let focus = localSnapshot.position + Vec3(0, 1.4 * size, 0) + jitter
+            let desiredDistance: Float = settings.distance
             let offset = orbit.act(Vec3(0, 0, 1)) * desiredDistance
 
             // Keep the camera out of geometry: if the line from the player to
@@ -372,7 +454,7 @@ public struct GameViewport: UIViewRepresentable {
             let model = scripted.weapon?.model
             localAvatar?.hold(weaponModel: model)
 
-            let wanted = scripted.camera == .firstPerson ? model : nil
+            let wanted = scripted.camera.mode == .firstPerson ? model : nil
             if wanted != viewModelKind {
                 viewModel?.removeFromParent()
                 viewModel = nil
@@ -402,7 +484,7 @@ public struct GameViewport: UIViewRepresentable {
             lastShotTime = elapsed
             recoil = 1
 
-            let eyes = localSnapshot.position + Vec3(0, PlayerHitBody.eyeHeight, 0)
+            let eyes = localSnapshot.position + Vec3(0, PlayerHitBody.eyeHeight * parent.session.localAppearance.height, 0)
             parent.session.send(input: .fire(origin: eyes, direction: aimDirection(from: eyes, range: weapon.range)))
         }
 
@@ -433,7 +515,7 @@ public struct GameViewport: UIViewRepresentable {
             // Our own shot starts at our eyes, which in first person is the
             // camera — a line straight away from the viewer is invisible.
             // Draw it from the gun instead.
-            let eyes = localSnapshot.position + Vec3(0, PlayerHitBody.eyeHeight, 0)
+            let eyes = localSnapshot.position + Vec3(0, PlayerHitBody.eyeHeight * parent.session.localAppearance.height, 0)
             if start.distance(to: eyes) < 0.8 {
                 if let viewModel, let kind = viewModelKind {
                     from = Vec3(viewModel.convert(position: WeaponModel.muzzle(kind), to: nil))

@@ -166,14 +166,14 @@ public enum WorldDelta: Codable, Hashable, Sendable {
     case reparent(blockID: UUID, newParent: UUID?)
     case environment(EnvironmentSettings)
     case rulesReplaced([EventRule])
-    case scriptReplaced(String?)
+    case scriptsReplaced([ScriptFile])
 
     private enum CodingKeys: String, CodingKey {
-        case type, block, blockID, newParent, environment, rules, script
+        case type, block, blockID, newParent, environment, rules, scripts
     }
 
     private enum Kind: String, Codable {
-        case insert, update, remove, reparent, environment, rulesReplaced, scriptReplaced
+        case insert, update, remove, reparent, environment, rulesReplaced, scriptsReplaced
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -198,9 +198,9 @@ public enum WorldDelta: Codable, Hashable, Sendable {
         case let .rulesReplaced(rules):
             try c.encode(Kind.rulesReplaced, forKey: .type)
             try c.encode(rules, forKey: .rules)
-        case let .scriptReplaced(script):
-            try c.encode(Kind.scriptReplaced, forKey: .type)
-            try c.encodeIfPresent(script, forKey: .script)
+        case let .scriptsReplaced(scripts):
+            try c.encode(Kind.scriptsReplaced, forKey: .type)
+            try c.encode(scripts, forKey: .scripts)
         }
     }
 
@@ -217,7 +217,7 @@ public enum WorldDelta: Codable, Hashable, Sendable {
             )
         case .environment: self = .environment(try c.decode(EnvironmentSettings.self, forKey: .environment))
         case .rulesReplaced: self = .rulesReplaced(try c.decode([EventRule].self, forKey: .rules))
-        case .scriptReplaced: self = .scriptReplaced(try c.decodeIfPresent(String.self, forKey: .script))
+        case .scriptsReplaced: self = .scriptsReplaced(try c.decode([ScriptFile].self, forKey: .scripts))
         }
     }
 
@@ -248,8 +248,8 @@ public enum WorldDelta: Codable, Hashable, Sendable {
             world.rules = rules
             world.modifiedAt = Date()
             return true
-        case let .scriptReplaced(script):
-            world.script = script
+        case let .scriptsReplaced(scripts):
+            world.scripts = scripts
             world.modifiedAt = Date()
             return true
         }
@@ -337,6 +337,8 @@ public struct PlayerInputPayload: Codable, Hashable, Sendable {
         case button(id: String)
         /// Reload before the magazine is empty.
         case reload
+        /// Text typed into a script's input box and sent.
+        case text(id: String, value: String)
     }
 
     public var peerID: PeerID
@@ -389,7 +391,8 @@ public enum AbloxProtocol {
     /// than left to fail mysteriously later.
     ///
     /// 2: `playerInput` and script effects (screen GUI, weapons, camera).
-    public static let version = 2
+    /// 3: `.absc` script files, free-form GUI, NPCs and world editing.
+    public static let version = 3
 
     /// Bonjour service type advertised by hosts.
     public static let bonjourServiceType = "_ablox._tcp"

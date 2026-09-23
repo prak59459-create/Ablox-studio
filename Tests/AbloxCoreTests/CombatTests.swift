@@ -119,13 +119,14 @@ final class CombatTests: XCTestCase {
     func testAbsurdWeaponsAreClamped() {
         let silly = WeaponSpec(name: String(repeating: "x", count: 100), damage: -5, fireRate: 1_000_000,
                                range: 50_000, magazine: 0, reloadTime: 999, spread: 400).clamped
-        XCTAssertEqual(silly.name.count, 24)
+        XCTAssertEqual(silly.name.count, 32)
         XCTAssertEqual(silly.damage, 0)
-        XCTAssertEqual(silly.fireRate, 20)
-        XCTAssertEqual(silly.range, 200)
+        XCTAssertEqual(silly.fireRate, 30)
+        XCTAssertEqual(silly.range, 1_000)
         XCTAssertEqual(silly.magazine, 1)
-        XCTAssertEqual(silly.reloadTime, 10)
-        XCTAssertEqual(silly.spread, 30)
+        XCTAssertEqual(silly.reloadTime, 60)
+        XCTAssertEqual(silly.spread, 45)
+        XCTAssertEqual(WeaponSpec(name: "x", damage: .infinity).clamped.damage, 0, "not a number is not a weapon")
     }
 
     func testEveryPresetIsAlreadyWithinLimits() {

@@ -159,6 +159,11 @@ public struct PlayerSnapshot: Codable, Hashable, Identifiable, Sendable {
     public var isGrounded: Bool
     public var score: Int
     public var isReady: Bool
+    /// A character a script created and the host moves — not a person. Drawn
+    /// like everyone else, left off the scoreboard.
+    public var isNPC: Bool
+    /// Hidden by a script: still in the game, not drawn.
+    public var isHidden: Bool
 
     public var id: PeerID { peerID }
 
@@ -170,7 +175,9 @@ public struct PlayerSnapshot: Codable, Hashable, Identifiable, Sendable {
         velocity: Vec3 = .zero,
         isGrounded: Bool = true,
         score: Int = 0,
-        isReady: Bool = false
+        isReady: Bool = false,
+        isNPC: Bool = false,
+        isHidden: Bool = false
     ) {
         self.peerID = peerID
         self.profile = profile
@@ -180,6 +187,26 @@ public struct PlayerSnapshot: Codable, Hashable, Identifiable, Sendable {
         self.isGrounded = isGrounded
         self.score = score
         self.isReady = isReady
+        self.isNPC = isNPC
+        self.isHidden = isHidden
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case peerID, profile, position, yawDegrees, velocity, isGrounded, score, isReady, isNPC, isHidden
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        peerID = try c.decode(PeerID.self, forKey: .peerID)
+        profile = try c.decode(AvatarProfile.self, forKey: .profile)
+        position = try c.decode(Vec3.self, forKey: .position)
+        yawDegrees = try c.decode(Float.self, forKey: .yawDegrees)
+        velocity = try c.decode(Vec3.self, forKey: .velocity)
+        isGrounded = try c.decode(Bool.self, forKey: .isGrounded)
+        score = try c.decode(Int.self, forKey: .score)
+        isReady = try c.decode(Bool.self, forKey: .isReady)
+        isNPC = try c.decodeIfPresent(Bool.self, forKey: .isNPC) ?? false
+        isHidden = try c.decodeIfPresent(Bool.self, forKey: .isHidden) ?? false
     }
 }
 

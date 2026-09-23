@@ -36,21 +36,22 @@ public struct WeaponSpec: Codable, Equatable, Hashable, Sendable {
         self.model = model
     }
 
-    /// The same weapon with every number forced into a sane range.
+    /// The same weapon with every number forced into a range the host can
+    /// actually simulate.
     ///
-    /// Scripts come from strangers. A fire rate of a million would turn one
-    /// tap into a million raycasts on the host; a range of a kilometre would
-    /// reach across the whole map through the kill plane. Clamped rather than
-    /// refused, so a script with an enthusiastic number still works.
+    /// Wide on purpose — a one-shot sniper, a thirty-round-a-second minigun
+    /// and a kilometre railgun are all fine — and still bounded, because a
+    /// fire rate of a million would be a million raycasts on the host.
+    /// Clamped rather than refused, so an enthusiastic number still works.
     public var clamped: WeaponSpec {
         var weapon = self
-        weapon.name = String(name.prefix(24))
-        weapon.damage = Swift.min(Swift.max(damage, 0), 1_000)
-        weapon.fireRate = Swift.min(Swift.max(fireRate, 0.2), 20)
-        weapon.range = Swift.min(Swift.max(range, 1), 200)
-        weapon.magazine = Swift.min(Swift.max(magazine, 1), 200)
-        weapon.reloadTime = Swift.min(Swift.max(reloadTime, 0), 10)
-        weapon.spread = Swift.min(Swift.max(spread, 0), 30)
+        weapon.name = String(name.prefix(32))
+        weapon.damage = damage.isFinite ? Swift.min(Swift.max(damage, 0), 1_000_000) : 0
+        weapon.fireRate = fireRate.isFinite ? Swift.min(Swift.max(fireRate, 0.1), 30) : 1
+        weapon.range = range.isFinite ? Swift.min(Swift.max(range, 1), 1_000) : 60
+        weapon.magazine = Swift.min(Swift.max(magazine, 1), 1_000)
+        weapon.reloadTime = reloadTime.isFinite ? Swift.min(Swift.max(reloadTime, 0), 60) : 1
+        weapon.spread = spread.isFinite ? Swift.min(Swift.max(spread, 0), 45) : 0
         return weapon
     }
 
@@ -105,7 +106,8 @@ public enum Hitscan {
         range: Float,
         shooter: PeerID,
         players: [(peer: PeerID, position: Vec3)],
-        blocks: [(id: UUID, bounds: BoundingBox)]
+        blocks: [(id: UUID, bounds: BoundingBox)],
+        scales: [PeerID: Float] = [:]
     ) -> Result {
         let direction = rawDirection.normalized
         guard direction.lengthSquared > 0.5, range > 0 else {
@@ -122,7 +124,8 @@ public enum Hitscan {
         }
 
         for player in players where player.peer != shooter {
-            if let distance = capsuleDistance(origin: origin, direction: direction, feet: player.position),
+            let scale = scales[player.peer] ?? 1
+            if let distance = capsuleDistance(origin: origin, direction: direction, feet: player.position, scale: scale),
                distance < nearest.distance {
                 nearest = Result(target: .player(player.peer), point: origin + direction * distance, distance: distance)
             }
@@ -136,12 +139,14 @@ public enum Hitscan {
     /// Solved exactly rather than approximated with a box: a box is widest at
     /// its corners, so a shot that visibly passes beside someone's shoulder
     /// would count as a hit, and in a 1v1 that is the argument nobody wins.
-    static func capsuleDistance(origin: Vec3, direction: Vec3, feet: Vec3) -> Float? {
-        let radius = PlayerHitBody.radius
+    /// `scale` is the character's size: a script can make a giant, and a
+    /// giant has to be as hittable as it looks.
+    static func capsuleDistance(origin: Vec3, direction: Vec3, feet: Vec3, scale: Float = 1) -> Float? {
+        let radius = PlayerHitBody.radius * scale
         // The capsule's spine: from one radius above the feet to one below
         // the top of the head.
         let bottom = feet + Vec3(0, radius, 0)
-        let top = feet + Vec3(0, PlayerHitBody.height - radius, 0)
+        let top = feet + Vec3(0, PlayerHitBody.height * scale - radius, 0)
 
         var best: Float?
 
@@ -226,13 +231,14 @@ public struct ArmedState: Equatable, Sendable {
     /// not much more — enough to stop a client firing from across the map.
     public static let maximumOriginError: Float = 2.5
 
-    public func refusal(at time: Double, origin: Vec3, direction: Vec3, shooterFeet: Vec3) -> Refusal? {
+    /// - Parameter scale: the shooter's size; a giant's eyes are higher up.
+    public func refusal(at time: Double, origin: Vec3, direction: Vec3, shooterFeet: Vec3, scale: Float = 1) -> Refusal? {
         if reloadEnds != nil { return .reloading }
         let interval = 1 / weapon.fireRate
         if time - lastShot < interval * (1 - ArmedState.rateTolerance) { return .tooSoon }
         guard direction.x.isFinite, direction.y.isFinite, direction.z.isFinite,
               direction.lengthSquared > 0.25 else { return .badDirection }
-        let eyes = shooterFeet + Vec3(0, PlayerHitBody.eyeHeight, 0)
+        let eyes = shooterFeet + Vec3(0, PlayerHitBody.eyeHeight * scale, 0)
         guard origin.distance(to: eyes) <= ArmedState.maximumOriginError else { return .tooFarFromBody }
         return nil
     }

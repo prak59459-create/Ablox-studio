@@ -23,21 +23,25 @@ public struct ScriptParser {
     }
 
     /// Parses a whole script.
-    public static func parse(_ source: String) throws -> ScriptProgram {
-        var parser = ScriptParser(tokens: try ScriptLexer.tokens(from: source))
+    ///
+    /// - Parameter file: its index in a bundle of `.absc` files, if it is
+    ///   one; errors then say which file. See `ScriptLocation`.
+    public static func parse(_ source: String, file: Int? = nil) throws -> ScriptProgram {
+        var parser = ScriptParser(tokens: try ScriptLexer.tokens(from: source, file: file))
         let statements = try parser.block(until: [], opener: nil)
 
-        var handlers: [String: ScriptHandler] = [:]
+        var handlers: [String: [ScriptHandler]] = [:]
         for statement in statements {
             guard case let .handler(event, parameters, body) = statement.kind else { continue }
-            if let existing = handlers[event] {
+            if let existing = handlers[event]?.first {
                 throw ScriptError(
                     line: statement.line,
                     kind: .syntax,
-                    message: L("There is already an “on {}” on line {}. Put both parts in one.", event, existing.line)
+                    message: L("There is already an “on {}” on line {}. Put both parts in one.", event,
+                               ScriptLocation.line(existing.line))
                 )
             }
-            handlers[event] = ScriptHandler(event: event, parameters: parameters, body: body, line: statement.line)
+            handlers[event] = [ScriptHandler(event: event, parameters: parameters, body: body, line: statement.line)]
         }
 
         return ScriptProgram(statements: statements, handlers: handlers)
@@ -190,7 +194,7 @@ public struct ScriptParser {
         if match(.else) {
             otherwise = try block(until: [.end], opener: ("else", self.line))
         }
-        try expect(.end, L("The “if” on line {} is never closed with “end”.", line))
+        try expect(.end, L("The “if” on line {} is never closed with “end”.", ScriptLocation.line(line)))
         return ScriptStmt(.ifChain(branches: branches, otherwise: otherwise), line: line)
     }
 
@@ -198,7 +202,7 @@ public struct ScriptParser {
         let condition = try expression()
         try expectAfterCondition(.do, L("“while” needs “do” after its condition."))
         let body = try block(until: [.end], opener: ("while", line))
-        try expect(.end, L("The “while” on line {} is never closed with “end”.", line))
+        try expect(.end, L("The “while” on line {} is never closed with “end”.", ScriptLocation.line(line)))
         return ScriptStmt(.whileLoop(condition: condition, body: body), line: line)
     }
 
@@ -212,13 +216,13 @@ public struct ScriptParser {
             let step = match(.step) ? try expression() : nil
             try expect(.do, L("“for” needs “do” before its body."))
             let body = try block(until: [.end], opener: ("for", line))
-            try expect(.end, L("The “for” on line {} is never closed with “end”.", line))
+            try expect(.end, L("The “for” on line {} is never closed with “end”.", ScriptLocation.line(line)))
             return ScriptStmt(.forRange(variable: variable, from: first, to: last, step: step, body: body), line: line)
         }
 
         try expect(.do, L("“for” needs “do” before its body."))
         let body = try block(until: [.end], opener: ("for", line))
-        try expect(.end, L("The “for” on line {} is never closed with “end”.", line))
+        try expect(.end, L("The “for” on line {} is never closed with “end”.", ScriptLocation.line(line)))
         return ScriptStmt(.forEach(variable: variable, sequence: first, body: body), line: line)
     }
 
@@ -242,7 +246,7 @@ public struct ScriptParser {
         let name = try identifier(L("“func” needs a name after it."))
         let params = try parameters()
         let body = try block(until: [.end], opener: ("func", line))
-        try expect(.end, L("The “func” on line {} is never closed with “end”.", line))
+        try expect(.end, L("The “func” on line {} is never closed with “end”.", ScriptLocation.line(line)))
         return ScriptStmt(.function(name: name, parameters: params, body: body), line: line)
     }
 
@@ -255,7 +259,7 @@ public struct ScriptParser {
         let event = try identifier(L("“on” needs an event name, as in “on start()”."))
         let params = try parameters()
         let body = try block(until: [.end], opener: ("on", line))
-        try expect(.end, L("The “on” on line {} is never closed with “end”.", line))
+        try expect(.end, L("The “on” on line {} is never closed with “end”.", ScriptLocation.line(line)))
         return ScriptStmt(.handler(event: event, parameters: params, body: body), line: line)
     }
 
@@ -410,7 +414,7 @@ public struct ScriptParser {
             // An anonymous function, for `after(2, func() … end)`.
             let params = try parameters()
             let body = try block(until: [.end], opener: ("func", at))
-            try expect(.end, L("The “func” on line {} is never closed with “end”.", at))
+            try expect(.end, L("The “func” on line {} is never closed with “end”.", ScriptLocation.line(at)))
             return ScriptExpr(.function(parameters: params, body: body), line: at)
 
         case .symbol(.leftParen):

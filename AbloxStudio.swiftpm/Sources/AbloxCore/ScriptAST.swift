@@ -104,10 +104,27 @@ public struct ScriptBranch: Equatable, Sendable {
 public struct ScriptProgram: Equatable, Sendable {
     public let statements: [ScriptStmt]
 
-    /// Event name → handler. One per event: a second `on tick` is an error at
-    /// parse time rather than a silent replacement, because the second one
-    /// winning is never what the author meant.
-    public let handlers: [String: ScriptHandler]
+    /// Event name → handlers, in file order. Within one file there is one
+    /// per event — a second `on tick` in the same file is an error, because
+    /// it is almost always a copy-paste — but separate `.absc` files may each
+    /// have their own `on join`, and all of them run.
+    public let handlers: [String: [ScriptHandler]]
+
+    public init(statements: [ScriptStmt], handlers: [String: [ScriptHandler]]) {
+        self.statements = statements
+        self.handlers = handlers
+    }
+
+    /// Several files as one program: top levels in order, handlers merged.
+    public static func combining(_ programs: [ScriptProgram]) -> ScriptProgram {
+        var handlers: [String: [ScriptHandler]] = [:]
+        for program in programs {
+            for (event, list) in program.handlers {
+                handlers[event, default: []].append(contentsOf: list)
+            }
+        }
+        return ScriptProgram(statements: programs.flatMap(\.statements), handlers: handlers)
+    }
 }
 
 public struct ScriptHandler: Equatable, Sendable {

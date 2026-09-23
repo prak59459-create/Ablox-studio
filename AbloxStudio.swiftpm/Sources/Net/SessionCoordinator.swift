@@ -112,6 +112,10 @@ public final class SessionCoordinator: ObservableObject {
     // MARK: Identity
 
     public let localPeerID: PeerID
+
+    /// Who the game's own chat lines come from. A fixed id rather than the
+    /// host's, so muting the host does not silence the game.
+    public static let gamePeerID = PeerID(UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1)))
     @Published public var profile: AvatarProfile {
         didSet {
             host?.updateLocalProfile(profile)
@@ -509,6 +513,9 @@ public final class SessionCoordinator: ObservableObject {
                 world.mutate(id: blockID) { $0.hasCollision = enabled }
             case let .endRound(message):
                 show(announcement: message, for: 5)
+            case let .script(.chat(line)):
+                // A line from the game itself, not from a person.
+                appendChat(ChatPayload(senderName: L("Game"), text: line), from: SessionCoordinator.gamePeerID)
             case let .script(effect):
                 scripted.apply(effect)
             default:
@@ -594,6 +601,18 @@ public final class SessionCoordinator: ObservableObject {
 
     public var localPlayer: PlayerSnapshot? {
         rosterState.localPlayer
+    }
+
+    /// The roster without the NPCs a script created: who is actually playing,
+    /// for the scoreboard.
+    public var people: [PlayerSnapshot] {
+        roster.filter { !$0.isNPC }
+    }
+
+    /// How the local avatar should look: as the host last said, since a
+    /// script can recolour or resize it, or as set up here until then.
+    public var localAppearance: AvatarProfile {
+        localPlayer?.profile ?? profile
     }
 
     public var otherPlayers: [PlayerSnapshot] {

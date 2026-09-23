@@ -20,6 +20,7 @@ import Foundation
 ///   sky-temple/
 ///     world.ablox     the WorldDocument, as saved by Studio
 ///     cover.png       the picture shown in the list
+///     main.absc       optional script files, listed under "scripts"
 /// ```
 ///
 /// ## Everything here is untrusted
@@ -68,6 +69,12 @@ public struct GameListing: Codable, Equatable, Identifiable, Sendable {
     /// Repository-relative path to the cover image. Optional: a world without
     /// a picture is listed with a generated placeholder rather than hidden.
     public var cover: String?
+    /// Repository-relative paths to `.absc` script files, run with the world.
+    /// Optional: a world saved by Studio already carries its scripts, and
+    /// these are for scripts written and kept as files in the repository —
+    /// on a computer, say. A file here replaces one of the same name inside
+    /// the world.
+    public var scripts: [String]?
     public var tags: [String]
     /// What the publisher says is in it. Shown before downloading, and checked
     /// against the real world afterwards — see `GameListing.mismatch(with:)`.
@@ -85,6 +92,7 @@ public struct GameListing: Codable, Equatable, Identifiable, Sendable {
         summary: String = "",
         world: String,
         cover: String? = nil,
+        scripts: [String]? = nil,
         tags: [String] = [],
         blockCount: Int = 0,
         maxPlayers: Int = 4,
@@ -97,6 +105,7 @@ public struct GameListing: Codable, Equatable, Identifiable, Sendable {
         self.summary = summary
         self.world = world
         self.cover = cover
+        self.scripts = scripts
         self.tags = tags
         self.blockCount = blockCount
         self.maxPlayers = maxPlayers
@@ -194,6 +203,10 @@ public extension GameCatalogue {
 
         public static let worldExtensions = ["ablox", "json"]
         public static let coverExtensions = ["png", "jpg", "jpeg"]
+        public static let scriptExtensions = [ScriptFile.fileExtension]
+        public static let maximumScripts = ScriptFile.Limits.maximumFiles
+        /// One `.absc` file, matching the script lexer's own ceiling.
+        public static let maximumScriptBytes = 1024 * 1024
     }
 }
 
@@ -407,6 +420,14 @@ public extension GameListing {
                 return .invalidPath(field: "cover", value: cover)
             }
         }
+        if let scripts {
+            guard scripts.count <= Limits.maximumScripts else {
+                return .fieldTooLong(field: "scripts", limit: Limits.maximumScripts)
+            }
+            for path in scripts where !Limits.isValidRepositoryPath(path, extensions: Limits.scriptExtensions) {
+                return .invalidPath(field: "scripts", value: path)
+            }
+        }
 
         guard schemaVersion >= 1 else { return .unsupportedSchema(id: id, schemaVersion: schemaVersion) }
         guard isSupported else { return .unsupportedSchema(id: id, schemaVersion: schemaVersion) }
@@ -491,6 +512,14 @@ public struct CatalogueSource: Equatable, Sendable {
 
     public func coverURL(for listing: GameListing) -> URL? {
         listing.cover.flatMap { url(forPath: $0, extensions: GameCatalogue.Limits.coverExtensions) }
+    }
+
+    /// The listing's `.absc` files, with the name each should have.
+    public func scriptURLs(for listing: GameListing) -> [(name: String, url: URL)] {
+        (listing.scripts ?? []).compactMap { path in
+            guard let url = url(forPath: path, extensions: GameCatalogue.Limits.scriptExtensions) else { return nil }
+            return (ScriptFile.cleanName(String(path.split(separator: "/").last ?? "")), url)
+        }
     }
 
     /// The page a person can open to read the repository or submit to it.
