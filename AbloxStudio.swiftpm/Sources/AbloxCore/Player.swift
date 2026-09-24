@@ -73,6 +73,10 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
     public var accentColor: ColorRGBA
     public var hat: HatStyle
     public var height: Float
+    /// What they are riding, drawn around them: a car, a bike, a jetpack…
+    /// Set by a game's script; purely how they look — speed is separate.
+    public var ride: Ride
+    public var rideColor: ColorRGBA
 
     public init(
         displayName: String = "Player",
@@ -80,7 +84,9 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         headColor: ColorRGBA = ColorRGBA(hex: "#FFD60A")!,
         accentColor: ColorRGBA = ColorRGBA(hex: "#A855F7")!,
         hat: HatStyle = .none,
-        height: Float = 1.0
+        height: Float = 1.0,
+        ride: Ride = .none,
+        rideColor: ColorRGBA = ColorRGBA(hex: "#EF4444")!
     ) {
         self.displayName = displayName
         self.bodyColor = bodyColor
@@ -88,6 +94,51 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         self.accentColor = accentColor
         self.hat = hat
         self.height = height
+        self.ride = ride
+        self.rideColor = rideColor
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case displayName, bodyColor, headColor, accentColor, hat, height, ride, rideColor
+    }
+
+    // Written by hand so a profile saved before rides existed — on this
+    // iPad, or arriving from one that has not updated — still loads.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        displayName = try c.decode(String.self, forKey: .displayName)
+        bodyColor = try c.decode(ColorRGBA.self, forKey: .bodyColor)
+        headColor = try c.decode(ColorRGBA.self, forKey: .headColor)
+        accentColor = try c.decode(ColorRGBA.self, forKey: .accentColor)
+        hat = try c.decode(HatStyle.self, forKey: .hat)
+        height = try c.decode(Float.self, forKey: .height)
+        ride = (try? c.decodeIfPresent(Ride.self, forKey: .ride)) ?? Ride.none
+        rideColor = (try? c.decodeIfPresent(ColorRGBA.self, forKey: .rideColor)) ?? ColorRGBA(hex: "#EF4444")!
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(displayName, forKey: .displayName)
+        try c.encode(bodyColor, forKey: .bodyColor)
+        try c.encode(headColor, forKey: .headColor)
+        try c.encode(accentColor, forKey: .accentColor)
+        try c.encode(hat, forKey: .hat)
+        try c.encode(height, forKey: .height)
+        try c.encode(ride, forKey: .ride)
+        try c.encode(rideColor, forKey: .rideColor)
+    }
+
+    /// Something a character rides, drawn around the avatar.
+    public enum Ride: String, Codable, CaseIterable, Sendable {
+        case none, car, sports, truck, kart, bike, scooter, jetpack, hoverboard
+
+        /// Sitting down in it, rather than standing on or wearing it.
+        public var isSeated: Bool {
+            switch self {
+            case .car, .sports, .truck, .kart: return true
+            case .none, .bike, .scooter, .jetpack, .hoverboard: return false
+            }
+        }
     }
 
     public enum HatStyle: String, Codable, CaseIterable, Sendable {

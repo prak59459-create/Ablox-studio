@@ -110,6 +110,43 @@ final class ScriptWorldTests: RuntimeTestCase {
         XCTAssertTrue(heard.contains("Alice was got by Zombie"))
     }
 
+    func testARideIsPartOfHowACharacterLooks() {
+        let game = game(#"""
+        on join(p)
+          p.ride = "sports"
+          p.ride_color = "#FACC15"
+          print(p.ride, p.ride_color)
+        end
+        on start()
+          let n = create_npc({name: "Cabbie", ride: "car", ride_color: "yellow"})
+          print(n.ride)
+        end
+        """#)
+        startWithBoth(game)
+        let alice = game.roster.first { $0.peerID == self.alice }!
+        XCTAssertEqual(alice.profile.ride, .sports)
+        XCTAssertEqual(alice.profile.rideColor, ColorRGBA(hex: "#FACC15"))
+        XCTAssertEqual(game.roster.first { $0.isNPC }?.profile.ride, .car)
+        XCTAssertTrue(game.drainOutput().contains("sports #FACC15"))
+    }
+
+    func testAnUnknownRideNamesTheChoices() {
+        let game = game("on join(p)\n  p.ride = \"rocket\"\nend")
+        startWithBoth(game)
+        XCTAssertTrue(game.drainErrors().first?.message.contains("hoverboard") ?? false)
+    }
+
+    func testAProfileSavedBeforeRidesStillLoads() throws {
+        let old = #"{"displayName":"Aoi","bodyColor":{"r":1,"g":0,"b":0,"a":1},"headColor":{"r":1,"g":1,"b":0,"a":1},"#
+            + #""accentColor":{"r":0,"g":0,"b":1,"a":1},"hat":"cap","height":1}"#
+        let profile = try JSONDecoder().decode(AvatarProfile.self, from: Data(old.utf8))
+        XCTAssertEqual(profile.displayName, "Aoi")
+        XCTAssertEqual(profile.hat, .cap)
+        XCTAssertEqual(profile.ride, .none)
+        let again = try JSONDecoder().decode(AvatarProfile.self, from: JSONEncoder().encode(profile))
+        XCTAssertEqual(again, profile)
+    }
+
     func testAnNPCSpeaksInABubbleOverItsHead() {
         let game = game(#"""
         on start()

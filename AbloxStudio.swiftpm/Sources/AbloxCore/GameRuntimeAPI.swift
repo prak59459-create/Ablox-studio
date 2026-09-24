@@ -23,7 +23,7 @@ extension GameRuntime: ScriptObjectResolver {
         "name", "id", "is_npc", "health", "max_health", "alive", "score", "team",
         "position", "x", "y", "z", "yaw", "look", "velocity",
         "weapon", "ammo", "speed", "jump", "gravity", "frozen",
-        "color", "head_color", "leg_color", "size", "hat", "visible",
+        "color", "head_color", "leg_color", "size", "hat", "ride", "ride_color", "visible",
         "give", "take", "reload", "teleport", "damage", "heal", "kill", "respawn", "launch", "look_at"
     ]
 
@@ -249,6 +249,8 @@ extension GameRuntime: ScriptObjectResolver {
         case "leg_color": return .string(state.profile.accentColor.hexString)
         case "size": return .number(Double(state.profile.height))
         case "hat": return .string(state.profile.hat.rawValue)
+        case "ride": return .string(state.profile.ride.rawValue)
+        case "ride_color": return .string(state.profile.rideColor.hexString)
         case "visible": return .bool(!state.isHidden)
         case "camera": return .string(state.camera.mode.rawValue)
         case "camera_distance": return .number(Double(state.camera.distance))
@@ -494,6 +496,16 @@ extension GameRuntime: ScriptObjectResolver {
                                   message: L("“hat” is one of: {}.", AvatarProfile.HatStyle.allCases.map(\.rawValue).joined(separator: ", ")))
             }
             updateProfile(state) { $0.hat = hat }
+        case "ride":
+            let text = value.isNull ? "none" : value.displayText.lowercased()
+            guard let ride = AvatarProfile.Ride(rawValue: text) else {
+                throw ScriptError(line: line, kind: .runtime,
+                                  message: L("“ride” is one of: {}.", AvatarProfile.Ride.allCases.map(\.rawValue).joined(separator: ", ")))
+            }
+            updateProfile(state) { $0.ride = ride }
+        case "ride_color":
+            let color = try self.color(value, line: line)
+            updateProfile(state) { $0.rideColor = color }
         case "name":
             let text = String(value.displayText.trimmingCharacters(in: .whitespacesAndNewlines).prefix(24))
             guard !text.isEmpty else { return }
@@ -602,6 +614,10 @@ extension GameRuntime: ScriptObjectResolver {
         if let hat = options["hat"], let style = AvatarProfile.HatStyle(rawValue: hat.displayText.lowercased()) {
             profile.hat = style
         }
+        if let ride = options["ride"], let kind = AvatarProfile.Ride(rawValue: ride.displayText.lowercased()) {
+            profile.ride = kind
+        }
+        if let color = options["ride_color"] { profile.rideColor = try self.color(color, line: line) }
         let start = try optionalPoint(options, line: line) ?? world.spawnPosition(forPlayerIndex: 0)
 
         let peer = PeerID()

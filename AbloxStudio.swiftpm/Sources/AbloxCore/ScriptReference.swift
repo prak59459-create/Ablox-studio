@@ -87,6 +87,8 @@ public enum ScriptReference {
                   L("Moves them to a block, a player or {x, y, z}; throws them; turns them to face something.")),
             Entry("p.color  p.head_color  p.leg_color  p.size  p.hat  p.visible",
                   L("How they look, for everyone. size 0.2 to 10; hats: none, cap, crown, antenna, halo.")),
+            Entry("p.ride = \"car\"  p.ride_color = \"red\"",
+                  L("Draws them riding something: none, car, sports, truck, kart, bike, scooter, jetpack, hoverboard. Only the look — set speed too.")),
             Entry("p.speed  p.jump  p.gravity  p.frozen", L("How they move, up to 10 times. frozen stops them moving.")),
             Entry("p.camera = \"first\"  (\"third\", \"top\", \"fixed\")", L("First person, behind them, looking down from above, or fixed in place.")),
             Entry("p.camera_distance  p.fov  p.camera_look(from, at)  p.camera_reset()",

@@ -14,6 +14,9 @@ public final class AvatarEntity: Entity {
     public private(set) var peerID: PeerID
     public private(set) var profile: AvatarProfile
 
+    /// Everything that is the person, so sitting down in a car moves it all
+    /// at once. The ride itself hangs off the avatar, not the rig.
+    private let rig = Entity()
     private let body = ModelEntity()
     private let head = ModelEntity()
     private let leftArm = ModelEntity()
@@ -21,6 +24,9 @@ public final class AvatarEntity: Entity {
     private let leftLeg = ModelEntity()
     private let rightLeg = ModelEntity()
     private var hatEntity: ModelEntity?
+    private var rideEntity: Entity?
+    private var appliedRide: AvatarProfile.Ride = .none
+    private var appliedRideColor: ColorRGBA?
     private var heldWeapon: Entity?
     public private(set) var heldWeaponModel: String?
 
@@ -84,8 +90,9 @@ public final class AvatarEntity: Entity {
         }
 
         for part in [body, head, leftArm, rightArm, leftLeg, rightLeg] {
-            addChild(part)
+            rig.addChild(part)
         }
+        addChild(rig)
     }
 
     // MARK: Appearance
@@ -109,6 +116,7 @@ public final class AvatarEntity: Entity {
         scale = SIMD3<Float>(repeating: profile.height)
 
         applyHat(profile.hat, material: accentMaterial)
+        applyRide(profile.ride, color: profile.rideColor)
     }
 
     private func material(_ color: ColorRGBA) -> RealityKit.Material {
@@ -148,8 +156,133 @@ public final class AvatarEntity: Entity {
         let entity = ModelEntity(mesh: mesh, materials: [material])
         entity.position = offset
         entity.name = "ablox.avatar.hat"
-        addChild(entity)
+        rig.addChild(entity)
         hatEntity = entity
+    }
+
+    // MARK: Ride
+
+    /// Builds what they ride from boxes and cylinders, front toward -Z like
+    /// the avatar. Seated rides lower the person into the seat and hide the
+    /// legs; the rest leave them standing on it or wearing it.
+    private func applyRide(_ ride: AvatarProfile.Ride, color: ColorRGBA) {
+        guard ride != appliedRide || color != appliedRideColor else { return }
+        appliedRide = ride
+        appliedRideColor = color
+        rideEntity?.removeFromParent()
+        rideEntity = nil
+
+        let seat: Float
+        switch ride {
+        case .none: seat = 0
+        case .car: seat = -0.45
+        case .sports: seat = -0.55
+        case .truck: seat = -0.1
+        case .kart: seat = -0.55
+        case .bike: seat = 0.15
+        case .scooter: seat = 0.1
+        case .jetpack: seat = 0
+        case .hoverboard: seat = 0.18
+        }
+        rig.position = SIMD3<Float>(0, seat, 0)
+        leftLeg.isEnabled = !ride.isSeated
+        rightLeg.isEnabled = !ride.isSeated
+        guard ride != .none else { return }
+
+        let paint = material(color)
+        let dark = material(ColorRGBA(r: 0.12, g: 0.13, b: 0.16))
+        let glass = material(ColorRGBA(r: 0.73, g: 0.9, b: 0.99))
+        let lamp = UnlitMaterial(color: UIColor(red: 1, green: 0.97, blue: 0.78, alpha: 1))
+        let brake = UnlitMaterial(color: UIColor(red: 0.94, green: 0.27, blue: 0.27, alpha: 1))
+        let flame = UnlitMaterial(color: UIColor(red: 1, green: 0.55, blue: 0.1, alpha: 1))
+        let glow = UnlitMaterial(color: UIColor(red: 0.2, green: 0.9, blue: 1, alpha: 1))
+
+        let root = Entity()
+        root.name = "ablox.avatar.ride"
+        func box(_ size: SIMD3<Float>, at position: SIMD3<Float>, _ material: RealityKit.Material,
+                 corner: Float = 0.03, tilt: Float = 0) {
+            let part = ModelEntity(mesh: .generateBox(size: size, cornerRadius: corner), materials: [material])
+            part.position = position
+            if tilt != 0 { part.orientation = simd_quatf(angle: tilt, axis: SIMD3<Float>(1, 0, 0)) }
+            root.addChild(part)
+        }
+        // A cylinder lies along Y; a wheel turns about X.
+        func wheel(radius: Float, width: Float, at position: SIMD3<Float>) {
+            let part = ModelEntity(mesh: .abloxCylinder(height: width, radius: radius), materials: [dark])
+            part.position = position
+            part.orientation = simd_quatf(angle: .pi / 2, axis: SIMD3<Float>(0, 0, 1))
+            root.addChild(part)
+        }
+        func fourWheels(radius: Float, width: Float, x: Float, z: Float) {
+            for sx in [Float(-1), 1] {
+                for sz in [Float(-1), 1] {
+                    wheel(radius: radius, width: width, at: SIMD3<Float>(sx * x, radius, sz * z))
+                }
+            }
+        }
+        func lights(x: Float, y: Float, front: Float, back: Float) {
+            for sx in [Float(-1), 1] {
+                box(SIMD3<Float>(0.34, 0.16, 0.06), at: SIMD3<Float>(sx * x, y, front), lamp, corner: 0.02)
+                box(SIMD3<Float>(0.34, 0.14, 0.06), at: SIMD3<Float>(sx * x, y, back), brake, corner: 0.02)
+            }
+        }
+
+        switch ride {
+        case .none:
+            return
+        case .car:
+            box(SIMD3<Float>(1.9, 0.6, 3.6), at: SIMD3<Float>(0, 0.5, 0), paint, corner: 0.14)
+            box(SIMD3<Float>(1.7, 0.5, 0.08), at: SIMD3<Float>(0, 1.0, -0.6), glass, tilt: 0.45)
+            box(SIMD3<Float>(1.5, 0.45, 0.14), at: SIMD3<Float>(0, 0.95, 0.55), dark)
+            fourWheels(radius: 0.36, width: 0.32, x: 0.95, z: 1.15)
+            lights(x: 0.6, y: 0.62, front: -1.81, back: 1.81)
+        case .sports:
+            box(SIMD3<Float>(1.9, 0.45, 4.0), at: SIMD3<Float>(0, 0.42, 0), paint, corner: 0.18)
+            box(SIMD3<Float>(1.6, 0.35, 0.08), at: SIMD3<Float>(0, 0.78, -0.5), glass, tilt: 0.7)
+            box(SIMD3<Float>(1.8, 0.07, 0.4), at: SIMD3<Float>(0, 0.98, 1.8), paint)
+            for sx in [Float(-1), 1] {
+                box(SIMD3<Float>(0.08, 0.3, 0.08), at: SIMD3<Float>(sx * 0.7, 0.8, 1.8), dark)
+            }
+            fourWheels(radius: 0.34, width: 0.34, x: 0.97, z: 1.3)
+            lights(x: 0.62, y: 0.5, front: -2.01, back: 2.01)
+        case .truck:
+            box(SIMD3<Float>(2.2, 0.8, 4.4), at: SIMD3<Float>(0, 0.75, 0), paint, corner: 0.1)
+            box(SIMD3<Float>(2.0, 0.6, 0.08), at: SIMD3<Float>(0, 1.45, -0.75), glass, tilt: 0.3)
+            box(SIMD3<Float>(2.2, 0.55, 1.8), at: SIMD3<Float>(0, 1.42, 1.25), dark, corner: 0.05)
+            fourWheels(radius: 0.5, width: 0.4, x: 1.05, z: 1.5)
+            lights(x: 0.72, y: 0.9, front: -2.21, back: 2.21)
+        case .kart:
+            box(SIMD3<Float>(1.3, 0.3, 2.0), at: SIMD3<Float>(0, 0.3, 0), paint, corner: 0.1)
+            box(SIMD3<Float>(1.5, 0.12, 0.2), at: SIMD3<Float>(0, 0.25, -1.05), dark)
+            box(SIMD3<Float>(0.8, 0.5, 0.14), at: SIMD3<Float>(0, 0.6, 0.5), dark)
+            box(SIMD3<Float>(0.5, 0.06, 0.06), at: SIMD3<Float>(0, 0.72, -0.45), dark)
+            fourWheels(radius: 0.25, width: 0.26, x: 0.72, z: 0.72)
+        case .bike:
+            wheel(radius: 0.35, width: 0.08, at: SIMD3<Float>(0, 0.35, -0.65))
+            wheel(radius: 0.35, width: 0.08, at: SIMD3<Float>(0, 0.35, 0.65))
+            box(SIMD3<Float>(0.08, 0.08, 1.2), at: SIMD3<Float>(0, 0.62, 0), paint)
+            box(SIMD3<Float>(0.06, 0.55, 0.06), at: SIMD3<Float>(0, 0.8, -0.6), paint)
+            box(SIMD3<Float>(0.7, 0.06, 0.06), at: SIMD3<Float>(0, 1.08, -0.6), dark)
+        case .scooter:
+            box(SIMD3<Float>(0.42, 0.08, 1.1), at: SIMD3<Float>(0, 0.2, 0), paint)
+            wheel(radius: 0.15, width: 0.1, at: SIMD3<Float>(0, 0.15, -0.5))
+            wheel(radius: 0.15, width: 0.1, at: SIMD3<Float>(0, 0.15, 0.5))
+            box(SIMD3<Float>(0.07, 1.0, 0.07), at: SIMD3<Float>(0, 0.72, -0.52), paint)
+            box(SIMD3<Float>(0.6, 0.06, 0.06), at: SIMD3<Float>(0, 1.2, -0.52), dark)
+        case .jetpack:
+            box(SIMD3<Float>(0.5, 0.6, 0.25), at: SIMD3<Float>(0, 1.0, 0.32), paint, corner: 0.06)
+            for sx in [Float(-1), 1] {
+                let nozzle = ModelEntity(mesh: .abloxCylinder(height: 0.25, radius: 0.09), materials: [dark])
+                nozzle.position = SIMD3<Float>(sx * 0.14, 0.62, 0.35)
+                root.addChild(nozzle)
+                box(SIMD3<Float>(0.12, 0.28, 0.12), at: SIMD3<Float>(sx * 0.14, 0.38, 0.35), flame, corner: 0.05)
+            }
+        case .hoverboard:
+            box(SIMD3<Float>(0.8, 0.1, 1.6), at: SIMD3<Float>(0, 0.12, 0), paint, corner: 0.05)
+            box(SIMD3<Float>(0.6, 0.02, 1.4), at: SIMD3<Float>(0, 0.05, 0), glow, corner: 0.01)
+        }
+        addChild(root)
+        rideEntity = root
     }
 
     // MARK: Weapon
