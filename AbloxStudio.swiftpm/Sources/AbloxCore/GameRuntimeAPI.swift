@@ -418,8 +418,8 @@ extension GameRuntime: ScriptObjectResolver {
             }
         case "say":
             return npcMethod(state, name) { [unowned self] arguments, _ in
-                let text = state.name + ": " + self.shortText(arguments.first ?? .null)
-                self.pending.append(self.broadcast(.script(.chat(text))))
+                let text = self.shortText(arguments.first ?? .null)
+                self.pending.append(self.broadcast(.script(.say(speaker: state.peer, name: state.name, text: text))))
                 return .null
             }
         case "destroy":

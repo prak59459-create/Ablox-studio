@@ -46,6 +46,9 @@ public final class SessionCoordinator: ObservableObject {
     @Published public private(set) var announcement: Announcement?
     @Published public private(set) var pingMilliseconds: Double?
     @Published public private(set) var roomCode: String = ""
+    /// While hosting: whether the room is open to everyone nearby (public)
+    /// or only to people with the code (private).
+    @Published public private(set) var isRoomPublic: Bool = false
     @Published public private(set) var browserUnavailableReason: String?
 
     /// Effects the local renderer still has to apply (tints, moves, sounds).
@@ -185,11 +188,11 @@ public final class SessionCoordinator: ObservableObject {
 
     // MARK: Hosting
 
-    public func startHosting(world: WorldDocument, isStudioSession: Bool = false, capacity: Int = AbloxProtocol.defaultCapacity) {
+    public func startHosting(world: WorldDocument, isStudioSession: Bool = false, isPublic: Bool = false, capacity: Int = AbloxProtocol.defaultCapacity) {
         leave()
 
         guard !isStudioSession, let source = world.scriptSource, source.updatesOnPlay else {
-            beginHosting(world: world, isStudioSession: isStudioSession, capacity: capacity)
+            beginHosting(world: world, isStudioSession: isStudioSession, isPublic: isPublic, capacity: capacity)
             return
         }
 
@@ -205,7 +208,7 @@ public final class SessionCoordinator: ObservableObject {
             // Left, or started something else, while waiting.
             guard let self, self.scriptRefreshAttempt == attempt else { return }
             self.scriptRefreshAttempt = nil
-            self.beginHosting(world: refreshed.world, isStudioSession: false, capacity: capacity)
+            self.beginHosting(world: refreshed.world, isStudioSession: false, isPublic: isPublic, capacity: capacity)
             if let error = refreshed.error {
                 self.scriptLog.append(ScriptLogLine(
                     text: L("Could not get the latest scripts, so the saved ones are used: {}", error), isError: true))
@@ -215,7 +218,7 @@ public final class SessionCoordinator: ObservableObject {
         }
     }
 
-    private func beginHosting(world: WorldDocument, isStudioSession: Bool, capacity: Int) {
+    private func beginHosting(world: WorldDocument, isStudioSession: Bool, isPublic: Bool, capacity: Int) {
         self.world = world
         let code = RoomCode.generate()
         roomCode = code
@@ -225,8 +228,10 @@ public final class SessionCoordinator: ObservableObject {
             hostName: profile.displayName.isEmpty ? "Ablox" : "\(profile.displayName)'s iPad",
             capacity: capacity,
             roomCode: code,
-            isStudioSession: isStudioSession
+            isStudioSession: isStudioSession,
+            isPublic: isPublic
         )
+        isRoomPublic = configuration.isPublic
 
         let host = AbloxHost(world: world, configuration: configuration, localPeerID: localPeerID, localProfile: profile)
 
@@ -283,6 +288,13 @@ public final class SessionCoordinator: ObservableObject {
         self.host = host
         host.start()
         host.startRound()
+    }
+
+    /// Switches the room between public and private while hosting.
+    public func setRoomPublic(_ isPublic: Bool) {
+        guard let host, !host.configuration.isStudioSession else { return }
+        isRoomPublic = isPublic
+        host.setPublic(isPublic)
     }
 
     // MARK: Joining
@@ -446,6 +458,7 @@ public final class SessionCoordinator: ObservableObject {
         stopReconnecting()
         host?.stop()
         host = nil
+        isRoomPublic = false
         client?.disconnect()
         client = nil
         role = .offline
@@ -513,7 +526,12 @@ public final class SessionCoordinator: ObservableObject {
         guard !trimmed.isEmpty else { return }
         switch role {
         case .hosting: host?.sendChat(trimmed)
-        case .joined: client?.sendChat(trimmed)
+        case .joined:
+            client?.sendChat(trimmed)
+            // The host relays a message to everyone but its sender, so a
+            // joined player's own line — and the bubble over their own head —
+            // has to be added here or it never appears on their screen.
+            appendChat(ChatPayload(senderName: profile.displayName, text: trimmed), from: localPeerID)
         case .offline: appendChat(ChatPayload(senderName: profile.displayName, text: trimmed), from: localPeerID)
         }
     }
@@ -548,6 +566,10 @@ public final class SessionCoordinator: ObservableObject {
             case let .script(.chat(line)):
                 // A line from the game itself, not from a person.
                 appendChat(ChatPayload(senderName: L("Game"), text: line), from: SessionCoordinator.gamePeerID)
+            case let .script(.say(speaker, name, text)):
+                // A character in the game talking: under its own name, so the
+                // bubble goes over its head and it can be muted like anyone.
+                appendChat(ChatPayload(senderName: name, text: text), from: speaker)
             case let .script(effect):
                 scripted.apply(effect)
             default:

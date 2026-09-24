@@ -27,19 +27,25 @@ public final class AbloxHost {
         /// game; changes what the lobby badge says and disables the rule
         /// engine.
         public var isStudioSession: Bool
+        /// A public room advertises its code, so anyone nearby can join from
+        /// the list. A private one keeps it off the air: only someone the
+        /// host tells can get in.
+        public var isPublic: Bool
 
         public init(
             worldName: String,
             hostName: String,
             capacity: Int = AbloxProtocol.defaultCapacity,
             roomCode: String = RoomCode.generate(),
-            isStudioSession: Bool = false
+            isStudioSession: Bool = false,
+            isPublic: Bool = false
         ) {
             self.worldName = worldName
             self.hostName = hostName
             self.capacity = capacity
             self.roomCode = roomCode
             self.isStudioSession = isStudioSession
+            self.isPublic = isPublic && !isStudioSession
         }
     }
 
@@ -168,7 +174,25 @@ public final class AbloxHost {
         txt[AbloxProtocol.TXTKey.capacity] = String(configuration.capacity)
         txt[AbloxProtocol.TXTKey.mode] = configuration.isStudioSession ? "studio" : "play"
         txt[AbloxProtocol.TXTKey.protocolVersion] = String(AbloxProtocol.version)
+        txt[AbloxProtocol.TXTKey.access] = configuration.isPublic ? "public" : "private"
+        if configuration.isPublic {
+            // The code is still the encryption key; publishing it is what
+            // "public" means. Anyone who can see the room can open it.
+            txt[AbloxProtocol.TXTKey.code] = configuration.roomCode
+        }
         return txt
+    }
+
+    /// Opens the room to everyone nearby, or closes it to all but those who
+    /// have the code. Players already inside stay.
+    public func setPublic(_ isPublic: Bool) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            let value = isPublic && !self.configuration.isStudioSession
+            guard value != self.configuration.isPublic else { return }
+            self.configuration.isPublic = value
+            self.refreshAdvertisement()
+        }
     }
 
     private func refreshAdvertisement() {

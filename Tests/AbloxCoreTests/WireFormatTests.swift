@@ -286,7 +286,8 @@ final class WireFormatTests: XCTestCase {
             .awardPoints(-3),
             .announce(message: "hi", duration: 2),
             .playSound(name: "ding"),
-            .endRound(message: "done")
+            .endRound(message: "done"),
+            .script(.say(speaker: PeerID(), name: "Nurse", text: "Next, please!"))
         ]
         for value in cases {
             let restored = try JSONDecoder().decode(EventAction.self, from: JSONEncoder().encode(value))
@@ -298,7 +299,7 @@ final class WireFormatTests: XCTestCase {
         // These are compatibility surface: changing one breaks older iPads,
         // so a deliberate test failure is the reminder to bump the version.
         XCTAssertEqual(AbloxProtocol.bonjourServiceType, "_ablox._tcp")
-        XCTAssertEqual(AbloxProtocol.version, 3)
+        XCTAssertEqual(AbloxProtocol.version, 4)
         XCTAssertEqual(PacketHeader.encodedSize, 33)
         XCTAssertEqual(PacketKind.handshake.rawValue, 1)
         XCTAssertEqual(PacketKind.leave.rawValue, 11)

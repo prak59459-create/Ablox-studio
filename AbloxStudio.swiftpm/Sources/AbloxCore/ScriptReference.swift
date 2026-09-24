@@ -106,7 +106,7 @@ public enum ScriptReference {
             Entry("create_npc({name: \"Guard\", position: {x: 0, y: 2, z: 5}, color: \"red\", size: 1.5, health: 200, speed: 0.8, team: \"red\"})",
                   L("Makes a character the game controls. It has everything a player has.")),
             Entry("n.move_to(block(\"Door\"))  n.follow(p)  n.stop()", L("Walks somewhere, keeps following someone, or stops.")),
-            Entry("n.jump_now()  n.shoot(p)  n.say(\"Halt!\")", L("Jumps, fires its weapon at someone, or speaks in the chat.")),
+            Entry("n.jump_now()  n.shoot(p)  n.say(\"Halt!\")", L("Jumps, fires its weapon at someone, or speaks in a bubble over its head.")),
             Entry("n.destroy()", L("Removes it. A knocked-out NPC is removed unless “on death” brings it back."))
         ])
     }

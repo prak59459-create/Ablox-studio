@@ -12,6 +12,11 @@ public struct DiscoveredPeer: Identifiable, Hashable {
     public let capacity: Int
     public let isStudioSession: Bool
     public let protocolVersion: Int
+    /// The room's code when the host made it public, so joining needs no
+    /// typing. Nil for a private room: its code is only on the host's screen.
+    public let publicCode: String?
+
+    public var isPublic: Bool { publicCode != nil }
 
     public var isFull: Bool { playerCount >= capacity }
 
@@ -48,6 +53,15 @@ public struct DiscoveredPeer: Identifiable, Hashable {
         self.capacity = Int(txt?[AbloxProtocol.TXTKey.capacity] ?? "") ?? AbloxProtocol.defaultCapacity
         self.isStudioSession = (txt?[AbloxProtocol.TXTKey.mode] ?? "play") == "studio"
         self.protocolVersion = Int(txt?[AbloxProtocol.TXTKey.protocolVersion] ?? "") ?? AbloxProtocol.version
+
+        // Public only when the host says so *and* sends a code that could be
+        // one. A host from before the setting sends neither: private.
+        let code = RoomCode.normalize(txt?[AbloxProtocol.TXTKey.code] ?? "")
+        if txt?[AbloxProtocol.TXTKey.access] == "public", RoomCode.isPlausible(code) {
+            self.publicCode = code
+        } else {
+            self.publicCode = nil
+        }
     }
 }
 

@@ -110,6 +110,21 @@ final class ScriptWorldTests: RuntimeTestCase {
         XCTAssertTrue(heard.contains("Alice was got by Zombie"))
     }
 
+    func testAnNPCSpeaksInABubbleOverItsHead() {
+        let game = game(#"""
+        on start()
+          let n = create_npc({name: "Nurse"})
+          n.say("Next, please!")
+        end
+        """#)
+        let effects = startWithBoth(game)
+        let npc = game.roster.first { $0.isNPC }!
+        XCTAssertTrue(scripted(alice, effects).contains(.say(speaker: npc.peerID, name: "Nurse", text: "Next, please!")),
+                      "the line names who said it, so the bubble goes over the right head")
+        XCTAssertTrue(scripted(bob, effects).contains(.say(speaker: npc.peerID, name: "Nurse", text: "Next, please!")),
+                      "and everyone hears it")
+    }
+
     func testNPCsCannotBeMovedByClients() {
         let game = game("on start()\n  create_npc({name: \"A\", position: {x: 1, y: 1, z: 1}})\nend")
         startWithBoth(game)

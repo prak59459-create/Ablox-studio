@@ -401,7 +401,8 @@ public enum AbloxProtocol {
     ///
     /// 2: `playerInput` and script effects (screen GUI, weapons, camera).
     /// 3: `.absc` script files, free-form GUI, NPCs and world editing.
-    public static let version = 3
+    /// 4: an NPC's `say` is a speech bubble over its head (`ScriptEffect.say`).
+    public static let version = 4
 
     /// Bonjour service type advertised by hosts.
     public static let bonjourServiceType = "_ablox._tcp"
@@ -415,6 +416,12 @@ public enum AbloxProtocol {
         public static let capacity = "cap"
         public static let mode = "mode"
         public static let protocolVersion = "pv"
+        /// "public" or "private". A host that predates the setting sends
+        /// neither and is treated as private: its code was never shown.
+        public static let access = "access"
+        /// The room code, published only by a public room, so anyone nearby
+        /// can join without typing it.
+        public static let code = "code"
     }
 
     /// Hard ceiling on a single framed message. A `worldSnapshot` for a big

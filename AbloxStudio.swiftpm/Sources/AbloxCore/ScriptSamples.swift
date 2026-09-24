@@ -354,6 +354,7 @@ public extension GameRuntime {
         for effect in effects where effect.targetPeerID == nil || effect.targetPeerID == you {
             switch effect.action {
             case let .script(.chat(line)): messages.append(line)
+            case let .script(.say(_, name, text)): messages.append(name + ": " + text)
             case let .script(scriptEffect): state.apply(scriptEffect)
             case let .announce(message, _): messages.append(message)
             case let .endRound(message): messages.append(message)

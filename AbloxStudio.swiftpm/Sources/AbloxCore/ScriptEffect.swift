@@ -225,4 +225,7 @@ public enum ScriptEffect: Codable, Equatable, Hashable, Sendable {
     case tracer(from: Vec3, to: Vec3)
     /// A line in the chat, from the game rather than a person.
     case chat(String)
+    /// A character said something: a line in the chat under their name, and
+    /// a speech bubble over their head.
+    case say(speaker: PeerID, name: String, text: String)
 }
