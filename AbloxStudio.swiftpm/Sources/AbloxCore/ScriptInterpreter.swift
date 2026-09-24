@@ -313,7 +313,9 @@ public final class ScriptInterpreter {
         case let .member(baseExpression, name):
             switch try evaluate(baseExpression, in: scope) {
             case let .map(map):
-                map[name] = value
+                // Setting an entry to nil removes it, so `keys` and `len`
+                // stop counting it — the same as a key that was never set.
+                map[name] = value.isNull ? nil : value
                 try checkSize(map.count, line: target.line)
             case let .object(object):
                 guard let resolver else {
@@ -336,7 +338,7 @@ public final class ScriptInterpreter {
                 let offset = try listOffset(position, count: list.items.count, line: target.line)
                 list.items[offset] = value
             case let (.map(map), .string(key)):
-                map[key] = value
+                map[key] = value.isNull ? nil : value
                 try checkSize(map.count, line: target.line)
             default:
                 throw ScriptError(line: target.line, kind: .runtime,

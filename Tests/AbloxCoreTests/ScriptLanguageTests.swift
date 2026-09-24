@@ -226,6 +226,18 @@ final class ScriptLanguageTests: XCTestCase {
         """), ["75 Mika red nil"])
     }
 
+    func testSettingAnEntryToNilRemovesIt() throws {
+        // Otherwise `keys` keeps listing an entry a script thought it had
+        // cleared, and a loop over it acts on something that is gone.
+        XCTAssertEqual(try run("""
+        let broken = { a: true, b: true }
+        broken["a"] = nil
+        broken.b = nil
+        broken.c = true
+        print(len(broken), join(keys(broken), ","), broken.a)
+        """), ["1 c nil"])
+    }
+
     func testStandardLibrary() throws {
         XCTAssertEqual(try run(#"print(len([1,2,3]), floor(2.7), max(1, 9, 4), clamp(15, 0, 10))"#), ["3 2 9 10"])
         XCTAssertEqual(try run(#"print(join(split("a,b,c", ","), "-"), upper("ab"), contains([1,2], 2))"#), ["a-b-c AB true"])
