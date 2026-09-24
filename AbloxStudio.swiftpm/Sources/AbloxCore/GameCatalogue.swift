@@ -476,11 +476,23 @@ public struct CatalogueSource: Equatable, Sendable {
     /// forgiving redirect.
     public static let `default` = CatalogueSource(repository: "prak59459-create/AbloxGames")
 
+    /// What Settings asks for, or the nearest thing that works: the built-in
+    /// list for a repository that is not one, `main` for a branch that is not
+    /// one. Someone half-way through typing still gets a list.
+    public static func chosen(repository: String, branch: String) -> CatalogueSource {
+        let repository = repository.trimmingCharacters(in: .whitespacesAndNewlines)
+        let branch = branch.trimmingCharacters(in: .whitespacesAndNewlines)
+        let wanted = CatalogueSource(repository: repository)
+        guard wanted.isValidRepository else { return .default }
+        guard isValidReference(branch) else { return wanted }
+        return CatalogueSource(repository: repository, reference: branch)
+    }
+
     /// `raw.githubusercontent.com` rather than the API: no token, no rate
     /// limit worth worrying about, and the response is the file itself rather
     /// than JSON wrapping base64 of the file.
     public var baseURL: URL? {
-        guard isValidRepository else { return nil }
+        guard isValidRepository, Self.isValidReference(reference) else { return nil }
         return URL(string: "https://raw.githubusercontent.com/\(repository)/\(reference)/")
     }
 
@@ -525,6 +537,21 @@ public struct CatalogueSource: Equatable, Sendable {
     /// The page a person can open to read the repository or submit to it.
     public var webURL: URL? {
         isValidRepository ? URL(string: "https://github.com/\(repository)") : nil
+    }
+
+    /// A branch or tag name that can only ever be one path segment's worth of
+    /// meaning: `main`, `test`, `feature/new-map`, `v1.2`.
+    ///
+    /// Checked because it is settable and lands in a URL: `..`, a leading
+    /// slash, a query or a fragment would each make it something other than
+    /// a branch.
+    public static func isValidReference(_ reference: String) -> Bool {
+        guard !reference.isEmpty, reference.count <= 100 else { return false }
+        guard !reference.hasPrefix("/"), !reference.hasSuffix("/"), !reference.hasPrefix("-"),
+              !reference.hasPrefix("."), !reference.contains("//"), !reference.contains("..") else { return false }
+        return reference.allSatisfy {
+            $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." || $0 == "/")
+        }
     }
 
     /// `owner/repo`, both plausible GitHub names.

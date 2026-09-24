@@ -463,7 +463,9 @@ final class EditorDocumentTests: XCTestCase {
             .modify(before: block, after: modified),
             .reparent(blockID: block.id, from: nil, to: UUID()),
             .setEnvironment(before: .default, after: EnvironmentSettings(gravity: -3)),
-            .setRules(before: [], after: [EventRule(name: "r", trigger: .worldStart, actions: [])])
+            .setRules(before: [], after: [EventRule(name: "r", trigger: .worldStart, actions: [])]),
+            .setScripts(before: [], after: [ScriptFile(name: "main", source: "")]),
+            .setScriptSource(before: nil, after: ScriptSource(repository: "a/b"))
         ]
 
         for command in commands {
@@ -539,5 +541,39 @@ final class EditorDocumentTests: XCTestCase {
         doc.endGesture()
         XCTAssertTrue(doc.undo())
         XCTAssertEqual(doc.world.scripts.first?.source, "", "one undo takes back the whole visit to the editor")
+    }
+
+    // MARK: Pulling from GitHub
+
+    func testTheScriptSourceIsUndoableAndTravels() {
+        var doc = makeDocument()
+        let source = ScriptSource(repository: "club/games", branch: "dev", folder: "scripts", updatesOnPlay: true)
+        doc.setScriptSource(source)
+        XCTAssertEqual(doc.world.scriptSource, source)
+        XCTAssertEqual(doc.drainDeltas(), [.scriptSourceChanged(source)])
+
+        doc.setScriptSource(source)
+        XCTAssertTrue(doc.drainDeltas().isEmpty, "setting the same source records nothing")
+
+        XCTAssertTrue(doc.undo())
+        XCTAssertNil(doc.world.scriptSource)
+        XCTAssertEqual(doc.drainDeltas(), [.scriptSourceChanged(nil)])
+    }
+
+    func testAPullIsOneUndoStepAndKeepsLocalFiles() {
+        var doc = makeDocument()
+        let local = doc.addScript(named: "mine", source: "print(1)")!
+        doc.addScript(named: "main", source: "old")
+        _ = doc.drainDeltas()
+
+        let result = doc.mergePulledScripts([("main.absc", "new"), ("ui.absc", "ui")])
+        XCTAssertEqual(result.updated, ["main.absc"])
+        XCTAssertEqual(result.added, ["ui.absc"])
+        XCTAssertEqual(doc.world.scripts.map(\.name), ["mine.absc", "main.absc", "ui.absc"])
+        XCTAssertEqual(doc.world.scripts.first?.id, local, "a pull never deletes a file written on the iPad")
+        XCTAssertEqual(doc.drainDeltas().count, 1, "co-editors get the whole pull at once")
+
+        XCTAssertTrue(doc.undo())
+        XCTAssertEqual(doc.world.scripts.map(\.source), ["print(1)", "old"], "one undo takes the pull back")
     }
 }

@@ -138,6 +138,9 @@ public final class SessionCoordinator: ObservableObject {
     /// `RosterState` for the two position bugs this replaced.
     private var rosterState: RosterState
     private var reconnectTask: Task<Void, Never>?
+    /// Set while a world's scripts are being pulled before hosting, so a
+    /// `leave()` in the meantime cancels the start.
+    private var scriptRefreshAttempt: UUID?
     private var sessionClock: Date = Date()
 
     private var now: Double { Date().timeIntervalSince(sessionClock) }
@@ -185,6 +188,34 @@ public final class SessionCoordinator: ObservableObject {
     public func startHosting(world: WorldDocument, isStudioSession: Bool = false, capacity: Int = AbloxProtocol.defaultCapacity) {
         leave()
 
+        guard !isStudioSession, let source = world.scriptSource, source.updatesOnPlay else {
+            beginHosting(world: world, isStudioSession: isStudioSession, capacity: capacity)
+            return
+        }
+
+        // The world pulls its `.absc` files from GitHub each time it is
+        // played. Fetched before the round starts, so the game begins with
+        // the newest scripts rather than changing under everyone.
+        self.world = world
+        status = .connecting
+        let attempt = UUID()
+        scriptRefreshAttempt = attempt
+        Task { @MainActor [weak self] in
+            let refreshed = await ScriptFetcher.refresh(world)
+            // Left, or started something else, while waiting.
+            guard let self, self.scriptRefreshAttempt == attempt else { return }
+            self.scriptRefreshAttempt = nil
+            self.beginHosting(world: refreshed.world, isStudioSession: false, capacity: capacity)
+            if let error = refreshed.error {
+                self.scriptLog.append(ScriptLogLine(
+                    text: L("Could not get the latest scripts, so the saved ones are used: {}", error), isError: true))
+            } else if let result = refreshed.result, result.changedAnything {
+                self.scriptLog.append(ScriptLogLine(text: L("Scripts updated from GitHub: {}", result.summary), isError: false))
+            }
+        }
+    }
+
+    private func beginHosting(world: WorldDocument, isStudioSession: Bool, capacity: Int) {
         self.world = world
         let code = RoomCode.generate()
         roomCode = code
@@ -411,6 +442,7 @@ public final class SessionCoordinator: ObservableObject {
     }
 
     public func leave() {
+        scriptRefreshAttempt = nil
         stopReconnecting()
         host?.stop()
         host = nil

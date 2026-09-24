@@ -132,11 +132,24 @@ and change themselves. A world holds any number of `.absc` files (up to 32):
   weapon, screen items, NPCs, created blocks, messages and `print` output),
   **Examples** and the **Reference** beside the code.
 
+- **Get .absc files from GitHub** names a public repository, branch and
+  folder; **Get the latest now** then pulls every `.absc` in it, replacing
+  files with the same name and never deleting one that is only on the iPad.
+  A pull is one undo step. With **Get the latest every time the game starts**
+  on, the iPad hosting the game pulls again before each round.
+
 A visit to the editor is one undo step. The files are saved in the world,
 travel to co-editors as a `scriptsReplaced` delta, and run on whichever iPad
 hosts the game in Ablox. The language and API are described in
 [Ablox `docs/scripting.md`](https://github.com/prak59459-create/Ablox/blob/main/docs/scripting.md)
 (日本語: [`scripting.ja.md`](https://github.com/prak59459-create/Ablox/blob/main/docs/scripting.ja.md)).
+
+## Opening a published game
+
+**Open a published game** on the project screen lists the game list the Games
+tab in Ablox reads — the repository and branch are shared with Ablox's
+Settings and can be changed in the sheet — and downloads a game, with its map,
+rules and `.absc` files, as a new project under a name not already taken.
 
 ## Building together
 

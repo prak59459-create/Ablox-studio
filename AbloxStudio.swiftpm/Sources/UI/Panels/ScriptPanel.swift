@@ -15,6 +15,9 @@ struct ScriptPanel: View {
     @State private var showImporter = false
     @State private var exportItem: ScriptExport?
     @State private var importMessage: String?
+    @State private var editingSource = false
+    @State private var pulling = false
+    @State private var pullNote: PullNote?
 
     init(session: StudioSession) {
         self.session = session
@@ -60,6 +63,8 @@ struct ScriptPanel: View {
                             .foregroundStyle(Ablox.Palette.warning)
                     }
 
+                    githubCard
+
                     Text(L("Start from an example"))
                         .font(.caption.weight(.bold))
                         .foregroundStyle(Ablox.Palette.inkMuted)
@@ -78,6 +83,12 @@ struct ScriptPanel: View {
         }
         .sheet(item: $exportItem) { item in
             ScriptExportSheet(item: item)
+        }
+        .sheet(isPresented: $editingSource) {
+            ScriptSourceSheet(current: session.document.world.scriptSource) { source in
+                session.edit { $0.setScriptSource(source) }
+                if source != nil { pull() } else { pullNote = nil }
+            }
         }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.data, .plainText], allowsMultipleSelection: true) { result in
             importFiles(result)
@@ -202,6 +213,98 @@ struct ScriptPanel: View {
         .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
+    // MARK: GitHub
+
+    /// Where the files come from when they are written on a computer and
+    /// pushed to a repository, and the button that brings them in.
+    @ViewBuilder
+    private var githubCard: some View {
+        if let source = session.document.world.scriptSource {
+            GlassCard(padding: 12) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Label(L("From GitHub"), systemImage: "arrow.down.circle")
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Button {
+                            editingSource = true
+                        } label: {
+                            Image(systemName: "gearshape")
+                                .frame(width: 32, height: 32)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Ablox.Palette.inkMuted)
+                        .accessibilityLabel(L("GitHub settings"))
+                    }
+                    Text(verbatim: source.displayName)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(Ablox.Palette.inkMuted)
+                        .lineLimit(2)
+                    if source.updatesOnPlay {
+                        Label(L("The latest files are fetched every time the game starts."), systemImage: "arrow.triangle.2.circlepath")
+                            .font(.caption2)
+                            .foregroundStyle(Ablox.Palette.inkFaint)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Button {
+                        pull()
+                    } label: {
+                        HStack(spacing: 6) {
+                            if pulling {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: "arrow.down.to.line")
+                            }
+                            Text(L("Get the latest now"))
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(NeonButtonStyle(.primary))
+                    .disabled(pulling)
+
+                    if let pullNote {
+                        Text(verbatim: pullNote.text)
+                            .font(.caption)
+                            .foregroundStyle(pullNote.isError ? Ablox.Palette.warning : Ablox.Palette.success)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            Button {
+                editingSource = true
+            } label: {
+                Label(L("Get .absc files from GitHub"), systemImage: "arrow.down.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(NeonButtonStyle(.secondary))
+        }
+    }
+
+    /// Brings every `.absc` in the source's folder into the world, as one
+    /// undo step. Files only on the iPad are left alone.
+    private func pull() {
+        guard let source = session.document.world.scriptSource, !pulling else { return }
+        pulling = true
+        pullNote = nil
+        Task { @MainActor in
+            defer { pulling = false }
+            do {
+                let downloaded = try await ScriptFetcher.download(source, knownNames: files.map(\.name))
+                guard !downloaded.isEmpty else {
+                    pullNote = PullNote(text: L("No .absc files were found there."), isError: true)
+                    return
+                }
+                var result = ScriptSyncResult()
+                session.edit { result = $0.mergePulledScripts(downloaded) }
+                pullNote = PullNote(text: result.summary, isError: false)
+            } catch {
+                pullNote = PullNote(text: ScriptFetcher.message(for: error), isError: true)
+            }
+        }
+    }
+
     private func sampleRow(_ sample: ScriptSample) -> some View {
         Button {
             if let id = addFile(named: sample.fileName, source: sample.source) {
@@ -262,6 +365,135 @@ struct ScriptPanel: View {
 /// Which file the editor sheet is showing.
 struct ScriptFileSelection: Identifiable {
     let id: UUID
+}
+
+/// The line under the pull button: what changed, or why nothing could.
+struct PullNote: Equatable {
+    let text: String
+    let isError: Bool
+}
+
+/// Which repository, branch and folder the world's `.absc` files come from.
+struct ScriptSourceSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let current: ScriptSource?
+    /// Called with the new source, or nil to stop pulling from GitHub.
+    let onSave: (ScriptSource?) -> Void
+
+    @State private var repository: String
+    @State private var branch: String
+    @State private var folder: String
+    @State private var updatesOnPlay: Bool
+
+    init(current: ScriptSource?, onSave: @escaping (ScriptSource?) -> Void) {
+        self.current = current
+        self.onSave = onSave
+        _repository = State(initialValue: current?.repository ?? "")
+        _branch = State(initialValue: current?.branch ?? "main")
+        _folder = State(initialValue: current?.folder ?? "")
+        _updatesOnPlay = State(initialValue: current?.updatesOnPlay ?? false)
+    }
+
+    private var draft: ScriptSource {
+        ScriptSource(repository: repository, branch: branch, folder: folder, updatesOnPlay: updatesOnPlay)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(L("Write .absc files on a computer, push them to a public GitHub repository, and bring them into this world with one tap."))
+                        .font(.callout)
+                        .foregroundStyle(Ablox.Palette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    field(L("Repository"), placeholder: "owner/repo", text: $repository)
+                    HStack(spacing: 12) {
+                        field(L("Branch"), placeholder: "main", text: $branch)
+                        field(L("Folder (empty for the top)"), placeholder: "scripts", text: $folder)
+                    }
+
+                    if !repository.isEmpty, !draft.isValid {
+                        Label(L("That repository, branch or folder is not valid."), systemImage: "info.circle")
+                            .font(.caption)
+                            .foregroundStyle(Ablox.Palette.warning)
+                    } else if draft.isValid {
+                        Text(verbatim: draft.displayName)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(Ablox.Palette.inkFaint)
+                    }
+
+                    Toggle(isOn: $updatesOnPlay) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L("Get the latest every time the game starts"))
+                                .font(.subheadline.weight(.medium))
+                            Text(L("The host fetches the files again before each game, so a fix pushed to GitHub reaches everyone without publishing again. If GitHub cannot be reached, the saved files are used."))
+                                .font(.caption)
+                                .foregroundStyle(Ablox.Palette.inkMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .tint(Ablox.Palette.accent)
+
+                    Label(L("Files with the same name are replaced. Files that are only on this iPad are kept."), systemImage: "doc.on.doc")
+                        .font(.caption)
+                        .foregroundStyle(Ablox.Palette.inkMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Label(L("Only reads public repositories. Nothing is uploaded."), systemImage: "lock.shield")
+                        .font(.caption)
+                        .foregroundStyle(Ablox.Palette.inkMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button {
+                        onSave(draft)
+                        dismiss()
+                    } label: {
+                        Label(L("Save and get files"), systemImage: "arrow.down.circle.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(NeonButtonStyle(.primary, fullWidth: true))
+                    .disabled(!draft.isValid)
+                    .opacity(draft.isValid ? 1 : 0.5)
+
+                    if current != nil {
+                        Button(role: .destructive) {
+                            onSave(nil)
+                            dismiss()
+                        } label: {
+                            Label(L("Stop getting files from GitHub"), systemImage: "xmark.circle")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(NeonButtonStyle(.destructive, fullWidth: true))
+                    }
+                }
+                .padding(20)
+            }
+            .background(Color(red: 0.05, green: 0.06, blue: 0.11))
+            .navigationTitle(L("Scripts from GitHub"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L("Cancel")) { dismiss() }
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+        .tint(Ablox.Palette.accent)
+    }
+
+    private func field(_ title: String, placeholder: String, text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.caption).foregroundStyle(Ablox.Palette.inkMuted)
+            TextField(placeholder, text: text)
+                .textFieldStyle(.plain)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .font(.callout.monospaced())
+                .padding(10)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+    }
 }
 
 /// A file being exported: written to a temporary `.absc` so the share sheet

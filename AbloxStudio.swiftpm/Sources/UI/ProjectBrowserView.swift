@@ -16,6 +16,11 @@ struct ProjectBrowserView: View {
     @State private var joiningPeer: DiscoveredPeer?
     @State private var joinCode = ""
     @State private var isAsking = false
+    @State private var isBrowsingGames = false
+    /// A published game downloaded in the sheet, opened once the sheet has
+    /// gone — presenting the editor over a sheet still on its way out is
+    /// refused.
+    @State private var downloadedGame: WorldDocument?
 
     var body: some View {
         ZStack {
@@ -56,6 +61,11 @@ struct ProjectBrowserView: View {
                 )
             }
         }
+        .sheet(isPresented: $isBrowsingGames, onDismiss: openDownloadedGame) {
+            GameListSheet(source: settings.catalogueSource) { world in
+                downloadedGame = world
+            }
+        }
         .sheet(item: $joiningPeer) { peer in
             joinSheet(peer)
         }
@@ -83,6 +93,13 @@ struct ProjectBrowserView: View {
             Spacer()
 
             languageMenu
+
+            Button {
+                isBrowsingGames = true
+            } label: {
+                Label(L("Open a published game"), systemImage: "square.and.arrow.down.on.square")
+            }
+            .buttonStyle(NeonButtonStyle(.secondary))
 
             Button {
                 isAsking = true
@@ -267,6 +284,22 @@ struct ProjectBrowserView: View {
 
     private func open(_ entry: ProjectStore.Entry) {
         guard let world = store.load(entry) else { return }
+        openSession = StudioSession(
+            world: world,
+            store: store,
+            localPeerID: settings.peerID,
+            profile: settings.profile
+        )
+    }
+
+    /// A published game becomes a project of its own: saved under a name
+    /// not already taken, then opened. `GameLibrary` has already given it a
+    /// new id, so it cannot replace anything on this iPad.
+    private func openDownloadedGame() {
+        guard var world = downloadedGame else { return }
+        downloadedGame = nil
+        world.name = store.uniqueName(basedOn: world.name)
+        guard store.save(world) else { return }
         openSession = StudioSession(
             world: world,
             store: store,

@@ -345,6 +345,21 @@ public struct EditorDocument: Sendable {
         setScripts(world.scripts.filter { $0.id != id })
     }
 
+    /// Where on GitHub the world's `.absc` files come from. Nil stops pulling.
+    public mutating func setScriptSource(_ source: ScriptSource?) {
+        guard source != world.scriptSource else { return }
+        perform(.setScriptSource(before: world.scriptSource, after: source))
+    }
+
+    /// Folds files pulled from GitHub into the world as one undo step, so a
+    /// pull that replaced something by mistake is one tap to take back.
+    @discardableResult
+    public mutating func mergePulledScripts(_ downloaded: [(name: String, source: String)]) -> ScriptSyncResult {
+        let merged = ScriptSource.merge(downloaded, into: world.scripts)
+        setScripts(merged.files)
+        return merged.result
+    }
+
     public mutating func renameWorld(_ name: String) {
         world.name = name
         hasUnsavedChanges = true

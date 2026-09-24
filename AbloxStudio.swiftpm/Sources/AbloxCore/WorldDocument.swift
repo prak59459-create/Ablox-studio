@@ -71,6 +71,8 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
     public var rules: [EventRule]
     /// The world's `.absc` script files. Empty for a world run by rules alone.
     public var scripts: [ScriptFile]
+    /// Where on GitHub those files come from, if they are pulled from there.
+    public var scriptSource: ScriptSource?
 
     public init(
         id: UUID = UUID(),
@@ -82,7 +84,8 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
         environment: EnvironmentSettings = .default,
         blocks: [BlockData] = [],
         rules: [EventRule] = [],
-        scripts: [ScriptFile] = []
+        scripts: [ScriptFile] = [],
+        scriptSource: ScriptSource? = nil
     ) {
         self.id = id
         self.schemaVersion = schemaVersion
@@ -94,6 +97,7 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
         self.blocks = blocks
         self.rules = rules
         self.scripts = scripts
+        self.scriptSource = scriptSource
     }
 
     // MARK: Coding
@@ -103,7 +107,7 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
     // has a single `script` string, which becomes `main.absc`.
 
     private enum CodingKeys: String, CodingKey {
-        case id, schemaVersion, name, authorName, createdAt, modifiedAt, environment, blocks, rules, scripts
+        case id, schemaVersion, name, authorName, createdAt, modifiedAt, environment, blocks, rules, scripts, scriptSource
         case legacyScript = "script"
     }
 
@@ -125,6 +129,7 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
         } else {
             scripts = []
         }
+        scriptSource = try c.decodeIfPresent(ScriptSource.self, forKey: .scriptSource)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -142,6 +147,7 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
         if !scripts.isEmpty {
             try c.encode(scripts, forKey: .scripts)
         }
+        try c.encodeIfPresent(scriptSource, forKey: .scriptSource)
     }
 }
 

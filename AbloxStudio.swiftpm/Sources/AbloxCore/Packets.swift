@@ -167,13 +167,14 @@ public enum WorldDelta: Codable, Hashable, Sendable {
     case environment(EnvironmentSettings)
     case rulesReplaced([EventRule])
     case scriptsReplaced([ScriptFile])
+    case scriptSourceChanged(ScriptSource?)
 
     private enum CodingKeys: String, CodingKey {
-        case type, block, blockID, newParent, environment, rules, scripts
+        case type, block, blockID, newParent, environment, rules, scripts, scriptSource
     }
 
     private enum Kind: String, Codable {
-        case insert, update, remove, reparent, environment, rulesReplaced, scriptsReplaced
+        case insert, update, remove, reparent, environment, rulesReplaced, scriptsReplaced, scriptSourceChanged
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -201,6 +202,9 @@ public enum WorldDelta: Codable, Hashable, Sendable {
         case let .scriptsReplaced(scripts):
             try c.encode(Kind.scriptsReplaced, forKey: .type)
             try c.encode(scripts, forKey: .scripts)
+        case let .scriptSourceChanged(source):
+            try c.encode(Kind.scriptSourceChanged, forKey: .type)
+            try c.encodeIfPresent(source, forKey: .scriptSource)
         }
     }
 
@@ -218,6 +222,7 @@ public enum WorldDelta: Codable, Hashable, Sendable {
         case .environment: self = .environment(try c.decode(EnvironmentSettings.self, forKey: .environment))
         case .rulesReplaced: self = .rulesReplaced(try c.decode([EventRule].self, forKey: .rules))
         case .scriptsReplaced: self = .scriptsReplaced(try c.decode([ScriptFile].self, forKey: .scripts))
+        case .scriptSourceChanged: self = .scriptSourceChanged(try c.decodeIfPresent(ScriptSource.self, forKey: .scriptSource))
         }
     }
 
@@ -250,6 +255,10 @@ public enum WorldDelta: Codable, Hashable, Sendable {
             return true
         case let .scriptsReplaced(scripts):
             world.scripts = scripts
+            world.modifiedAt = Date()
+            return true
+        case let .scriptSourceChanged(source):
+            world.scriptSource = source
             world.modifiedAt = Date()
             return true
         }

@@ -19,6 +19,7 @@ public final class StudioSettings: ObservableObject {
         // sets it in the other on the same iPad.
         static let language = "ablox.language"
         static let catalogue = "ablox.catalogueRepository"
+        static let catalogueBranch = "ablox.catalogueBranch"
     }
 
     private let defaults: UserDefaults
@@ -61,14 +62,18 @@ public final class StudioSettings: ObservableObject {
     ///
     /// Shares the client's key, so a school that points Ablox at its own list
     /// only has to say so once. Studio uses it for the "open the repository"
-    /// link on the publish sheet.
+    /// link on the publish sheet and for opening a published world to edit.
     @Published public var catalogueRepository: String {
         didSet { defaults.set(catalogueRepository, forKey: Key.catalogue) }
     }
 
+    /// The list's branch, shared with the client in the same way.
+    @Published public var catalogueBranch: String {
+        didSet { defaults.set(catalogueBranch, forKey: Key.catalogueBranch) }
+    }
+
     public var catalogueSource: CatalogueSource {
-        let chosen = CatalogueSource(repository: catalogueRepository)
-        return chosen.isValidRepository ? chosen : .default
+        CatalogueSource.chosen(repository: catalogueRepository, branch: catalogueBranch)
     }
 
     public let peerID: PeerID
@@ -93,6 +98,8 @@ public final class StudioSettings: ObservableObject {
 
         self.catalogueRepository = defaults.string(forKey: Key.catalogue)
             ?? CatalogueSource.default.repository
+        self.catalogueBranch = defaults.string(forKey: Key.catalogueBranch)
+            ?? CatalogueSource.default.reference
 
         // Shares the key the client uses, so both apps on one iPad present the
         // same builder.

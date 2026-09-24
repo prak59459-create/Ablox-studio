@@ -134,12 +134,13 @@ public final class GameLibrary: ObservableObject {
             // `.absc` files kept beside the world in the repository. One with
             // the same name as a script inside the world replaces it, so the
             // repository copy is the one that counts.
+            var scripts: [(name: String, source: String)] = []
             for script in source.scriptURLs(for: listing) {
                 let bytes = try await fetch(script.url, limit: GameCatalogue.Limits.maximumScriptBytes)
                 guard let text = String(data: bytes, encoding: .utf8) else { continue }
-                world.scripts.removeAll { $0.name.lowercased() == script.name.lowercased() }
-                world.scripts.append(ScriptFile(name: script.name, source: text))
+                scripts.append((name: script.name, source: text))
             }
+            world.scripts = ScriptSource.merge(scripts, into: world.scripts).files
 
             let destination = worldCacheURL(for: listing.id)
             try world.encodedForFile().write(to: destination, options: .atomic)
