@@ -35,7 +35,23 @@ public final class GameLibrary: ObservableObject {
 
     /// Which repository to read. Settable so a school can run its own.
     @Published public var source: CatalogueSource {
-        didSet { if source != oldValue { listings = []; updatedAt = nil } }
+        didSet {
+            if source != oldValue {
+                listings = []
+                updatedAt = nil
+                fallbackBranch = nil
+            }
+        }
+    }
+
+    /// The repository's default branch, when the chosen branch had no
+    /// `index.json` and that one did. Worlds, scripts and covers then come
+    /// from the same place the list did.
+    private var fallbackBranch: String?
+
+    /// Where the list — and everything it points to — was actually read.
+    public var effectiveSource: CatalogueSource {
+        fallbackBranch.map { source.on(branch: $0) } ?? source
     }
 
     private let session: URLSession
@@ -64,7 +80,22 @@ public final class GameLibrary: ObservableObject {
 
         status = .refreshing
         do {
-            let data = try await fetch(url, limit: GameCatalogue.Limits.maximumIndexBytes)
+            let data: Data
+            do {
+                data = try await fetch(url, limit: GameCatalogue.Limits.maximumIndexBytes)
+                fallbackBranch = nil
+            } catch FetchError.badStatus(404) {
+                // Nothing on that branch — most often a repository with no
+                // `main`. Its default branch is the next best guess.
+                guard let branch = await defaultBranch(), branch != source.reference,
+                      let fallbackURL = source.on(branch: branch).indexURL else {
+                    status = .failed(L("There is no game list on the branch “{}” of {}. Check the repository and branch in Settings.",
+                                       source.reference, source.repository))
+                    return
+                }
+                data = try await fetch(fallbackURL, limit: GameCatalogue.Limits.maximumIndexBytes)
+                fallbackBranch = branch
+            }
             let catalogue = try GameCatalogue.decode(indexData: data)
             apply(catalogue)
             // Written only after it parsed, so a corrupt response cannot
@@ -112,7 +143,7 @@ public final class GameLibrary: ObservableObject {
             status = .failed(L("That game's listing is malformed."))
             return nil
         }
-        guard let url = source.worldURL(for: listing) else {
+        guard let url = effectiveSource.worldURL(for: listing) else {
             status = .failed(L("That game's listing is malformed."))
             return nil
         }
@@ -135,7 +166,7 @@ public final class GameLibrary: ObservableObject {
             // the same name as a script inside the world replaces it, so the
             // repository copy is the one that counts.
             var scripts: [(name: String, source: String)] = []
-            for script in source.scriptURLs(for: listing) {
+            for script in effectiveSource.scriptURLs(for: listing) {
                 let bytes = try await fetch(script.url, limit: GameCatalogue.Limits.maximumScriptBytes)
                 guard let text = String(data: bytes, encoding: .utf8) else { continue }
                 scripts.append((name: script.name, source: text))
@@ -174,7 +205,7 @@ public final class GameLibrary: ObservableObject {
             return data
         }
 
-        guard let url = source.coverURL(for: listing) else { return nil }
+        guard let url = effectiveSource.coverURL(for: listing) else { return nil }
         guard let data = try? await fetch(url, limit: GameCatalogue.Limits.maximumCoverBytes) else { return nil }
 
         coverCache[listing.id] = data
@@ -241,6 +272,13 @@ public final class GameLibrary: ObservableObject {
     }
 
     // MARK: Fetching
+
+    /// The repository's default branch according to GitHub, or nil.
+    private func defaultBranch() async -> String? {
+        guard let url = source.repositoryInfoURL,
+              let data = try? await fetch(url, limit: CatalogueSource.maximumRepositoryInfoBytes) else { return nil }
+        return CatalogueSource.defaultBranch(fromRepositoryInfo: data)
+    }
 
     private enum FetchError: Error { case tooLarge, badStatus(Int) }
 

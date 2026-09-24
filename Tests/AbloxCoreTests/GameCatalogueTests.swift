@@ -166,6 +166,26 @@ final class GameCatalogueTests: XCTestCase {
         XCTAssertTrue(CatalogueSource(repository: "prak59459-create/ablox-games").isValidRepository)
     }
 
+    func testTheDefaultBranchIsReadFromGitHubsRepositoryInfo() throws {
+        // A repository with no `main` names its real default branch here.
+        let info = Data(#"{"name": "AbloxGames", "private": false, "default_branch": "claude/games"}"#.utf8)
+        XCTAssertEqual(CatalogueSource.defaultBranch(fromRepositoryInfo: info), "claude/games")
+
+        let source = CatalogueSource(repository: "someone/ablox-games")
+        XCTAssertEqual(source.repositoryInfoURL?.absoluteString, "https://api.github.com/repos/someone/ablox-games")
+        XCTAssertEqual(source.on(branch: "claude/games").indexURL?.absoluteString,
+                       "https://raw.githubusercontent.com/someone/ablox-games/claude/games/index.json")
+    }
+
+    func testARepositoryInfoThatIsNotOneGivesNoBranch() {
+        // Untrusted input: it lands in a URL, so it must still be a branch.
+        for bad in [#"{"default_branch": "../../evil"}"#, #"{"default_branch": ""}"#, #"{"message": "Not Found"}"#,
+                    "not json", #"{"default_branch": "a?b"}"#] {
+            XCTAssertNil(CatalogueSource.defaultBranch(fromRepositoryInfo: Data(bad.utf8)), bad)
+        }
+        XCTAssertNil(CatalogueSource(repository: "not a repo").repositoryInfoURL)
+    }
+
     func testTheDefaultSourceIsUsable() throws {
         XCTAssertTrue(CatalogueSource.default.isValidRepository)
         XCTAssertNotNil(CatalogueSource.default.indexURL)

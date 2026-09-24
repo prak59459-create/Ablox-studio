@@ -534,6 +534,32 @@ public struct CatalogueSource: Equatable, Sendable {
         }
     }
 
+    /// The same repository on another branch.
+    public func on(branch: String) -> CatalogueSource {
+        CatalogueSource(repository: repository, reference: branch)
+    }
+
+    /// GitHub's description of the repository, which names its default
+    /// branch. Asked only when the chosen branch has no `index.json` — most
+    /// often because the repository has no `main` — so the list still loads.
+    public var repositoryInfoURL: URL? {
+        isValidRepository ? URL(string: "https://api.github.com/repos/\(repository)") : nil
+    }
+
+    /// The largest repository description worth reading. GitHub's is a few
+    /// kilobytes; anything far bigger is not that.
+    public static let maximumRepositoryInfoBytes = 256 * 1024
+
+    /// The default branch from `repositoryInfoURL`'s JSON, or nil when the
+    /// response is not that, or names something that could not be a branch.
+    public static func defaultBranch(fromRepositoryInfo data: Data) -> String? {
+        guard data.count <= maximumRepositoryInfoBytes else { return nil }
+        struct Info: Decodable { let default_branch: String? }
+        guard let branch = (try? JSONDecoder().decode(Info.self, from: data))?.default_branch,
+              isValidReference(branch) else { return nil }
+        return branch
+    }
+
     /// The page a person can open to read the repository or submit to it.
     public var webURL: URL? {
         isValidRepository ? URL(string: "https://github.com/\(repository)") : nil

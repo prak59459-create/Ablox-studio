@@ -665,6 +665,8 @@ public enum Strings {
          "誰かが公開するとここに並びます。Ablox Studioで自分のものを用意できます。"),
         ("Showing the games saved on this iPad.", "このiPadに保存済みのゲームを表示しています。"),
         ("Could not reach the game list.", "ゲーム一覧に接続できませんでした。"),
+        ("There is no game list on the branch “{}” of {}. Check the repository and branch in Settings.",
+         "ブランチ「{}」（{}）にゲーム一覧がありません。設定のリポジトリとブランチを確認してください。"),
         ("Could not download “{}”.", "「{}」をダウンロードできませんでした。"),
         ("That game's listing is malformed.", "そのゲームの登録情報が壊れています。"),
         ("That world has too many parts to open safely.", "そのワールドはパーツが多すぎて安全に開けません。"),
