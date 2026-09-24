@@ -380,6 +380,16 @@ public struct BoundingBox: Codable, Hashable, Sendable {
         }
     }
 
+    /// Squared distance from `point` to the nearest point of the box; zero
+    /// inside it. Measuring to the nearest edge is what lets a far setting
+    /// hide small distant parts but never the ground under your feet.
+    public func distanceSquared(to point: Vec3) -> Float {
+        let dx = Swift.max(min.x - point.x, 0, point.x - max.x)
+        let dy = Swift.max(min.y - point.y, 0, point.y - max.y)
+        let dz = Swift.max(min.z - point.z, 0, point.z - max.z)
+        return dx * dx + dy * dy + dz * dz
+    }
+
     /// Union of a sequence of boxes, or `nil` when empty. Used for
     /// "frame selection" in the Studio viewport.
     public static func containing<S: Sequence>(_ boxes: S) -> BoundingBox? where S.Element == BoundingBox {
@@ -411,31 +421,33 @@ public struct Ray: Sendable {
     /// distance, or `nil` when the ray misses. A ray starting inside the box
     /// reports distance 0.
     public func intersects(_ box: BoundingBox) -> Float? {
+        // Axis by axis with plain scalars rather than through little arrays:
+        // this runs for every block along a shot or a camera line, and four
+        // array allocations per block were most of its cost.
         var tMin: Float = 0
         var tMax: Float = .greatestFiniteMagnitude
-
-        let origins = [origin.x, origin.y, origin.z]
-        let directions = [direction.x, direction.y, direction.z]
-        let mins = [box.min.x, box.min.y, box.min.z]
-        let maxs = [box.max.x, box.max.y, box.max.z]
-
-        for axis in 0..<3 {
-            let d = directions[axis]
-            let o = origins[axis]
-            if abs(d) < 1e-6 {
-                // Parallel to this slab: miss unless the origin is within it.
-                if o < mins[axis] || o > maxs[axis] { return nil }
-                continue
-            }
-            let inv = 1 / d
-            var t1 = (mins[axis] - o) * inv
-            var t2 = (maxs[axis] - o) * inv
-            if t1 > t2 { swap(&t1, &t2) }
-            tMin = Swift.max(tMin, t1)
-            tMax = Swift.min(tMax, t2)
-            if tMin > tMax { return nil }
-        }
+        guard Self.clip(origin.x, direction.x, box.min.x, box.max.x, &tMin, &tMax),
+              Self.clip(origin.y, direction.y, box.min.y, box.max.y, &tMin, &tMax),
+              Self.clip(origin.z, direction.z, box.min.z, box.max.z, &tMin, &tMax)
+        else { return nil }
         return tMin
+    }
+
+    /// One slab of the slab method. False when the ray misses.
+    @inline(__always)
+    private static func clip(_ o: Float, _ d: Float, _ low: Float, _ high: Float,
+                             _ tMin: inout Float, _ tMax: inout Float) -> Bool {
+        if abs(d) < 1e-6 {
+            // Parallel to this slab: miss unless the origin is within it.
+            return !(o < low || o > high)
+        }
+        let inv = 1 / d
+        var t1 = (low - o) * inv
+        var t2 = (high - o) * inv
+        if t1 > t2 { swap(&t1, &t2) }
+        tMin = Swift.max(tMin, t1)
+        tMax = Swift.min(tMax, t2)
+        return tMin <= tMax
     }
 
     /// Distance at which the ray crosses the horizontal plane at `height`,

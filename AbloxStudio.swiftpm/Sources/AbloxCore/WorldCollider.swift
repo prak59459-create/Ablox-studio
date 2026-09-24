@@ -69,32 +69,21 @@ public enum WorldCollider {
         world: WorldDocument,
         deltaTime: Float
     ) -> CollisionResult {
+        resolve(position: position, velocity: velocity, body: body, index: WorldIndex(world: world), deltaTime: deltaTime)
+    }
+
+    /// One collision step against an index built earlier — what the render
+    /// loop and the host's NPCs use, so a big world is not re-measured for
+    /// every character on every frame.
+    public static func resolve(
+        position: Vec3,
+        velocity: Vec3,
+        body: CharacterBody = .default,
+        index: WorldIndex,
+        deltaTime: Float
+    ) -> CollisionResult {
         let dt = Swift.max(0, Swift.min(deltaTime, 0.1))
-
-        var solids: [BoundingBox] = []
-        var triggers: [(id: UUID, box: BoundingBox)] = []
-
-        for block in world.blocks {
-            guard block.isVisible, block.hasCollision else {
-                // An invisible or non-colliding block can still be a trigger
-                // the author expects to fire, but only if it means something.
-                if block.behavior.needsTouchDetection, block.isVisible,
-                   let box = world.worldBounds(of: block.id) {
-                    triggers.append((block.id, box))
-                }
-                continue
-            }
-            guard let box = world.worldBounds(of: block.id) else { continue }
-
-            if isPassThrough(block.behavior) {
-                triggers.append((block.id, box))
-            } else {
-                solids.append(box)
-                if block.behavior.needsTouchDetection {
-                    triggers.append((block.id, box))
-                }
-            }
-        }
+        let solids = Solids(index: index)
 
         var p = position
         var v = velocity
@@ -130,7 +119,7 @@ public enum WorldCollider {
             var probe = p
             probe.y -= groundProbeDepth
             let probeBox = body.bounds(at: probe)
-            grounded = solids.contains { probeBox.penetrates($0) }
+            grounded = solids.any(penetratedBy: probeBox)
         }
 
         // Triggers are tested against a box grown by the ground probe depth,
@@ -144,9 +133,40 @@ public enum WorldCollider {
         // Erring toward triggers firing is the right direction here: a coin
         // you nearly touched should count.
         let playerBox = body.bounds(at: p).expanded(by: groundProbeDepth)
-        let touched = triggers.filter { $0.box.intersects(playerBox) }.map(\.id)
+        let touched = index.entries(near: playerBox).filter(isTrigger).map(\.id)
 
         return CollisionResult(position: p, velocity: v, isGrounded: grounded, touchedBlockIDs: touched)
+    }
+
+    /// Something you stand on or walk into.
+    private static func isSolid(_ entry: WorldIndex.Entry) -> Bool {
+        entry.isVisible && entry.hasCollision && !isPassThrough(entry.behavior)
+    }
+
+    /// Something that reports being touched. The rules the full-list
+    /// version had: visible, and either pass-through or a block whose
+    /// behaviour needs touches, colliding or not.
+    private static func isTrigger(_ entry: WorldIndex.Entry) -> Bool {
+        guard entry.isVisible else { return false }
+        if entry.hasCollision {
+            return isPassThrough(entry.behavior) || entry.behavior.needsTouchDetection
+        }
+        return entry.behavior.needsTouchDetection
+    }
+
+    /// The solid blocks, asked about one box at a time, so each question
+    /// only looks at the blocks near that box.
+    struct Solids {
+        let index: WorldIndex
+
+        /// The first solid, in document order, that `box` sinks into.
+        func first(penetratedBy box: BoundingBox) -> BoundingBox? {
+            index.entries(near: box).first { isSolid($0) && box.penetrates($0.bounds) }?.bounds
+        }
+
+        func any(penetratedBy box: BoundingBox) -> Bool {
+            first(penetratedBy: box) != nil
+        }
     }
 
     /// Behaviours a player walks through rather than into.
@@ -181,7 +201,7 @@ public enum WorldCollider {
         position p: inout Vec3,
         velocity: Float,
         body: CharacterBody,
-        solids: [BoundingBox],
+        solids: Solids,
         stepHeight: Float
     ) -> Float? {
         guard velocity != 0 else { return nil }
@@ -191,7 +211,7 @@ public enum WorldCollider {
         // but a bounded loop keeps one bad frame from spinning forever.
         for _ in 0..<4 {
             let box = body.bounds(at: p)
-            guard let blocker = solids.first(where: { box.penetrates($0) }) else { break }
+            guard let blocker = solids.first(penetratedBy: box) else { break }
 
             // A low obstacle is stepped over rather than walked into.
             let rise = blocker.max.y - p.y
@@ -199,7 +219,7 @@ public enum WorldCollider {
                 var stepped = p
                 stepped.y = blocker.max.y
                 let steppedBox = body.bounds(at: stepped)
-                if !solids.contains(where: { steppedBox.penetrates($0) }) {
+                if !solids.any(penetratedBy: steppedBox) {
                     p = stepped
                     continue
                 }
@@ -226,13 +246,13 @@ public enum WorldCollider {
         position p: inout Vec3,
         velocity v: inout Vec3,
         body: CharacterBody,
-        solids: [BoundingBox],
+        solids: Solids,
         movingUp: Bool
     ) -> Bool {
         var landed = false
         for _ in 0..<4 {
             let box = body.bounds(at: p)
-            guard let blocker = solids.first(where: { box.penetrates($0) }) else { break }
+            guard let blocker = solids.first(penetratedBy: box) else { break }
 
             if movingUp {
                 // Hit a ceiling: stop rising, and start falling immediately

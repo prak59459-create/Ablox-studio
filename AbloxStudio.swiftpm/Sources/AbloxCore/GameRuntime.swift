@@ -66,6 +66,11 @@ public final class GameRuntime {
     public private(set) var hasStarted = false
 
     public var world: WorldDocument { machine.world }
+
+    /// Block bounds and a grid over them, rebuilt only when the blocks
+    /// change — see `WorldIndex`. NPC movement and every shot use it.
+    private let worldIndexCache = WorldIndexCache()
+    var worldIndex: WorldIndex { worldIndexCache.index(for: world) }
     public var players: [PeerID: PlayerSnapshot] { machine.players }
     public var isRoundOver: Bool { machine.isRoundOver }
     public var isScriptRunning: Bool { interpreter != nil }
@@ -579,10 +584,7 @@ public final class GameRuntime {
     }
 
     func solidBlocks() -> [(id: UUID, bounds: BoundingBox)] {
-        world.blocks.compactMap { block in
-            guard block.isVisible, block.hasCollision, let bounds = world.worldBounds(of: block.id) else { return nil }
-            return (block.id, bounds)
-        }
+        worldIndex.solidBlocks
     }
 
     // MARK: NPCs
@@ -595,6 +597,8 @@ public final class GameRuntime {
         guard step > 0 else { return }
         let config = MovementConfig.default
         let gravityScale = worldGravityScale
+        // One index for every NPC this step: NPCs do not move blocks.
+        let index = worldIndex
 
         for state in orderedStates where state.isNPC {
             guard var body = state.body else { continue }
@@ -622,7 +626,7 @@ public final class GameRuntime {
             let result = WorldCollider.resolve(position: body.position, velocity: velocity,
                                                body: CharacterBody(radius: 0.4 * state.profile.height,
                                                                    height: 1.8 * state.profile.height),
-                                               world: world, deltaTime: step)
+                                               index: index, deltaTime: step)
             // Walking into a step it cannot walk up: hop, as a player would.
             let wanted = Vec3(desired.x, 0, desired.z).length
             let got = Vec3(result.velocity.x, 0, result.velocity.z).length
@@ -841,7 +845,7 @@ public final class GameRuntime {
     }
 
     func blockID(_ object: ScriptObject) -> UUID? {
-        guard object.kind == "block", let uuid = UUID(uuidString: object.id), world.block(id: uuid) != nil else { return nil }
+        guard object.kind == "block", let uuid = UUID(uuidString: object.id), worldIndex.entry(for: uuid) != nil else { return nil }
         return uuid
     }
 }

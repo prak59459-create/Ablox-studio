@@ -625,11 +625,15 @@ extension GameRuntime: ScriptObjectResolver {
     // MARK: Blocks
 
     private func blockMember(_ object: ScriptObject, _ name: String, line: Int) throws -> ScriptValue {
-        guard let id = blockID(object), let block = world.block(id: id) else {
+        // Through the index: a plain lookup searched every block, and a
+        // script looping over its blocks paid that for each one.
+        let index = worldIndex
+        guard let id = blockID(object), let entry = index.entry(for: id) else {
             if name == "name" { return .string(object.displayName) }
             return .null
         }
-        let position = world.worldPosition(of: id)
+        let block = world.blocks[entry.order]
+        let position = entry.position
         switch name {
         case "name": return .string(block.name)
         case "id": return .string(String(id.uuidString.prefix(8)))
@@ -1330,7 +1334,7 @@ extension GameRuntime: ScriptObjectResolver {
         switch value {
         case let .object(object):
             if let state = character(object), let position = position(of: state) { return position }
-            if let id = blockID(object) { return world.worldPosition(of: id) }
+            if let id = blockID(object) { return worldIndex.entry(for: id)?.position ?? world.worldPosition(of: id) }
         case .map:
             return try vector(value, line: line)
         default:
@@ -1348,8 +1352,9 @@ extension GameRuntime: ScriptObjectResolver {
         if case let .object(object) = value, let id = blockID(object) {
             // A metre above the top face, as checkpoints do, so nobody lands
             // inside the block.
-            if let bounds = world.worldBounds(of: id) {
-                let centre = world.worldPosition(of: id)
+            if let entry = worldIndex.entry(for: id) {
+                let bounds = entry.bounds
+                let centre = entry.position
                 return Vec3(centre.x, bounds.max.y + 1, centre.z)
             }
         }

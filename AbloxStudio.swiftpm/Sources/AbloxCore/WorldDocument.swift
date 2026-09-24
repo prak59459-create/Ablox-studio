@@ -225,7 +225,12 @@ public extension WorldDocument {
     /// itself (the box is grown to cover the rotated extents).
     func worldBounds(of id: UUID) -> BoundingBox? {
         guard let block = block(id: id) else { return nil }
-        let t = worldTransform(of: id)
+        return Self.bounds(of: block, at: worldTransform(of: id))
+    }
+
+    /// The AABB of `block` placed at world transform `t`. Shared with
+    /// `WorldIndex`, so the fast path and this one give the same box.
+    static func bounds(of block: BlockData, at t: Transform3D) -> BoundingBox {
         let half = block.shape.unitBounds.size * t.scale * 0.5
 
         // Project the rotated half-extents onto the world axes so the AABB

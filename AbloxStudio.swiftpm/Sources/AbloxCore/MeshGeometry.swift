@@ -202,6 +202,43 @@ public struct MeshGeometry: Equatable, Sendable {
         return builder.geometry
     }
 
+    /// A UV sphere: `rings` bands from pole to pole, `segments` around.
+    ///
+    /// RealityKit's own `generateSphere` has no detail setting, so the
+    /// lighter graphics settings use this one with fewer bands. The rows at
+    /// the poles are single triangles, since their top (or bottom) edge is a
+    /// point.
+    public static func sphere(radius: Float, rings: Int = 16, segments: Int = 24) -> MeshGeometry {
+        var builder = Builder()
+        let rings = Swift.max(2, rings)
+        let segments = Swift.max(3, segments)
+
+        for ring in 0...rings {
+            let v = Float(ring) / Float(rings)
+            let polar = v * Float.pi
+            let height = cos(polar)
+            let width = sin(polar)
+            for step in 0...segments {
+                let u = Float(step) / Float(segments)
+                let angle = u * 2 * Float.pi
+                let normal = Vec3(width * cos(angle), height, width * sin(angle))
+                builder.addVertex(position: normal * radius, normal: normal, texture: TexCoord(u: u, v: 1 - v))
+            }
+        }
+
+        let stride = UInt32(segments + 1)
+        for ring in 0..<rings {
+            for step in 0..<segments {
+                let upper = UInt32(ring) * stride + UInt32(step)
+                let lower = upper + stride
+                // Both orders checked in MeshGeometryTests to face outward.
+                if ring != 0 { builder.addTriangle(upper, upper + 1, lower) }
+                if ring != rings - 1 { builder.addTriangle(upper + 1, lower + 1, lower) }
+            }
+        }
+        return builder.geometry
+    }
+
     // MARK: - Builder
 
     private struct Builder {

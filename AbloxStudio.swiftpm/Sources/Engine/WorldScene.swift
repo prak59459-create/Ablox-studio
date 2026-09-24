@@ -22,7 +22,22 @@ public final class WorldScene {
     private var sunLight: DirectionalLight?
     private var groundEntity: ModelEntity?
 
-    public init() {
+    /// Whether each part gets a RealityKit collider. The Studio's editor
+    /// picks parts through them; a game works everything out from the
+    /// document instead and leaves them off.
+    private let collisionShapes: Bool
+    /// How detailed the parts and shadows are — see `GraphicsProfile`.
+    public private(set) var profile = GraphicsProfile.profile(for: .high)
+    /// Hidden by a runtime effect rather than by the document.
+    private var effectHidden: Set<UUID> = []
+    /// Too far away to draw at the current view distance.
+    private var culled: Set<UUID> = []
+    /// Blocks with children. Never hidden for distance: hiding an entity
+    /// hides everything under it, and a child can be much nearer.
+    private var parentIDs: Set<UUID> = []
+
+    public init(collisionShapes: Bool = true) {
+        self.collisionShapes = collisionShapes
         root.name = "ablox.world"
         lightingAnchor.addChild(root)
     }
@@ -45,20 +60,33 @@ public final class WorldScene {
 
         var seen = Set<UUID>()
 
+        // Children grouped by parent once, rather than asking the document
+        // for each block's children — that was a search of every block, per
+        // block, on every change.
+        var children: [UUID?: [BlockData]] = [:]
+        let known = Set(world.blocks.map(\.id))
+        for block in world.blocks {
+            let parent = block.parentID.flatMap { known.contains($0) ? $0 : nil }
+            children[parent, default: []].append(block)
+        }
+        parentIDs = Set(children.keys.compactMap { $0 })
+
         // Parents must exist before children can be attached to them, so walk
         // the tree top-down rather than iterating the flat array.
-        var queue: [BlockData] = world.rootBlocks
-        while let block = queue.first {
-            queue.removeFirst()
-            seen.insert(block.id)
+        var queue: [BlockData] = children[nil] ?? []
+        var next = 0
+        while next < queue.count {
+            let block = queue[next]
+            next += 1
+            guard seen.insert(block.id).inserted else { continue }
             upsert(block, in: world, physicsChanged: physicsChanged)
-            queue.append(contentsOf: world.children(of: block.id))
+            queue.append(contentsOf: children[block.id] ?? [])
         }
 
         // Any block in the flat array we never reached is orphaned by a
-        // dangling parent link. Render it at the top level rather than
-        // silently dropping it — an invisible block is a confusing bug,
-        // a misplaced one is an obvious `validate()` warning.
+        // dangling parent link or a parent cycle. Render it at the top level
+        // rather than silently dropping it — an invisible block is a
+        // confusing bug, a misplaced one is an obvious `validate()` warning.
         for block in world.blocks where !seen.contains(block.id) {
             seen.insert(block.id)
             upsert(block, in: world, physicsChanged: physicsChanged, forceTopLevel: true)
@@ -68,6 +96,8 @@ public final class WorldScene {
             entity.removeFromParent()
             entities.removeValue(forKey: id)
             lastAppliedBlocks.removeValue(forKey: id)
+            effectHidden.remove(id)
+            culled.remove(id)
         }
     }
 
@@ -82,11 +112,16 @@ public final class WorldScene {
                 return
             }
         } else {
-            entity = BlockEntityFactory.makeEntity(for: block)
+            entity = BlockEntityFactory.makeEntity(for: block, profile: profile, collisionShapes: collisionShapes)
             entities[block.id] = entity
         }
 
-        BlockEntityFactory.apply(block, to: entity, physicsEnabled: physicsEnabled && block.hasCollision)
+        if let previous = lastAppliedBlocks[block.id], previous.shape != block.shape {
+            entity.model?.mesh = BlockEntityFactory.mesh(for: block.shape, profile: profile)
+        }
+        BlockEntityFactory.apply(block, to: entity, physicsEnabled: physicsEnabled && block.hasCollision,
+                                 collisionShapes: collisionShapes)
+        if culled.contains(block.id) || effectHidden.contains(block.id) { entity.isEnabled = false }
         lastAppliedBlocks[block.id] = block
         reparentIfNeeded(entity, block: block, forceTopLevel: forceTopLevel)
     }
@@ -117,7 +152,7 @@ public final class WorldScene {
         } else {
             light = DirectionalLight()
             light.light.color = .white
-            light.shadow = DirectionalLightComponent.Shadow(maximumDistance: 40, depthBias: 1.5)
+            applyShadow(to: light)
             lightingAnchor.addChild(light)
             sunLight = light
         }
@@ -165,6 +200,53 @@ public final class WorldScene {
         groundEntity = ground
     }
 
+    // MARK: Graphics
+
+    /// Switches to another quality level: meshes, shadows and view distance.
+    public func setGraphics(_ newProfile: GraphicsProfile) {
+        guard newProfile != profile else { return }
+        let meshesChanged = newProfile.smoothShapes != profile.smoothShapes
+            || newProfile.roundSegments != profile.roundSegments
+            || newProfile.sphereRings != profile.sphereRings
+        profile = newProfile
+        if let sunLight { applyShadow(to: sunLight) }
+        if meshesChanged {
+            for (id, entity) in entities {
+                guard let block = lastAppliedBlocks[id] else { continue }
+                entity.model?.mesh = BlockEntityFactory.mesh(for: block.shape, profile: profile)
+            }
+        }
+        if profile.viewDistance == nil { showAllCulled() }
+    }
+
+    private func applyShadow(to light: DirectionalLight) {
+        light.shadow = profile.shadowDistance.map { DirectionalLightComponent.Shadow(maximumDistance: $0, depthBias: 1.5) }
+    }
+
+    /// Hides parts further than the view distance from `eye`, and shows the
+    /// ones that have come back into range. Called a few times a second,
+    /// not every frame: nobody walks 80 m in a quarter of a second.
+    public func cull(from eye: Vec3, index: WorldIndex) {
+        guard let distance = profile.viewDistance else { return }
+        let limit = distance * distance
+        for (id, entity) in entities {
+            guard !parentIDs.contains(id), let bounds = index.bounds(of: id) else { continue }
+            let far = bounds.distanceSquared(to: eye) > limit
+            if far {
+                if culled.insert(id).inserted { entity.isEnabled = false }
+            } else if culled.remove(id) != nil {
+                entity.isEnabled = (lastAppliedBlocks[id]?.isVisible ?? true) && !effectHidden.contains(id)
+            }
+        }
+    }
+
+    private func showAllCulled() {
+        for id in culled {
+            entities[id]?.isEnabled = (lastAppliedBlocks[id]?.isVisible ?? true) && !effectHidden.contains(id)
+        }
+        culled.removeAll()
+    }
+
     // MARK: Lookup
 
     public func entity(for blockID: UUID) -> ModelEntity? {
@@ -198,6 +280,9 @@ public final class WorldScene {
         for entity in entities.values { entity.removeFromParent() }
         entities.removeAll()
         lastAppliedBlocks.removeAll()
+        effectHidden.removeAll()
+        culled.removeAll()
+        parentIDs.removeAll()
     }
 
     // MARK: Runtime effects
@@ -226,7 +311,8 @@ public final class WorldScene {
             }
 
         case let .setVisible(blockID, visible):
-            entities[blockID]?.isEnabled = visible
+            if visible { effectHidden.remove(blockID) } else { effectHidden.insert(blockID) }
+            entities[blockID]?.isEnabled = visible && !culled.contains(blockID)
 
         case let .setCollision(blockID, enabled):
             // Only the removal has to happen now — a floor that vanishes must
@@ -247,6 +333,8 @@ public final class WorldScene {
     }
 
     private func applyInstantTint(_ color: ColorRGBA, to entity: ModelEntity) {
+        // A fresh material, never the shared one from `BlockEntityFactory`:
+        // tinting that would repaint every block of the same colour.
         var material = SimpleMaterial()
         material.color = .init(tint: UIColor(
             red: CGFloat(color.r), green: CGFloat(color.g), blue: CGFloat(color.b), alpha: CGFloat(color.a)

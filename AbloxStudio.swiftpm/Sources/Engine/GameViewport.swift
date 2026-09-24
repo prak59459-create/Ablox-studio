@@ -25,6 +25,10 @@ public struct GameViewport: UIViewRepresentable {
     var hapticsEnabled: Bool
     /// The fire button is held. Shots go out at the weapon's rate while it is.
     var isFiring: Bool
+    /// Settings → Graphics. `auto` steps down by itself below 30 fps.
+    var graphicsQuality: GraphicsQuality
+    /// A small frame-rate counter at the top of the screen.
+    var showFrameRate: Bool
 
     public init(
         session: SessionCoordinator,
@@ -34,6 +38,8 @@ public struct GameViewport: UIViewRepresentable {
         soundEnabled: Bool = true,
         hapticsEnabled: Bool = true,
         isFiring: Bool = false,
+        graphicsQuality: GraphicsQuality = .auto,
+        showFrameRate: Bool = false,
         onBlockTapped: ((UUID) -> Void)? = nil
     ) {
         self.session = session
@@ -43,6 +49,8 @@ public struct GameViewport: UIViewRepresentable {
         self.soundEnabled = soundEnabled
         self.hapticsEnabled = hapticsEnabled
         self.isFiring = isFiring
+        self.graphicsQuality = graphicsQuality
+        self.showFrameRate = showFrameRate
         self.onBlockTapped = onBlockTapped
     }
 
@@ -69,6 +77,7 @@ public struct GameViewport: UIViewRepresentable {
     public func updateUIView(_ view: ARView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.setFeedbackEnabled(sound: soundEnabled, haptics: hapticsEnabled)
+        context.coordinator.setGraphics(quality: graphicsQuality, showFrameRate: showFrameRate)
         context.coordinator.syncWorld(session.world)
         context.coordinator.syncRoster(session.roster, localPeerID: session.localPeerID)
         // Effects are drained in the render loop, not here: `drainEffects()`
@@ -90,7 +99,22 @@ public struct GameViewport: UIViewRepresentable {
     public final class Coordinator {
         var parent: GameViewport
 
-        private let worldScene = WorldScene()
+        /// No RealityKit colliders: movement, shots and taps all use the
+        /// world index, and a collider per part was work nothing read.
+        private let worldScene = WorldScene(collisionShapes: false)
+        /// Block bounds and a grid over them, rebuilt only when blocks change.
+        private let indexCache = WorldIndexCache()
+
+        // MARK: Graphics
+
+        private var graphicsQuality: GraphicsQuality = .auto
+        private var governor = FrameRateGovernor()
+        private var appliedProfile: GraphicsProfile?
+        private var cullClock: Float = 0
+        private var fpsLabel: UILabel?
+        private var fpsClock: Float = 0
+        /// Whether each avatar should be shown, before distance is considered.
+        private var avatarHidden: [PeerID: Bool] = [:]
         private let cameraAnchor = AnchorEntity(world: .zero)
         private let camera = PerspectiveCamera()
 
@@ -189,7 +213,10 @@ public struct GameViewport: UIViewRepresentable {
             // does its own per-block diffing anyway.
             guard world.modifiedAt != lastWorldRevision else { return }
             lastWorldRevision = world.modifiedAt
-            worldScene.sync(to: world, physicsEnabled: true)
+            // RealityKit physics only matters for parts that can fall. The
+            // players' own movement never used it, and a static body per part
+            // was simulated every frame for nothing.
+            worldScene.sync(to: world, physicsEnabled: world.blocks.contains { !$0.isAnchored })
 
             // A script can repaint the sky mid-game.
             let sky = world.environment.skyBottom
@@ -212,9 +239,13 @@ public struct GameViewport: UIViewRepresentable {
                     if existing.profile != player.profile {
                         existing.apply(profile: player.profile)
                     }
-                    existing.isEnabled = !player.isHidden
+                    if avatarHidden[player.peerID] != player.isHidden {
+                        avatarHidden[player.peerID] = player.isHidden
+                        existing.isEnabled = !player.isHidden
+                    }
                 } else {
                     let avatar = AvatarEntity(peerID: player.peerID, profile: player.profile, position: player.position)
+                    avatarHidden[player.peerID] = player.isHidden
                     avatar.isEnabled = !player.isHidden
                     worldScene.anchor.addChild(avatar)
                     avatars[player.peerID] = avatar
@@ -224,6 +255,7 @@ public struct GameViewport: UIViewRepresentable {
             for (peerID, avatar) in avatars where !seen.contains(peerID) {
                 avatar.removeFromParent()
                 avatars.removeValue(forKey: peerID)
+                avatarHidden.removeValue(forKey: peerID)
             }
 
             // As the host last said: a script may have recoloured or resized
@@ -293,8 +325,10 @@ public struct GameViewport: UIViewRepresentable {
 
         private func tick(deltaTime: Float) {
             let world = parent.session.world
+            let index = indexCache.index(for: world)
             let dt = min(deltaTime, 1.0 / 20)
             elapsed += Double(dt)
+            watchFrameRate(deltaTime)
 
             // 1. Intent → velocity, scaled by whatever the script allows.
             let scripted = parent.session.scripted
@@ -328,7 +362,7 @@ public struct GameViewport: UIViewRepresentable {
                 position: localSnapshot.position,
                 velocity: localSnapshot.velocity,
                 body: CharacterBody(radius: 0.4 * size, height: 1.8 * size),
-                world: world,
+                index: index,
                 deltaTime: dt
             )
             localSnapshot.position = collision.position
@@ -354,17 +388,116 @@ public struct GameViewport: UIViewRepresentable {
             let effects = parent.session.drainEffects()
             if !effects.isEmpty { apply(effects: effects) }
 
-            updateCamera(dt: dt)
+            updateCamera(dt: dt, index: index)
             updateWeapons(dt: dt)
-            if parent.isFiring { fireIfReady() }
+            if parent.isFiring { fireIfReady(index: index) }
             fadeTracers(dt: dt)
             publishIfDue()
+
+            cullClock += dt
+            if cullClock >= 0.25 {
+                cullClock = 0
+                cullFarAway(index: index)
+            }
+        }
+
+        // MARK: Graphics
+
+        func setGraphics(quality: GraphicsQuality, showFrameRate: Bool) {
+            if quality != graphicsQuality || appliedProfile == nil {
+                graphicsQuality = quality
+                // Auto starts from the top and steps down if it has to.
+                governor = FrameRateGovernor(startingAt: quality.fixedLevel ?? .high)
+                apply(profile: .profile(for: governor.level))
+            }
+            setFrameRateLabel(visible: showFrameRate)
+        }
+
+        private func apply(profile: GraphicsProfile) {
+            guard profile != appliedProfile else { return }
+            appliedProfile = profile
+            worldScene.setGraphics(profile)
+            guard let view else { return }
+
+            // Fewer pixels: the biggest single saving on an iPad's screen.
+            let native = view.window?.windowScene?.screen.scale ?? view.traitCollection.displayScale
+            if native > 0 {
+                view.contentScaleFactor = native * CGFloat(profile.resolutionScale)
+            }
+
+            let effects: ARView.RenderOptions = [.disableHDR, .disableGroundingShadows, .disableDepthOfField]
+            if profile.postEffects {
+                view.renderOptions.subtract(effects)
+            } else {
+                view.renderOptions.formUnion(effects)
+            }
+            cullClock = 1
+        }
+
+        /// Feeds the frame time to the governor, which on Auto may pick
+        /// another level, and keeps the counter up to date.
+        private func watchFrameRate(_ frameTime: Float) {
+            if let level = governor.record(frameTime: Double(frameTime)), graphicsQuality == .auto {
+                apply(profile: .profile(for: level))
+            }
+            fpsClock += frameTime
+            if fpsClock >= 0.5, let fpsLabel, !fpsLabel.isHidden {
+                fpsClock = 0
+                let fps = Int(governor.framesPerSecond.rounded())
+                let level = appliedProfile?.level ?? governor.level
+                var text = "\(fps) fps · \(level.displayName)"
+                if graphicsQuality == .auto { text += " (" + GraphicsQuality.auto.displayName + ")" }
+                fpsLabel.text = text
+                fpsLabel.textColor = fps >= Int(FrameRateGovernor.minimumFPS) ? .white : UIColor(red: 1, green: 0.55, blue: 0.5, alpha: 1)
+            }
+        }
+
+        private func setFrameRateLabel(visible: Bool) {
+            guard let view else { return }
+            if visible, fpsLabel == nil {
+                let label = UILabel()
+                label.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+                label.textColor = .white
+                label.backgroundColor = UIColor.black.withAlphaComponent(0.45)
+                label.textAlignment = .center
+                label.layer.cornerRadius = 6
+                label.clipsToBounds = true
+                label.text = "… fps"
+                label.translatesAutoresizingMaskIntoConstraints = false
+                view.addSubview(label)
+                NSLayoutConstraint.activate([
+                    label.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 2),
+                    label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                    label.widthAnchor.constraint(equalToConstant: 170),
+                    label.heightAnchor.constraint(equalToConstant: 18)
+                ])
+                fpsLabel = label
+            }
+            fpsLabel?.isHidden = !visible
+        }
+
+        /// Hides parts and characters beyond the view distance.
+        private func cullFarAway(index: WorldIndex) {
+            let eye = Vec3(camera.position(relativeTo: nil))
+            worldScene.cull(from: eye, index: index)
+
+            let distance = appliedProfile?.viewDistance
+            for (peer, avatar) in avatars {
+                let hidden = avatarHidden[peer] ?? false
+                var show = !hidden
+                if show, let distance {
+                    // A little further than parts: a person popping in is
+                    // more noticeable than a crate.
+                    show = avatar.targetPosition.distance(to: eye) <= distance * 1.25
+                }
+                if avatar.isEnabled != show { avatar.isEnabled = show }
+            }
         }
 
         /// The camera the world's script asked for: behind the player (the
         /// default, pulled in when a wall is in the way), at their eyes,
         /// looking down from above, or fixed in the world.
-        private func updateCamera(dt: Float) {
+        private func updateCamera(dt: Float, index: WorldIndex) {
             let settings = parent.session.scripted.camera
             let size = parent.session.localAppearance.height
             camera.camera.fieldOfViewInDegrees = max(10, min(150, settings.fieldOfView))
@@ -429,9 +562,10 @@ public struct GameViewport: UIViewRepresentable {
             // the camera crosses a block, sit just in front of it.
             var distance = desiredDistance
             let ray = Ray(origin: focus, direction: offset)
-            for block in parent.session.world.blocks where block.hasCollision && block.isVisible {
-                guard let bounds = parent.session.world.worldBounds(of: block.id) else { continue }
-                if let hit = ray.intersects(bounds.expanded(by: 0.25)), hit < distance {
+            // Only the parts near the line from the player to the camera.
+            let reach = BoundingBox(min: focus.componentMin(focus + offset), max: focus.componentMax(focus + offset)).expanded(by: 0.5)
+            for entry in index.entries(near: reach) where entry.hasCollision && entry.isVisible {
+                if let hit = ray.intersects(entry.bounds.expanded(by: 0.25)), hit < distance {
                     distance = max(1.5, hit)
                 }
             }
@@ -476,7 +610,7 @@ public struct GameViewport: UIViewRepresentable {
 
         /// Sends a shot when the weapon is ready. Only a request: the host
         /// checks the rate, the ammo and where we are, and decides the hit.
-        private func fireIfReady() {
+        private func fireIfReady(index: WorldIndex) {
             let scripted = parent.session.scripted
             guard scripted.canFire, let weapon = scripted.weapon else { return }
             let interval = 1 / max(weapon.fireRate, 0.2)
@@ -485,19 +619,15 @@ public struct GameViewport: UIViewRepresentable {
             recoil = 1
 
             let eyes = localSnapshot.position + Vec3(0, PlayerHitBody.eyeHeight * parent.session.localAppearance.height, 0)
-            parent.session.send(input: .fire(origin: eyes, direction: aimDirection(from: eyes, range: weapon.range)))
+            parent.session.send(input: .fire(origin: eyes, direction: aimDirection(from: eyes, range: weapon.range, index: index)))
         }
 
         /// The shot leaves the eyes but must land under the crosshair, which
         /// in third person sits on a ray from the camera several metres
         /// behind them. So: find what the crosshair is on, then aim at that.
-        private func aimDirection(from eyes: Vec3, range: Float) -> Vec3 {
-            let world = parent.session.world
+        private func aimDirection(from eyes: Vec3, range: Float, index: WorldIndex) -> Vec3 {
             let origin = Vec3(camera.position(relativeTo: nil))
-            let blocks: [(id: UUID, bounds: BoundingBox)] = world.blocks.compactMap { block in
-                guard block.isVisible, block.hasCollision, let bounds = world.worldBounds(of: block.id) else { return nil }
-                return (block.id, bounds)
-            }
+            let blocks = index.solidBlocks
             let players: [(peer: PeerID, position: Vec3)] = avatars.map { ($0.key, $0.value.targetPosition) }
             let crosshair = Hitscan.cast(
                 from: origin, direction: viewDirection, range: range + origin.distance(to: eyes),
@@ -568,8 +698,19 @@ public struct GameViewport: UIViewRepresentable {
         @objc func handleTap(_ recognizer: UITapGestureRecognizer) {
             guard let view else { return }
             let location = recognizer.location(in: view)
-            guard let entity = view.entity(at: location),
-                  let blockID = worldScene.blockID(forHit: entity) else { return }
+            // Picked against the world document rather than RealityKit
+            // colliders, which the game no longer builds: the nearest visible,
+            // solid part under the finger that is being drawn.
+            guard let through = view.ray(through: location) else { return }
+            let ray = Ray(origin: Vec3(through.origin), direction: Vec3(through.direction))
+            let index = indexCache.index(for: parent.session.world)
+            let reach = appliedProfile?.viewDistance ?? 400
+            var nearest: (id: UUID, distance: Float)?
+            for entry in index.solidBlocks {
+                guard let hit = ray.intersects(entry.bounds), hit <= reach, hit < (nearest?.distance ?? .greatestFiniteMagnitude) else { continue }
+                nearest = (entry.id, hit)
+            }
+            guard let blockID = nearest?.id else { return }
 
             parent.session.report(blockID: blockID, cause: .tapped)
             parent.onBlockTapped?(blockID)

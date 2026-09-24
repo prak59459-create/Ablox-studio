@@ -26,7 +26,7 @@ enum ProceduralMesh {
     static let defaultSegments = 24
 
     private struct Key: Hashable {
-        enum Shape { case cylinder, cone }
+        enum Shape { case cylinder, cone, sphere }
         var shape: Shape
         var height: Float
         var radius: Float
@@ -52,6 +52,15 @@ enum ProceduralMesh {
         )
     }
 
+    /// A sphere with a chosen number of bands, for the lighter graphics
+    /// settings (RealityKit's own sphere has no detail setting).
+    static func sphere(radius: Float, rings: Int, segments: Int) -> MeshResource {
+        resource(
+            for: Key(shape: .sphere, height: Float(rings), radius: radius, segments: segments),
+            name: "ablox.sphere"
+        )
+    }
+
     private static func resource(for key: Key, name: String) -> MeshResource {
         cacheLock.lock()
         defer { cacheLock.unlock() }
@@ -64,6 +73,9 @@ enum ProceduralMesh {
             geometry = .cylinder(height: key.height, radius: key.radius, segments: key.segments)
         case .cone:
             geometry = .cone(height: key.height, radius: key.radius, segments: key.segments)
+        case .sphere:
+            // `height` carries the band count for a sphere.
+            geometry = .sphere(radius: key.radius, rings: Int(key.height), segments: key.segments)
         }
 
         var descriptor = MeshDescriptor(name: name)
@@ -77,8 +89,14 @@ enum ProceduralMesh {
         // A box rather than a trap: if RealityKit ever refuses the descriptor,
         // the block is the wrong shape, which is visible and reportable. A
         // `try!` here would take the whole world down instead.
-        let mesh = (try? MeshResource.generate(from: [descriptor]))
-            ?? .generateBox(size: SIMD3<Float>(key.radius * 2, key.height, key.radius * 2))
+        let mesh: MeshResource
+        if let made = try? MeshResource.generate(from: [descriptor]) {
+            mesh = made
+        } else if key.shape == .sphere {
+            mesh = .generateSphere(radius: key.radius)
+        } else {
+            mesh = .generateBox(size: SIMD3<Float>(key.radius * 2, key.height, key.radius * 2))
+        }
 
         cache[key] = mesh
         return mesh

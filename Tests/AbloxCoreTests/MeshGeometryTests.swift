@@ -147,6 +147,28 @@ final class MeshGeometryTests: XCTestCase {
         }
     }
 
+    // MARK: Sphere (the lighter graphics settings)
+
+    func testTheSphereIsWellFormedTheRightSizeAndFacesOutward() {
+        for (rings, segments) in [(16, 24), (8, 12), (2, 3)] {
+            let mesh = MeshGeometry.sphere(radius: 0.5, rings: rings, segments: segments)
+            XCTAssertTrue(mesh.isWellFormed)
+            XCTAssertEqual(mesh.triangleCount, segments * (2 * rings - 2))
+            let bounds = mesh.bounds
+            XCTAssertEqual(bounds.max.y, 0.5, accuracy: 1e-5)
+            XCTAssertEqual(bounds.min.y, -0.5, accuracy: 1e-5)
+            XCTAssertEqual(bounds.max.x, 0.5, accuracy: 1e-5)
+            assertAllTrianglesFaceAwayFromTheCentre(of: mesh)
+            for triangle in 0..<mesh.triangleCount {
+                XCTAssertGreaterThan(mesh.faceNormal(ofTriangle: triangle).length, 1e-9)
+            }
+            for (p, n) in zip(mesh.positions, mesh.normals) {
+                XCTAssertEqual(n.length, 1, accuracy: 1e-5)
+                XCTAssertEqual(p.length, 0.5, accuracy: 1e-5)
+            }
+        }
+    }
+
     func testTheCylinderWallShadesAsACurve() {
         // Radial normals, not per-face ones: the difference between a tube and
         // a 24-sided prism.
