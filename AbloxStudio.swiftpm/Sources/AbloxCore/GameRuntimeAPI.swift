@@ -41,7 +41,7 @@ extension GameRuntime: ScriptObjectResolver {
 
     public static let blockMemberNames: [String] = [
         "name", "id", "position", "x", "y", "z", "size", "rotation", "color", "material", "shape",
-        "visible", "solid", "tags", "opacity", "move", "move_to", "rotate", "destroy", "clone"
+        "visible", "solid", "tags", "opacity", "behavior", "move", "move_to", "rotate", "destroy", "clone"
     ]
 
     public static let worldMemberNames: [String] = [
@@ -646,6 +646,7 @@ extension GameRuntime: ScriptObjectResolver {
         case "solid": return .bool(block.hasCollision)
         case "tags": return .list(ScriptList(block.tags.map { .string($0) }))
         case "opacity": return .number(Double(block.color.a))
+        case "behavior": return .string(block.behavior.rawValue)
         case "move", "move_to":
             return method(name) { [unowned self] arguments, line in
                 let seconds: Double
@@ -738,6 +739,17 @@ extension GameRuntime: ScriptObjectResolver {
             block.hasCollision = value.isTruthy
         case "anchored":
             block.isAnchored = value.isTruthy
+        case "behavior":
+            // What touching it does, and whether touching it is noticed at
+            // all: only a block with a behaviour reports `on touch`, so a
+            // script-made coin or door needs "trigger" (walk through it) or
+            // another behaviour to be touchable.
+            let text = value.isNull ? "none" : value.displayText.lowercased()
+            guard let behavior = BlockBehavior(rawValue: text) else {
+                throw ScriptError(line: line, kind: .runtime,
+                                  message: L("“behavior” is one of: {}.", BlockBehavior.allCases.map(\.rawValue).joined(separator: ", ")))
+            }
+            block.behavior = behavior
         case "tags":
             guard case let .list(list) = value else {
                 throw ScriptError(line: line, kind: .runtime, message: L("“tags” needs a list, like [\"coin\"]."))

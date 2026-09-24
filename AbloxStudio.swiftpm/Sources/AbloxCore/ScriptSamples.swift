@@ -273,7 +273,7 @@ public enum ScriptSamples {
                               size: {x: 2, y: 0.5, z: 2}, color: colors[(i - 1) % 6 + 1]})
               end
               create_block({name: "Goal", position: {x: (steps + 1) * 3, y: (steps + 1) * 1.2, z: 0},
-                            size: 3, color: "gold", material: "neon", tags: ["goal"]})
+                            size: 3, color: "gold", material: "neon", tags: ["goal"], behavior: "trigger"})
               -- \(L("Step 6 slides back and forth forever."))
               let mover = block("Step 6")
               every(2, func()

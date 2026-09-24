@@ -140,6 +140,7 @@ public enum ScriptReference {
             Entry("b.position  b.size  b.rotation  b.color  b.opacity  b.material  b.shape",
                   L("Where it is and what it looks like. All can be changed.")),
             Entry("b.visible  b.solid  b.name  b.tags", L("Hide it, let players walk through it, rename or retag it.")),
+            Entry("b.behavior = \"trigger\"", L("What touching it does: trigger, hazard, checkpoint, bounce, collectible and more. Only a block with a behavior reports “on touch”.")),
             Entry("b.move(0, 3, 0, 1)  b.move_to(p, 2)  b.rotate(0, 90, 0)", L("Moves it by x, y, z (or to something) over some seconds, or turns it.")),
             Entry("b.clone()  b.destroy()", L("Copies it, or removes it.")),
             Entry("world.sky = \"#87CEEB\"  world.sky_top  world.sky_bottom  world.light",

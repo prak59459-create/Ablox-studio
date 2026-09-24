@@ -12,6 +12,41 @@ final class ScriptWorldTests: RuntimeTestCase {
         return world
     }
 
+    // MARK: Touchable blocks
+
+    func testAScriptMadeBlockIsTouchableOnlyWithABehavior() {
+        let game = game(#"""
+        on start()
+          create_block({name: "Coin", position: {x: 0, y: 1, z: 0}, behavior: "trigger"})
+          create_block({name: "Rock", position: {x: 5, y: 1, z: 0}})
+        end
+        on touch(p, b)
+          announce(p.name + " touched " + b.name + " (" + b.behavior + ")")
+        end
+        """#, world: floorWorld())
+        startWithBoth(game)
+        let coin = game.world.blocks.first { $0.name == "Coin" }!
+        let rock = game.world.blocks.first { $0.name == "Rock" }!
+        XCTAssertEqual(coin.behavior, .trigger)
+        XCTAssertTrue(coin.behavior.needsTouchDetection, "so the iPad reports touching it")
+        XCTAssertFalse(rock.behavior.needsTouchDetection, "plain scenery is not reported")
+
+        let touching = WorldCollider.resolve(position: Vec3(0, 0.5, 0), velocity: .zero, world: game.world, deltaTime: 0.1)
+        XCTAssertTrue(touching.touchedBlockIDs.contains(coin.id))
+        let effects = game.handle(.touched(peer: alice, blockID: coin.id))
+        XCTAssertTrue(announcements(alice, effects).contains("Alice touched Coin (trigger)"))
+    }
+
+    func testABadBehaviorNamesTheChoices() {
+        let game = game(#"""
+        on start()
+          create_block({name: "X", behavior: "lava"})
+        end
+        """#)
+        startWithBoth(game)
+        XCTAssertTrue(game.drainErrors().first?.message.contains("trigger") ?? false)
+    }
+
     // MARK: NPCs
 
     func testNPCsWalkToWhereTheyAreSent() {
