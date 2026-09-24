@@ -197,18 +197,20 @@ public final class GameLibrary: ObservableObject {
     /// Returns `nil` rather than an error for anything that goes wrong: a
     /// missing picture is a placeholder in the list, never a message.
     public func coverData(for listing: GameListing) async -> Data? {
-        if let cached = coverCache[listing.id] { return cached }
+        let key = coverKey(for: listing)
+        if let cached = coverCache[key] { return cached }
 
-        let fileURL = coverCacheURL(for: listing.id)
+        let fileURL = coverCacheURL(forKey: key)
         if let data = try? Data(contentsOf: fileURL) {
-            coverCache[listing.id] = data
+            coverCache[key] = data
             return data
         }
 
         guard let url = effectiveSource.coverURL(for: listing) else { return nil }
         guard let data = try? await fetch(url, limit: GameCatalogue.Limits.maximumCoverBytes) else { return nil }
 
-        coverCache[listing.id] = data
+        coverCache[key] = data
+        removeOldCovers(of: listing.id, keeping: fileURL)
         try? data.write(to: fileURL, options: .atomic)
         return data
     }
@@ -267,8 +269,34 @@ public final class GameLibrary: ObservableObject {
         cacheDirectory.appendingPathComponent("\(id).ablox")
     }
 
-    private func coverCacheURL(for id: String) -> URL {
-        cacheDirectory.appendingPathComponent("\(id).cover")
+    /// The game and its cover's path. The catalogue publishes a changed
+    /// picture under a new file name, so keying on the path fetches the new
+    /// one instead of showing the first copy ever downloaded forever.
+    ///
+    /// `@` cannot appear in an id, so one game's key is never the start of
+    /// another's.
+    private func coverKey(for listing: GameListing) -> String {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in (listing.cover ?? "").utf8 {
+            hash = (hash ^ UInt64(byte)) &* 0x1000_0000_01b3
+        }
+        return "\(listing.id)@\(String(hash, radix: 16))"
+    }
+
+    private func coverCacheURL(forKey key: String) -> URL {
+        cacheDirectory.appendingPathComponent("\(key).cover")
+    }
+
+    /// Earlier covers of the same game, and the unkeyed file older builds
+    /// wrote.
+    private func removeOldCovers(of id: String, keeping current: URL) {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: cacheDirectory.path)) ?? []
+        for name in names where name == "\(id).cover" || (name.hasPrefix("\(id)@") && name.hasSuffix(".cover")) {
+            let url = cacheDirectory.appendingPathComponent(name)
+            if url.lastPathComponent != current.lastPathComponent {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
     }
 
     // MARK: Fetching
