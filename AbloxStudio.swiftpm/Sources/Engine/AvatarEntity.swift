@@ -24,6 +24,13 @@ public final class AvatarEntity: Entity {
     private let leftLeg = ModelEntity()
     private let rightLeg = ModelEntity()
     private var hatEntity: ModelEntity?
+    private var faceEntity: Entity?
+    private var appliedFace: AvatarProfile.Face?
+    private var appliedFaceHeadColor: ColorRGBA?
+    private var petEntity: Entity?
+    private var appliedPet: AvatarProfile.Pet = .none
+    private var appliedPetColor: ColorRGBA?
+    private var petPhase: Float = 0
     private var rideEntity: Entity?
     private var appliedRide: AvatarProfile.Ride = .none
     private var appliedRideColor: ColorRGBA?
@@ -122,8 +129,169 @@ public final class AvatarEntity: Entity {
         // stay in proportion without recomputing every offset.
         scale = SIMD3<Float>(repeating: profile.height)
 
-        applyHat(profile.hat, material: accentMaterial)
+        applyHat(profile.hat, material: profile.hatColor.map { material($0) } ?? accentMaterial)
         applyRide(profile.ride, color: profile.rideColor)
+        applyFace(profile.face)
+        applyPet(profile.pet, color: profile.petColor)
+    }
+
+    // MARK: Face
+
+    /// Eyes and a mouth on the front of the head (the avatar faces -Z).
+    private func applyFace(_ face: AvatarProfile.Face) {
+        // The cat's ears are the head's colour, so a new head colour
+        // rebuilds them too.
+        guard face != appliedFace || (face == .cat && profile.headColor != appliedFaceHeadColor) else { return }
+        appliedFace = face
+        appliedFaceHeadColor = profile.headColor
+        faceEntity?.removeFromParent()
+        let group = Entity()
+        let ink = UnlitMaterial(color: UIColor(red: 0.1, green: 0.11, blue: 0.14, alpha: 1))
+        let front: Float = -0.228
+        func part(_ w: Float, _ h: Float, _ x: Float, _ y: Float, _ material: RealityKit.Material? = nil) {
+            let box = ModelEntity(mesh: .generateBox(size: SIMD3<Float>(w, h, 0.012)), materials: [material ?? ink])
+            box.position = SIMD3<Float>(x, y, front)
+            group.addChild(box)
+        }
+        func eyes(_ w: Float = 0.07, _ h: Float = 0.09) {
+            part(w, h, -0.1, 0.05)
+            part(w, h, 0.1, 0.05)
+        }
+        switch face {
+        case .smile:
+            eyes()
+            part(0.16, 0.035, 0, -0.09)
+        case .grin:
+            eyes()
+            part(0.24, 0.07, 0, -0.09, UnlitMaterial(color: .white))
+            part(0.26, 0.02, 0, -0.05)
+        case .wink:
+            part(0.09, 0.022, -0.1, 0.05)
+            part(0.07, 0.09, 0.1, 0.05)
+            part(0.16, 0.035, 0.02, -0.09)
+        case .cool:
+            part(0.38, 0.1, 0, 0.05)
+            part(0.14, 0.03, 0, -0.1)
+        case .surprised:
+            eyes(0.08, 0.1)
+            part(0.08, 0.08, 0, -0.1)
+        case .sleepy:
+            part(0.09, 0.022, -0.1, 0.04)
+            part(0.09, 0.022, 0.1, 0.04)
+            part(0.07, 0.03, 0, -0.1)
+        case .cat:
+            eyes(0.06, 0.1)
+            part(0.05, 0.03, -0.035, -0.08)
+            part(0.05, 0.03, 0.035, -0.08)
+            part(0.04, 0.03, 0, -0.05, UnlitMaterial(color: UIColor(red: 0.96, green: 0.45, blue: 0.6, alpha: 1)))
+            // Ears, on top of the head.
+            for side: Float in [-1, 1] {
+                let earMaterials: [RealityKit.Material] = head.model?.materials ?? [ink]
+                let ear = ModelEntity(mesh: .generateBox(size: SIMD3<Float>(0.1, 0.12, 0.06)), materials: earMaterials)
+                ear.position = SIMD3<Float>(side * 0.14, 0.27, 0)
+                ear.orientation = simd_quatf(angle: side * 0.3, axis: SIMD3<Float>(0, 0, 1))
+                group.addChild(ear)
+            }
+        case .robot:
+            part(0.34, 0.09, 0, 0.05, UnlitMaterial(color: UIColor(red: 0.3, green: 0.85, blue: 1, alpha: 1)))
+            for i in 0..<4 { part(0.03, 0.05, -0.06 + Float(i) * 0.04, -0.1) }
+        case .heart:
+            let pink = UnlitMaterial(color: UIColor(red: 0.98, green: 0.3, blue: 0.5, alpha: 1))
+            for x: Float in [-0.1, 0.1] {
+                part(0.05, 0.05, x - 0.022, 0.07, pink)
+                part(0.05, 0.05, x + 0.022, 0.07, pink)
+                part(0.06, 0.05, x, 0.035, pink)
+            }
+            part(0.16, 0.035, 0, -0.09)
+        }
+        head.addChild(group)
+        faceEntity = group
+    }
+
+    // MARK: Pet
+
+    /// A small friend beside them: at the feet, or by the shoulder if it
+    /// flies. Built from boxes like everything else.
+    private func applyPet(_ pet: AvatarProfile.Pet, color: ColorRGBA) {
+        guard pet != appliedPet || color != appliedPetColor else { return }
+        appliedPet = pet
+        appliedPetColor = color
+        petEntity?.removeFromParent()
+        petEntity = nil
+        guard pet != .none else { return }
+        let root = Entity()
+        let skin = material(color)
+        let dark = UnlitMaterial(color: UIColor(red: 0.1, green: 0.11, blue: 0.14, alpha: 1))
+        func box(_ size: SIMD3<Float>, _ at: SIMD3<Float>, _ m: RealityKit.Material? = nil, tilt: Float = 0) {
+            let part = ModelEntity(mesh: .generateBox(size: size, cornerRadius: min(size.x, size.y, size.z) * 0.2), materials: [m ?? skin])
+            part.position = at
+            if tilt != 0 { part.orientation = simd_quatf(angle: tilt, axis: SIMD3<Float>(0, 0, 1)) }
+            root.addChild(part)
+        }
+        switch pet {
+        case .none:
+            return
+        case .cat, .dog:
+            box(SIMD3<Float>(0.22, 0.2, 0.36), SIMD3<Float>(0, 0.2, 0))
+            box(SIMD3<Float>(0.22, 0.2, 0.2), SIMD3<Float>(0, 0.36, -0.2))
+            for x: Float in [-0.07, 0.07] {
+                box(SIMD3<Float>(0.06, 0.12, 0.06), SIMD3<Float>(x, 0.05, -0.12))
+                box(SIMD3<Float>(0.06, 0.12, 0.06), SIMD3<Float>(x, 0.05, 0.12))
+                box(SIMD3<Float>(0.035, 0.035, 0.01), SIMD3<Float>(x * 0.8, 0.39, -0.305), dark)
+            }
+            if pet == .cat {
+                box(SIMD3<Float>(0.06, 0.08, 0.04), SIMD3<Float>(-0.07, 0.5, -0.2), tilt: 0.3)
+                box(SIMD3<Float>(0.06, 0.08, 0.04), SIMD3<Float>(0.07, 0.5, -0.2), tilt: -0.3)
+                box(SIMD3<Float>(0.04, 0.24, 0.04), SIMD3<Float>(0, 0.35, 0.2), tilt: 0.2)
+            } else {
+                box(SIMD3<Float>(0.06, 0.12, 0.05), SIMD3<Float>(-0.12, 0.4, -0.2), tilt: -0.4)
+                box(SIMD3<Float>(0.06, 0.12, 0.05), SIMD3<Float>(0.12, 0.4, -0.2), tilt: 0.4)
+                box(SIMD3<Float>(0.08, 0.06, 0.08), SIMD3<Float>(0, 0.33, -0.32))
+                box(SIMD3<Float>(0.04, 0.16, 0.04), SIMD3<Float>(0, 0.32, 0.2), tilt: -0.5)
+            }
+        case .bunny:
+            box(SIMD3<Float>(0.22, 0.22, 0.26), SIMD3<Float>(0, 0.14, 0))
+            box(SIMD3<Float>(0.18, 0.18, 0.18), SIMD3<Float>(0, 0.3, -0.12))
+            box(SIMD3<Float>(0.05, 0.22, 0.04), SIMD3<Float>(-0.05, 0.5, -0.12))
+            box(SIMD3<Float>(0.05, 0.22, 0.04), SIMD3<Float>(0.05, 0.5, -0.12))
+            box(SIMD3<Float>(0.03, 0.03, 0.01), SIMD3<Float>(-0.04, 0.33, -0.215), dark)
+            box(SIMD3<Float>(0.03, 0.03, 0.01), SIMD3<Float>(0.04, 0.33, -0.215), dark)
+        case .bird:
+            box(SIMD3<Float>(0.14, 0.14, 0.2), SIMD3<Float>(0, 0, 0))
+            box(SIMD3<Float>(0.04, 0.03, 0.06), SIMD3<Float>(0, 0.02, -0.13), UnlitMaterial(color: .orange))
+            box(SIMD3<Float>(0.18, 0.02, 0.1), SIMD3<Float>(-0.12, 0.03, 0.02), tilt: 0.4)
+            box(SIMD3<Float>(0.18, 0.02, 0.1), SIMD3<Float>(0.12, 0.03, 0.02), tilt: -0.4)
+        case .slime:
+            let blob = ModelEntity(mesh: .generateSphere(radius: 0.17), materials: [skin])
+            blob.position = SIMD3<Float>(0, 0.14, 0)
+            blob.scale = SIMD3<Float>(1.1, 0.8, 1.1)
+            root.addChild(blob)
+            box(SIMD3<Float>(0.03, 0.05, 0.01), SIMD3<Float>(-0.05, 0.18, -0.17), dark)
+            box(SIMD3<Float>(0.03, 0.05, 0.01), SIMD3<Float>(0.05, 0.18, -0.17), dark)
+        case .robot:
+            box(SIMD3<Float>(0.24, 0.22, 0.2), SIMD3<Float>(0, 0.22, 0))
+            box(SIMD3<Float>(0.18, 0.14, 0.16), SIMD3<Float>(0, 0.41, 0))
+            box(SIMD3<Float>(0.12, 0.03, 0.01), SIMD3<Float>(0, 0.42, -0.085), UnlitMaterial(color: UIColor(red: 0.3, green: 0.9, blue: 1, alpha: 1)))
+            box(SIMD3<Float>(0.02, 0.12, 0.02), SIMD3<Float>(0, 0.54, 0))
+            box(SIMD3<Float>(0.1, 0.1, 0.1), SIMD3<Float>(0, 0.06, 0), dark)
+        case .dragon:
+            box(SIMD3<Float>(0.18, 0.16, 0.3), SIMD3<Float>(0, 0, 0))
+            box(SIMD3<Float>(0.14, 0.13, 0.16), SIMD3<Float>(0, 0.1, -0.2))
+            box(SIMD3<Float>(0.26, 0.02, 0.16), SIMD3<Float>(-0.2, 0.08, 0.02), tilt: 0.5)
+            box(SIMD3<Float>(0.26, 0.02, 0.16), SIMD3<Float>(0.2, 0.08, 0.02), tilt: -0.5)
+            box(SIMD3<Float>(0.05, 0.05, 0.22), SIMD3<Float>(0, -0.02, 0.24))
+            box(SIMD3<Float>(0.03, 0.03, 0.01), SIMD3<Float>(-0.04, 0.13, -0.285), UnlitMaterial(color: .yellow))
+            box(SIMD3<Float>(0.03, 0.03, 0.01), SIMD3<Float>(0.04, 0.13, -0.285), UnlitMaterial(color: .yellow))
+        }
+        root.name = "ablox.avatar.pet"
+        root.position = petHome
+        addChild(root)
+        petEntity = root
+    }
+
+    /// Where the pet stays, beside and a little behind.
+    private var petHome: SIMD3<Float> {
+        appliedPet.flies ? SIMD3<Float>(0.55, 1.75, 0.25) : SIMD3<Float>(0.7, 0, 0.35)
     }
 
     private func material(_ color: ColorRGBA) -> RealityKit.Material {
@@ -341,6 +509,12 @@ public final class AvatarEntity: Entity {
     /// which is moved directly rather than eased.
     public func animate(travelled: Float, deltaTime: Float) {
         strideDistance += travelled
+        if let petEntity {
+            // A small bob, faster while walking; fliers hover.
+            petPhase += deltaTime * (travelled > 0.01 ? 12 : 3)
+            let bob = appliedPet.flies ? sin(petPhase * 0.5) * 0.08 : abs(sin(petPhase)) * 0.06
+            petEntity.position = petHome + SIMD3<Float>(0, bob, 0)
+        }
         let speed = travelled / Swift.max(deltaTime, 1e-4)
         if animateGesture(deltaTime: deltaTime, speed: speed) { return }
         animateLimbs(speed: speed)

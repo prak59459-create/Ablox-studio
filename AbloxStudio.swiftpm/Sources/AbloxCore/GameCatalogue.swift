@@ -69,6 +69,8 @@ public struct GameListing: Codable, Equatable, Identifiable, Sendable {
     /// Repository-relative path to the cover image. Optional: a world without
     /// a picture is listed with a generated placeholder rather than hidden.
     public var cover: String?
+    /// More pictures of the game, from other angles, for its page. Optional.
+    public var shots: [String]?
     /// Repository-relative paths to `.absc` script files, run with the world.
     /// Optional: a world saved by Studio already carries its scripts, and
     /// these are for scripts written and kept as files in the repository —
@@ -92,6 +94,7 @@ public struct GameListing: Codable, Equatable, Identifiable, Sendable {
         summary: String = "",
         world: String,
         cover: String? = nil,
+        shots: [String]? = nil,
         scripts: [String]? = nil,
         tags: [String] = [],
         blockCount: Int = 0,
@@ -105,6 +108,7 @@ public struct GameListing: Codable, Equatable, Identifiable, Sendable {
         self.summary = summary
         self.world = world
         self.cover = cover
+        self.shots = shots
         self.scripts = scripts
         self.tags = tags
         self.blockCount = blockCount
@@ -144,6 +148,8 @@ public extension GameCatalogue {
         public static let maximumBlocks = 5_000
 
         public static let maximumCoverBytes = 4 * 1024 * 1024
+        /// Extra pictures on a game's page.
+        public static let maximumShots = 4
 
         public static let maximumIDLength = 64
         public static let maximumTitleLength = 60
@@ -420,6 +426,14 @@ public extension GameListing {
                 return .invalidPath(field: "cover", value: cover)
             }
         }
+        if let shots {
+            guard shots.count <= Limits.maximumShots else {
+                return .fieldTooLong(field: "shots", limit: Limits.maximumShots)
+            }
+            for path in shots where !Limits.isValidRepositoryPath(path, extensions: Limits.coverExtensions) {
+                return .invalidPath(field: "shots", value: path)
+            }
+        }
         if let scripts {
             guard scripts.count <= Limits.maximumScripts else {
                 return .fieldTooLong(field: "scripts", limit: Limits.maximumScripts)
@@ -524,6 +538,13 @@ public struct CatalogueSource: Equatable, Sendable {
 
     public func coverURL(for listing: GameListing) -> URL? {
         listing.cover.flatMap { url(forPath: $0, extensions: GameCatalogue.Limits.coverExtensions) }
+    }
+
+    /// The listing's extra pictures.
+    public func shotURLs(for listing: GameListing) -> [URL] {
+        (listing.shots ?? []).prefix(GameCatalogue.Limits.maximumShots).compactMap {
+            url(forPath: $0, extensions: GameCatalogue.Limits.coverExtensions)
+        }
     }
 
     /// The listing's `.absc` files, with the name each should have.

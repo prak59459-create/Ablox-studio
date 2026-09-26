@@ -79,6 +79,13 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
     public var rideColor: ColorRGBA
     /// A few words under their name — a badge they earned, "Builder".
     public var title: String
+    /// Eyes and mouth.
+    public var face: Face
+    /// The hat's own colour; nil wears the legs' colour, as before.
+    public var hatColor: ColorRGBA?
+    /// A small friend that follows them about.
+    public var pet: Pet
+    public var petColor: ColorRGBA
 
     public init(
         displayName: String = "Player",
@@ -89,7 +96,11 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         height: Float = 1.0,
         ride: Ride = .none,
         rideColor: ColorRGBA = ColorRGBA(hex: "#EF4444")!,
-        title: String = ""
+        title: String = "",
+        face: Face = .smile,
+        hatColor: ColorRGBA? = nil,
+        pet: Pet = .none,
+        petColor: ColorRGBA = ColorRGBA(hex: "#F59E0B")!
     ) {
         self.displayName = displayName
         self.bodyColor = bodyColor
@@ -100,10 +111,14 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         self.ride = ride
         self.rideColor = rideColor
         self.title = title
+        self.face = face
+        self.hatColor = hatColor
+        self.pet = pet
+        self.petColor = petColor
     }
 
     private enum CodingKeys: String, CodingKey {
-        case displayName, bodyColor, headColor, accentColor, hat, height, ride, rideColor, title
+        case displayName, bodyColor, headColor, accentColor, hat, height, ride, rideColor, title, face, hatColor, pet, petColor
     }
 
     // Written by hand so a profile saved before rides existed — on this
@@ -119,6 +134,10 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         ride = (try? c.decodeIfPresent(Ride.self, forKey: .ride)) ?? Ride.none
         rideColor = (try? c.decodeIfPresent(ColorRGBA.self, forKey: .rideColor)) ?? ColorRGBA(hex: "#EF4444")!
         title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? ""
+        face = (try? c.decodeIfPresent(Face.self, forKey: .face)) ?? .smile
+        hatColor = try? c.decodeIfPresent(ColorRGBA.self, forKey: .hatColor)
+        pet = (try? c.decodeIfPresent(Pet.self, forKey: .pet)) ?? Pet.none
+        petColor = (try? c.decodeIfPresent(ColorRGBA.self, forKey: .petColor)) ?? ColorRGBA(hex: "#F59E0B")!
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -132,6 +151,81 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         try c.encode(ride, forKey: .ride)
         try c.encode(rideColor, forKey: .rideColor)
         if !title.isEmpty { try c.encode(title, forKey: .title) }
+        // Left out at their defaults, so an older iPad reads the profile as it
+        // always did.
+        if face != .smile { try c.encode(face, forKey: .face) }
+        try c.encodeIfPresent(hatColor, forKey: .hatColor)
+        if pet != .none {
+            try c.encode(pet, forKey: .pet)
+            try c.encode(petColor, forKey: .petColor)
+        }
+    }
+
+    /// Eyes and mouth, drawn on the front of the head.
+    public enum Face: String, Codable, CaseIterable, Sendable {
+        case smile, grin, wink, cool, surprised, sleepy, cat, robot, heart
+
+        public var displayName: String {
+            switch self {
+            case .smile: return L("Smile")
+            case .grin: return L("Grin")
+            case .wink: return L("Wink")
+            case .cool: return L("Sunglasses")
+            case .surprised: return L("Surprised")
+            case .sleepy: return L("Sleepy")
+            case .cat: return L("Cat")
+            case .robot: return L("Robot")
+            case .heart: return L("Heart eyes")
+            }
+        }
+
+        public var symbolName: String {
+            switch self {
+            case .smile: return "face.smiling"
+            case .grin: return "face.smiling.inverse"
+            case .wink: return "eye"
+            case .cool: return "sunglasses"
+            case .surprised: return "exclamationmark.bubble"
+            case .sleepy: return "moon.zzz"
+            case .cat: return "cat"
+            case .robot: return "cpu"
+            case .heart: return "heart.circle"
+            }
+        }
+    }
+
+    /// A small friend that follows along.
+    public enum Pet: String, Codable, CaseIterable, Sendable {
+        case none, cat, dog, bunny, bird, slime, robot, dragon
+
+        public var displayName: String {
+            switch self {
+            case .none: return L("None")
+            case .cat: return L("Cat")
+            case .dog: return L("Dog")
+            case .bunny: return L("Bunny")
+            case .bird: return L("Bird")
+            case .slime: return L("Slime")
+            case .robot: return L("Robot")
+            case .dragon: return L("Dragon")
+            }
+        }
+
+        public var symbolName: String {
+            switch self {
+            case .none: return "nosign"
+            case .cat: return "cat.fill"
+            case .dog: return "dog.fill"
+            case .bunny: return "hare.fill"
+            case .bird: return "bird.fill"
+            case .slime: return "drop.fill"
+            case .robot: return "cpu.fill"
+            case .dragon: return "flame.fill"
+            }
+        }
+
+        /// Flying pets sit by the shoulder rather than at the feet.
+        public var flies: Bool { self == .bird || self == .dragon }
     }
 
     /// Something a character rides, drawn around the avatar.

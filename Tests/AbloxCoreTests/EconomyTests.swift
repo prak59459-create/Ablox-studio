@@ -18,6 +18,10 @@ final class EconomyTests: XCTestCase {
                 XCTAssertNotNil(item.color, "\(item.id) is a colour item with no colour")
             case .hat:
                 XCTAssertNotNil(item.hat, "\(item.id) is a hat item with no hat")
+            case .face:
+                XCTAssertNotNil(item.face, "\(item.id) is a face item with no face")
+            case .pet:
+                XCTAssertNotNil(item.pet, "\(item.id) is a pet item with no pet")
             }
             XCTAssertGreaterThanOrEqual(item.price, 0)
             XCTAssertFalse(item.name.isEmpty)
@@ -181,7 +185,8 @@ final class EconomyTests: XCTestCase {
         // added to ShopItem, this test is where it gets argued about.
         for item in ShopCatalogue.items {
             XCTAssertTrue(
-                item.color != nil || item.hat != nil,
+                // A pet only follows its owner about; it never helps them.
+                item.color != nil || item.hat != nil || item.face != nil || item.pet != nil,
                 "\(item.id) carries something that is not appearance"
             )
         }

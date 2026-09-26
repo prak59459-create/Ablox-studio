@@ -15,6 +15,8 @@ public struct ShopItem: Codable, Hashable, Identifiable, Sendable {
         case headColor
         case accentColor
         case hat
+        case face
+        case pet
 
         public var displayName: String {
             switch self {
@@ -22,6 +24,8 @@ public struct ShopItem: Codable, Hashable, Identifiable, Sendable {
             case .headColor: return L("Head & arms")
             case .accentColor: return L("Legs & hat")
             case .hat: return L("Hat")
+            case .face: return L("Face")
+            case .pet: return L("Pet")
             }
         }
     }
@@ -45,6 +49,12 @@ public struct ShopItem: Codable, Hashable, Identifiable, Sendable {
     public let color: ColorRGBA?
     /// For hat items.
     public let hat: AvatarProfile.HatStyle?
+    /// For face items.
+    public let face: AvatarProfile.Face?
+    /// For pet items.
+    public let pet: AvatarProfile.Pet?
+
+    public var rarity: ItemRarity { ItemRarity(price: price) }
 
     public init(
         id: String,
@@ -52,7 +62,9 @@ public struct ShopItem: Codable, Hashable, Identifiable, Sendable {
         kind: Kind,
         price: Int,
         color: ColorRGBA? = nil,
-        hat: AvatarProfile.HatStyle? = nil
+        hat: AvatarProfile.HatStyle? = nil,
+        face: AvatarProfile.Face? = nil,
+        pet: AvatarProfile.Pet? = nil
     ) {
         self.id = id
         self.name = name
@@ -60,6 +72,8 @@ public struct ShopItem: Codable, Hashable, Identifiable, Sendable {
         self.price = price
         self.color = color
         self.hat = hat
+        self.face = face
+        self.pet = pet
     }
 
     /// Items priced 0 are owned from the start and never appear as locked.
@@ -104,6 +118,22 @@ public enum ShopCatalogue {
                 price: hat == .none ? 0 : 75,
                 hat: hat
             ))
+        }
+
+        let facePrices: [AvatarProfile.Face: Int] = [.smile: 0, .grin: 0, .wink: 30, .surprised: 40, .sleepy: 40, .cool: 80,
+                                                     .cat: 120, .robot: 120, .heart: 160]
+        for face in AvatarProfile.Face.allCases {
+            let faceNames: [AvatarProfile.Face: String] = [.smile: "Smile", .grin: "Grin", .wink: "Wink", .cool: "Sunglasses",
+                                                           .surprised: "Surprised", .sleepy: "Sleepy", .cat: "Cat", .robot: "Robot",
+                                                           .heart: "Heart eyes"]
+            result.append(ShopItem(id: "face.\(face.rawValue)", name: faceNames[face] ?? face.rawValue, kind: .face,
+                                   price: facePrices[face] ?? 50, face: face))
+        }
+        let petPrices: [AvatarProfile.Pet: Int] = [.none: 0, .cat: 150, .dog: 150, .bunny: 200, .bird: 250, .slime: 300,
+                                                   .robot: 400, .dragon: 600]
+        for pet in AvatarProfile.Pet.allCases {
+            result.append(ShopItem(id: "pet.\(pet.rawValue)", name: pet.rawValue.capitalized, kind: .pet,
+                                   price: petPrices[pet] ?? 200, pet: pet))
         }
 
         return result

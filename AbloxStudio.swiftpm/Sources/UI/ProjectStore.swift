@@ -61,6 +61,10 @@ public final class ProjectStore: ObservableObject {
     @Published public private(set) var entries: [Entry] = []
     @Published public private(set) var deleted: [DeletedEntry] = []
     @Published public private(set) var lastError: String?
+    /// Worlds that cannot be deleted or renamed until unlocked.
+    @Published public private(set) var locked: Set<UUID> = []
+    /// Which folder each world is filed in; none is the top level.
+    @Published public private(set) var folders: [UUID: String] = [:]
 
     /// A new version is kept at most this often. An editor autosaves every
     /// few seconds; a version per autosave would bury the one worth going
@@ -82,6 +86,7 @@ public final class ProjectStore: ObservableObject {
         self.trashDirectory = directory.appendingPathComponent("Recently Deleted", isDirectory: true)
         createDirectoryIfNeeded()
         purgeExpiredDeletions()
+        loadShelf()
         reload()
     }
 
@@ -111,6 +116,7 @@ public final class ProjectStore: ObservableObject {
             lastError = "Could not read saved worlds: \(error.localizedDescription)"
         }
         deleted = deletedEntries()
+        forgetShelfOfMissingWorlds()
     }
 
     /// Reads just enough of a world file to list it.
@@ -184,6 +190,10 @@ public final class ProjectStore: ObservableObject {
 
     /// Moves the world to Recently Deleted, where it stays for thirty days.
     public func delete(_ entry: Entry) {
+        guard !locked.contains(entry.id) else {
+            lastError = L("“{}” is locked. Unlock it first.", entry.name)
+            return
+        }
         do {
             try fileManager.createDirectory(at: trashDirectory, withIntermediateDirectories: true)
             let target = trashURL(for: entry.id)
@@ -311,6 +321,10 @@ public final class ProjectStore: ObservableObject {
     }
 
     public func rename(_ entry: Entry, to newName: String) {
+        guard !locked.contains(entry.id) else {
+            lastError = L("“{}” is locked. Unlock it first.", entry.name)
+            return
+        }
         guard var world = load(entry) else { return }
         world.name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         save(world)
@@ -406,6 +420,100 @@ public final class ProjectStore: ObservableObject {
         }
         reload()
         return changed
+    }
+
+    // MARK: Locks, folders and pictures
+
+    /// `.shelf.json` beside the worlds: locks and folders. Hidden, so the
+    /// listing never mistakes it for a world.
+    private var shelfURL: URL { directory.appendingPathComponent(".shelf.json") }
+
+    private struct Shelf: Codable {
+        var locked: [UUID] = []
+        var folders: [String: String] = [:]
+    }
+
+    private func loadShelf() {
+        guard let data = try? Data(contentsOf: shelfURL), let shelf = try? JSONDecoder().decode(Shelf.self, from: data) else { return }
+        locked = Set(shelf.locked)
+        folders = Dictionary(uniqueKeysWithValues: shelf.folders.compactMap { key, value in UUID(uuidString: key).map { ($0, value) } })
+    }
+
+    private func saveShelf() {
+        let shelf = Shelf(locked: Array(locked), folders: Dictionary(uniqueKeysWithValues: folders.map { ($0.key.uuidString, $0.value) }))
+        if let data = try? JSONEncoder().encode(shelf) { try? data.write(to: shelfURL, options: [.atomic]) }
+    }
+
+    /// Drops the folder of a world that has gone for good (a deleted one
+    /// keeps it, in case it is put back).
+    private func forgetShelfOfMissingWorlds() {
+        let known = Set(entries.map(\.id)).union(deleted.map(\.id))
+        let stale = folders.keys.filter { !known.contains($0) } + locked.filter { !known.contains($0) }
+        guard !stale.isEmpty else { return }
+        for id in stale {
+            folders[id] = nil
+            locked.remove(id)
+        }
+        saveShelf()
+    }
+
+    public func setLocked(_ isLocked: Bool, _ entry: Entry) {
+        if isLocked { locked.insert(entry.id) } else { locked.remove(entry.id) }
+        saveShelf()
+    }
+
+    /// Files a world in a folder; nil or empty takes it out.
+    public func setFolder(_ folder: String?, for entry: Entry) {
+        let name = folder?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        folders[entry.id] = name.isEmpty ? nil : String(name.prefix(40))
+        saveShelf()
+    }
+
+    /// Every folder in use, by name.
+    public var folderNames: [String] {
+        Array(Set(folders.values)).sorted()
+    }
+
+    /// Where the picture of a world is kept (taken while it was played).
+    private func thumbnailURL(for id: UUID) -> URL {
+        directory.appendingPathComponent(".thumbnails", isDirectory: true).appendingPathComponent("\(id.uuidString).png")
+    }
+
+    public func thumbnail(for id: UUID) -> Data? {
+        try? Data(contentsOf: thumbnailURL(for: id))
+    }
+
+    public func saveThumbnail(_ png: Data, for id: UUID) {
+        let url = thumbnailURL(for: id)
+        try? fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? png.write(to: url, options: [.atomic])
+        objectWillChange.send()
+    }
+
+    /// A world file from Files or AirDrop, added to the list. One already
+    /// here with the same id comes in as a copy rather than replacing it.
+    @discardableResult
+    public func importWorld(from url: URL) -> WorldDocument? {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url), var world = try? WorldDocument.decoded(from: data) else {
+            lastError = L("That file is not an Ablox world.")
+            return nil
+        }
+        if entries.contains(where: { $0.id == world.id }) {
+            world.id = UUID()
+            world.name = uniqueName(basedOn: world.name)
+        }
+        save(world)
+        return world
+    }
+
+    /// A copy of the world's file named after the world, to send to someone.
+    public func shareableCopy(of entry: Entry) -> URL? {
+        let safe = entry.name.components(separatedBy: CharacterSet(charactersIn: "/\\:?%*|\"<>")).joined()
+        let target = fileManager.temporaryDirectory.appendingPathComponent(safe.isEmpty ? "World" : safe).appendingPathExtension(Self.fileExtension)
+        try? fileManager.removeItem(at: target)
+        return (try? fileManager.copyItem(at: entry.url, to: target)) != nil ? target : nil
     }
 
     /// Exposed so the Studio can offer "share this world" via the system

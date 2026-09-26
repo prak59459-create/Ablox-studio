@@ -662,7 +662,15 @@ public final class SessionCoordinator: ObservableObject {
     /// world has no script to read it.
     private func savedData(for world: WorldDocument) -> SaveData? {
         guard let saveStore, world.hasScript else { return nil }
-        return saveStore.load(worldID: world.id) ?? SaveData()
+        return saveStore.load(worldID: saveID(for: world)) ?? SaveData()
+    }
+
+    /// Which save slot a world plays with (Games → a game's page), 1 by
+    /// default. Set by the app from its settings.
+    public var saveSlotFor: @MainActor (UUID) -> Int = { _ in 1 }
+
+    private func saveID(for world: WorldDocument) -> UUID {
+        SaveSlots.storageID(world: world.id, slot: saveSlotFor(world.id))
     }
 
     /// Writes what the host's script saved. Small and at most once a second,
@@ -671,7 +679,8 @@ public final class SessionCoordinator: ObservableObject {
     private func keep(_ data: SaveData) {
         guard let saveStore, world.hasScript else { return }
         do {
-            try saveStore.save(data, worldID: world.id, worldName: world.name)
+            let slot = saveSlotFor(world.id)
+            try saveStore.save(data, worldID: saveID(for: world), worldName: slot > 1 ? L("{} (slot {})", world.name, slot) : world.name)
         } catch {
             scriptLog.append(ScriptLogLine(text: L("Could not save this game's progress: {}", error.localizedDescription), isError: true))
         }

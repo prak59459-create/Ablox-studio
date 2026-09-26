@@ -215,6 +215,47 @@ public final class GameLibrary: ObservableObject {
         return data
     }
 
+    /// A game's extra pictures, fetched when its page opens and kept like
+    /// covers (under the path, which names the picture's fingerprint).
+    public func shotData(for listing: GameListing) async -> [Data] {
+        var pictures: [Data] = []
+        for (index, url) in effectiveSource.shotURLs(for: listing).enumerated() {
+            var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+            for byte in url.path.utf8 { hash = (hash ^ UInt64(byte)) &* 0x1000_0000_01b3 }
+            let key = "\(listing.id)@shot\(index)-\(String(hash, radix: 16))"
+            if let cached = coverCache[key] {
+                pictures.append(cached)
+                continue
+            }
+            let file = coverCacheURL(forKey: key)
+            if let data = try? Data(contentsOf: file) {
+                coverCache[key] = data
+                pictures.append(data)
+                continue
+            }
+            guard let data = try? await fetch(url, limit: GameCatalogue.Limits.maximumCoverBytes) else { continue }
+            coverCache[key] = data
+            try? data.write(to: file, options: .atomic)
+            pictures.append(data)
+        }
+        return pictures
+    }
+
+    /// Downloads every game not yet on this iPad, so the whole list plays
+    /// with no network. Returns how many were fetched.
+    @discardableResult
+    public func downloadAll(progress: ((Int, Int) -> Void)? = nil) async -> Int {
+        let missing = listings.filter { !isInstalled($0) && $0.isSupported }
+        var fetched = 0
+        for (index, listing) in missing.enumerated() {
+            progress?(index, missing.count)
+            if await download(listing) != nil { fetched += 1 }
+            _ = await coverData(for: listing)
+        }
+        progress?(missing.count, missing.count)
+        return fetched
+    }
+
     // MARK: Cache
 
     public func isInstalled(_ listing: GameListing) -> Bool {

@@ -10,7 +10,8 @@ import Combine
 public final class ViewportLink {
     weak var coordinator: GameViewport.Coordinator?
 
-    public init() {}
+    // Nonisolated so a view can make one as a `@State` default.
+    nonisolated public init() {}
 
     /// The 3D view as a picture (no buttons, no chat), or nil.
     public func snapshot(_ completion: @escaping (UIImage?) -> Void) {
