@@ -31,6 +31,9 @@ public final class AbloxHost {
         /// the list. A private one keeps it off the air: only someone the
         /// host tells can get in.
         public var isPublic: Bool
+        /// Mixed into the key made from the room code, new every session;
+        /// advertised, not secret. See `TLSPeerSecurity`.
+        public let keySalt: String
 
         public init(
             worldName: String,
@@ -46,6 +49,7 @@ public final class AbloxHost {
             self.roomCode = roomCode
             self.isStudioSession = isStudioSession
             self.isPublic = isPublic && !isStudioSession
+            self.keySalt = TLSPeerSecurity.newSalt()
         }
     }
 
@@ -83,6 +87,18 @@ public final class AbloxHost {
     private let codec: PacketCodec
     private var listener: NWListener?
     private var connections: [ObjectIdentifier: PeerConnection] = [:]
+    /// Connections that have finished the Ablox handshake and are playing.
+    private var joined: Set<ObjectIdentifier> = []
+    /// How much each connection may still send — see `PacketBudget`.
+    private var budgets: [ObjectIdentifier: PacketBudget] = [:]
+    /// Addresses that keep failing to get in.
+    private var attempts = AttemptLimiter()
+
+    /// Connections still getting in at once, and how long one may take. A
+    /// connection that never finishes its handshake would otherwise hold its
+    /// place forever.
+    private static let maximumPending = 6
+    private static let handshakeDeadline: Double = 10
     private let game: GameRuntime
     private var localProfile: AvatarProfile
     private var tickTimer: DispatchSourceTimer?
@@ -110,7 +126,7 @@ public final class AbloxHost {
     private func startOnQueue() {
         state = .starting
         do {
-            let parameters = TLSPeerSecurity.parameters(roomCode: configuration.roomCode)
+            let parameters = TLSPeerSecurity.parameters(roomCode: configuration.roomCode, salt: configuration.keySalt)
             let listener = try NWListener(using: parameters, on: NWEndpoint.Port(rawValue: AbloxProtocol.preferredPort) ?? .any)
 
             listener.service = NWListener.Service(
@@ -158,6 +174,8 @@ public final class AbloxHost {
                 connection.cancel()
             }
             self.connections.removeAll()
+            self.joined.removeAll()
+            self.budgets.removeAll()
             self.listener?.cancel()
             self.listener = nil
             self.state = .idle
@@ -175,6 +193,7 @@ public final class AbloxHost {
         txt[AbloxProtocol.TXTKey.mode] = configuration.isStudioSession ? "studio" : "play"
         txt[AbloxProtocol.TXTKey.protocolVersion] = String(AbloxProtocol.version)
         txt[AbloxProtocol.TXTKey.access] = configuration.isPublic ? "public" : "private"
+        txt[AbloxProtocol.TXTKey.salt] = configuration.keySalt
         if configuration.isPublic {
             // The code is still the encryption key; publishing it is what
             // "public" means. Anyone who can see the room can open it.
@@ -214,8 +233,24 @@ public final class AbloxHost {
         }
 
         let peer = PeerConnection(adopting: nwConnection, codec: codec, queue: queue)
+        let address = peer.remoteAddress
+        let pending = connections.count - joined.count
+        guard !attempts.isBanned(address, at: elapsed), pending < Self.maximumPending else {
+            nwConnection.cancel()
+            return
+        }
         let key = ObjectIdentifier(peer)
         connections[key] = peer
+        budgets[key] = PacketBudget()
+
+        // Wrong code, or never saying hello: counted, and after enough of
+        // them this address waits a while before it may try again.
+        queue.asyncAfter(deadline: .now() + Self.handshakeDeadline) { [weak self, weak peer] in
+            guard let self, let peer, self.connections[ObjectIdentifier(peer)] != nil,
+                  !self.joined.contains(ObjectIdentifier(peer)) else { return }
+            peer.cancel()
+            self.dropConnection(peer)
+        }
 
         peer.onPacket = { [weak self, weak peer] packet in
             guard let self, let peer else { return }
@@ -232,8 +267,12 @@ public final class AbloxHost {
     }
 
     private func dropConnection(_ peer: PeerConnection) {
-        connections.removeValue(forKey: ObjectIdentifier(peer))
-        guard let peerID = peer.remotePeerID else { return }
+        let key = ObjectIdentifier(peer)
+        guard connections.removeValue(forKey: key) != nil else { return }
+        budgets[key] = nil
+        let wasJoined = joined.remove(key) != nil
+        if !wasJoined { attempts.recordFailure(peer.remoteAddress, at: elapsed) }
+        guard wasJoined, let peerID = peer.remotePeerID else { return }
         let farewell = game.removePlayer(peerID)
         broadcast(.leave, LeavePayload(peerID: peerID))
         publishRoster()
@@ -244,6 +283,19 @@ public final class AbloxHost {
     // MARK: Packet handling
 
     private func handle(_ packet: Packet, from peer: PeerConnection) {
+        let key = ObjectIdentifier(peer)
+        switch budgets[key]?.admit(packet.kind, at: elapsed) ?? .allow {
+        case .allow: break
+        case .drop: return
+        case .disconnect:
+            // Flooding: broken, or trying to take the room down.
+            peer.cancel()
+            dropConnection(peer)
+            return
+        }
+        // Until the handshake, only the handshake means anything.
+        guard packet.kind == .handshake || joined.contains(key) else { return }
+
         switch packet.kind {
         case .handshake:
             handleHandshake(packet, from: peer)
@@ -253,6 +305,9 @@ public final class AbloxHost {
             // A client may only move its own avatar. Without this check any
             // peer could shove everyone else around the world.
             guard payload.peerID == peer.remotePeerID else { return }
+            // NaN or a position light-years away would poison every distance
+            // check that touched it, here and on everyone's iPad.
+            guard payload.isPlausible else { return }
             game.updateTransform(payload)
             relay(packet, excluding: peer)
             onRemoteTransform?(payload)
@@ -284,11 +339,16 @@ public final class AbloxHost {
             onRemoteDelta?(delta)
 
         case .chat:
-            guard let payload = try? codec.decodePayload(ChatPayload.self, from: packet) else { return }
-            relay(packet, excluding: peer)
-            onChat?(packet.senderID, payload)
-            // Who sent it is the connection's peer, not the header's claim.
-            if let sender = peer.remotePeerID, !configuration.isStudioSession {
+            guard let payload = try? codec.decodePayload(ChatPayload.self, from: packet),
+                  let sender = peer.remotePeerID else { return }
+            // Who said it is the connection's peer, under the name the host
+            // knows them by — never the sender's own claim, which could put
+            // words over someone else's head.
+            let name = game.players[sender]?.profile.displayName ?? payload.senderName
+            let verified = ChatPayload(senderName: name, text: payload.text, senderID: sender)
+            if let stamped = try? codec.encode(.chat, verified) { relay(stamped, excluding: peer) }
+            onChat?(sender, verified)
+            if !configuration.isStudioSession {
                 dispatch(game.handleChat(from: sender, text: payload.text))
             }
 
@@ -319,8 +379,27 @@ public final class AbloxHost {
             peer.cancel()
             return
         }
+        // Nobody may join as the host, and a connection keeps the identity
+        // of its first handshake.
+        guard payload.peerID != localPeerID, payload.peerID == peer.remotePeerID else {
+            peer.cancel()
+            dropConnection(peer)
+            return
+        }
+        let profile = payload.profile.sanitizedForNetwork()
+        let key = ObjectIdentifier(peer)
 
-        let welcome = game.addPlayer(PlayerSnapshot(peerID: payload.peerID, profile: payload.profile))
+        // Already playing: this is a new look, not a new arrival. Resending
+        // the world here used to wipe the game's screen on their iPad.
+        if joined.contains(key) {
+            dispatch(game.addPlayer(PlayerSnapshot(peerID: payload.peerID, profile: profile)))
+            publishRoster()
+            return
+        }
+        joined.insert(key)
+        attempts.recordSuccess(peer.remoteAddress)
+
+        let welcome = game.addPlayer(PlayerSnapshot(peerID: payload.peerID, profile: profile))
 
         // Reply with our own details, then the world, then the roster —
         // in that order, so the client can render the world before it has to
@@ -342,8 +421,11 @@ public final class AbloxHost {
 
     // MARK: Broadcasting
 
+    /// To everyone playing. A connection still getting in is sent nothing
+    /// until its handshake: it would throw it away, and it has not yet shown
+    /// it belongs here.
     private func relay(_ packet: Packet, excluding sender: PeerConnection?) {
-        for connection in connections.values where connection !== sender {
+        for (key, connection) in connections where connection !== sender && joined.contains(key) {
             connection.send(packet)
         }
     }
@@ -428,7 +510,7 @@ public final class AbloxHost {
     public func sendChat(_ text: String) {
         queue.async { [weak self] in
             guard let self else { return }
-            let payload = ChatPayload(senderName: self.localProfile.displayName, text: text)
+            let payload = ChatPayload(senderName: self.localProfile.displayName, text: text, senderID: self.localPeerID)
             self.broadcast(.chat, payload)
             self.onChat?(self.localPeerID, payload)
             if !self.configuration.isStudioSession {

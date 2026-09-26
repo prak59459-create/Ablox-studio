@@ -15,6 +15,8 @@ public struct DiscoveredPeer: Identifiable, Hashable {
     /// The room's code when the host made it public, so joining needs no
     /// typing. Nil for a private room: its code is only on the host's screen.
     public let publicCode: String?
+    /// Mixed into the key made from the room code; see `TLSPeerSecurity`.
+    public let keySalt: String
 
     public var isPublic: Bool { publicCode != nil }
 
@@ -53,6 +55,7 @@ public struct DiscoveredPeer: Identifiable, Hashable {
         self.capacity = Int(txt?[AbloxProtocol.TXTKey.capacity] ?? "") ?? AbloxProtocol.defaultCapacity
         self.isStudioSession = (txt?[AbloxProtocol.TXTKey.mode] ?? "play") == "studio"
         self.protocolVersion = Int(txt?[AbloxProtocol.TXTKey.protocolVersion] ?? "") ?? AbloxProtocol.version
+        self.keySalt = txt?[AbloxProtocol.TXTKey.salt] ?? ""
 
         // Public only when the host says so *and* sends a code that could be
         // one. A host from before the setting sends neither: private.

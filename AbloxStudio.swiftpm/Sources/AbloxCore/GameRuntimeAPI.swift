@@ -73,15 +73,14 @@ extension GameRuntime: ScriptObjectResolver {
 
         interpreter.define("block") { [unowned self] arguments, _ in
             let name = (arguments.first ?? .null).displayText
-            let match = self.world.blocks.first { $0.name == name }
-                ?? self.world.blocks.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
-            return match.map { self.blockObject($0.id) } ?? .null
+            return self.blockLookup.firstBlock(named: name).map { self.blockObject($0) } ?? .null
         }
         interpreter.define("blocks") { [unowned self] arguments, _ in
-            let found = arguments.isEmpty || (arguments.first?.isNull ?? true)
-                ? self.world.blocks
-                : self.world.blocks(taggedWith: (arguments.first ?? .null).displayText)
-            return .list(ScriptList(found.map { self.blockObject($0.id) }))
+            if arguments.isEmpty || (arguments.first?.isNull ?? true) {
+                return .list(ScriptList(self.world.blocks.map { self.blockObject($0.id) }))
+            }
+            let ids = self.blockLookup.blocks(taggedWith: (arguments.first ?? .null).displayText)
+            return .list(ScriptList(ids.map { self.blockObject($0) }))
         }
         interpreter.define("create_block") { [unowned self] arguments, line in
             try self.createBlock(arguments.first ?? .null, line: line)

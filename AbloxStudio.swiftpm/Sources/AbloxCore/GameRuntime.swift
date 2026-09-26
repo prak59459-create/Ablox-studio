@@ -72,6 +72,9 @@ public final class GameRuntime {
     /// Block bounds and a grid over them, rebuilt only when the blocks
     /// change — see `WorldIndex`. NPC movement and every shot use it.
     private let worldIndexCache = WorldIndexCache()
+    /// Names and tags to blocks — see `BlockLookup`. Nil until asked for, and
+    /// again after an edit that could change it.
+    var lookupCache: BlockLookup?
     var worldIndex: WorldIndex { worldIndexCache.index(for: world) }
     public var players: [PeerID: PlayerSnapshot] { machine.players }
     public var isRoundOver: Bool { machine.isRoundOver }
@@ -280,6 +283,7 @@ public final class GameRuntime {
     }
 
     public func apply(_ delta: WorldDelta) {
+        forgetLookup(ifAffectedBy: delta)
         machine.apply(delta)
     }
 
@@ -748,6 +752,7 @@ public final class GameRuntime {
     /// Changes the map for everyone: the rule machine's copy now, every
     /// iPad's copy when the host sends the delta on.
     func queue(_ delta: WorldDelta) {
+        forgetLookup(ifAffectedBy: delta)
         machine.apply(delta)
         pendingDeltas.append(delta)
     }

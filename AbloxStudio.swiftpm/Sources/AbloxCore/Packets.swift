@@ -365,12 +365,17 @@ public struct PlayerInputPayload: Codable, Hashable, Sendable {
 public struct ChatPayload: Codable, Hashable, Sendable {
     public var senderName: String
     public var text: String
+    /// Who really said it, filled in by the host from the connection the
+    /// message came in on. A guest's own claim — the name above, the packet
+    /// header — is replaced, so no one can put words over someone else's head.
+    public var senderID: PeerID?
 
-    public init(senderName: String, text: String) {
+    public init(senderName: String, text: String, senderID: PeerID? = nil) {
         self.senderName = senderName
         // Chat is rendered in a fixed-height overlay; clamp here so one peer
         // cannot paste a wall of text over everyone's viewport.
         self.text = String(text.prefix(AbloxProtocol.maxChatLength))
+        self.senderID = senderID
     }
 }
 
@@ -406,7 +411,11 @@ public enum AbloxProtocol {
     /// 3: `.absc` script files, free-form GUI, NPCs and world editing.
     /// 4: an NPC's `say` is a speech bubble over its head (`ScriptEffect.say`).
     /// 5: saved game data (`PlayerInputPayload.Input.saved`, `ScriptEffect.store`).
-    public static let version = 5
+    /// 6: the room key is stretched and salted (`TXTKey.salt`), and relayed
+    ///    chat says who really sent it (`ChatPayload.senderID`). An older
+    ///    iPad could not finish the TLS handshake, so the lobby must be able
+    ///    to tell it why before it tries.
+    public static let version = 6
 
     /// Bonjour service type advertised by hosts.
     public static let bonjourServiceType = "_ablox._tcp"
@@ -426,6 +435,9 @@ public enum AbloxProtocol {
         /// The room code, published only by a public room, so anyone nearby
         /// can join without typing it.
         public static let code = "code"
+        /// Random per session, mixed into the key made from the room code so
+        /// no table of precomputed keys works against it. Not a secret.
+        public static let salt = "salt"
     }
 
     /// Hard ceiling on a single framed message. A `worldSnapshot` for a big

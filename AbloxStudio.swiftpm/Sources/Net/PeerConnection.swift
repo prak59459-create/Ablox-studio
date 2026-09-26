@@ -36,6 +36,14 @@ public final class PeerConnection {
         }
     }
 
+    /// The other end's address, for turning away one that keeps failing.
+    public var remoteAddress: String {
+        switch connection.endpoint {
+        case let .hostPort(host, _): return "\(host)"
+        default: return "\(connection.endpoint)"
+        }
+    }
+
     /// Most recent round-trip time, from the ping/pong pair.
     public private(set) var roundTripMilliseconds: Double?
 
@@ -56,10 +64,10 @@ public final class PeerConnection {
     // MARK: Init
 
     /// Outbound: we are joining someone else's session.
-    public init(endpoint: NWEndpoint, roomCode: String, codec: PacketCodec, queue: DispatchQueue) {
+    public init(endpoint: NWEndpoint, roomCode: String, salt: String, codec: PacketCodec, queue: DispatchQueue) {
         self.codec = codec
         self.queue = queue
-        self.connection = NWConnection(to: endpoint, using: TLSPeerSecurity.parameters(roomCode: roomCode))
+        self.connection = NWConnection(to: endpoint, using: TLSPeerSecurity.parameters(roomCode: roomCode, salt: salt))
     }
 
     /// Inbound: the listener handed us a connection someone made to us.
@@ -234,8 +242,10 @@ public final class PeerConnection {
         switch packet.kind {
         case .handshake:
             if let payload = try? codec.decodePayload(HandshakePayload.self, from: packet) {
-                remotePeerID = payload.peerID
-                remoteProfile = payload.profile
+                // Who is on the other end is settled by the first handshake. A
+                // later one may change how they look, never who they are.
+                if remotePeerID == nil { remotePeerID = payload.peerID }
+                if payload.peerID == remotePeerID { remoteProfile = payload.profile }
             }
         case .ping:
             // Reply immediately, at the transport layer, so the measured RTT

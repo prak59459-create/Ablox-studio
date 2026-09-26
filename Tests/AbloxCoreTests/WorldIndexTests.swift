@@ -76,6 +76,56 @@ final class WorldIndexTests: XCTestCase {
         XCTAssertEqual(moved.entry(for: world.blocks[5].id)?.position, Vec3(99, 0, 99).applyingParent(of: world, block: world.blocks[5]))
     }
 
+    /// Kept up edit by edit — blocks added, moved, hidden, removed,
+    /// re-parented — the cached index is always the one a fresh build gives.
+    func testTheCacheKeptUpEditByEditMatchesAFreshIndex() {
+        var world = randomWorld(count: 180, seed: 21)
+        var random = SeededRandom(seed: 99)
+        let cache = WorldIndexCache()
+        _ = cache.index(for: world)
+        for step in 0..<400 {
+            let roll = random.integer(0, 9)
+            let pick = random.integer(1, world.blocks.count - 1)
+            switch roll {
+            case 0, 1:
+                // A coin dropped, sometimes hung from something.
+                let parent = random.unit() < 0.3 ? world.blocks[pick].id : nil
+                world.blocks.append(BlockData(name: "Drop \(step)",
+                                              transform: Transform3D(position: Vec3(Float(random.integer(-100, 100)), 3, Float(random.integer(-100, 100)))),
+                                              parentID: parent))
+            case 2, 3, 4:
+                // Moving platforms: several at once, sometimes.
+                for _ in 0..<random.integer(1, 3) {
+                    let k = random.integer(1, world.blocks.count - 1)
+                    world.blocks[k].transform.position.x += Float(random.integer(-6, 6))
+                    world.blocks[k].transform.rotation = Quat.euler(degrees: Vec3(0, Float(random.integer(0, 359)), 0))
+                }
+            case 5:
+                world.blocks[pick].color = ColorRGBA(r: random.unit(), g: 0, b: 0, a: 1)
+            case 6:
+                world.blocks[pick].isVisible.toggle()
+            case 7:
+                world.blocks.remove(at: pick)
+            case 8:
+                world.blocks[pick].parentID = random.unit() < 0.5 ? nil : world.blocks[random.integer(1, world.blocks.count - 1)].id
+            default:
+                world.blocks[pick].transform.scale = Vec3(Float(random.integer(1, 90)), 1, Float(random.integer(1, 90)))
+            }
+            let kept = cache.index(for: world)
+            let fresh = WorldIndex(world: world)
+            XCTAssertEqual(kept.entries, fresh.entries, "step \(step)")
+            XCTAssertEqual(kept.solidBlocks.map(\.id), fresh.solidBlocks.map(\.id), "step \(step)")
+            XCTAssertEqual(kept.solidBlocks.map(\.bounds), fresh.solidBlocks.map(\.bounds), "step \(step)")
+            if step % 10 == 0 {
+                for _ in 0..<20 {
+                    let box = BoundingBox(center: Vec3(Float(random.integer(-130, 130)), 5, Float(random.integer(-130, 130))),
+                                          size: Vec3(Float(random.integer(1, 40)), 12, Float(random.integer(1, 40))))
+                    XCTAssertEqual(kept.entries(near: box).map(\.id), fresh.entries(near: box).map(\.id), "step \(step)")
+                }
+            }
+        }
+    }
+
     func testTheColliderGivesTheSameAnswerThroughTheIndex() {
         // Walking and falling through a crowded world: the step against a
         // cached index must match the step that measures the world itself.

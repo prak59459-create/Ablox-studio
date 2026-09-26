@@ -47,6 +47,7 @@ public final class AbloxClient {
     /// already typed.
     private var lastEndpoint: NWEndpoint?
     private var lastRoomCode: String?
+    private var lastSalt = ""
 
     public init(localPeerID: PeerID, profile: AvatarProfile) {
         self.localPeerID = localPeerID
@@ -57,7 +58,7 @@ public final class AbloxClient {
     // MARK: Lifecycle
 
     public func connect(to peer: DiscoveredPeer, roomCode: String) {
-        connect(to: peer.endpoint, roomCode: roomCode)
+        connect(to: peer.endpoint, roomCode: roomCode, salt: peer.keySalt)
     }
 
     /// Reconnects to the session this client was last in.
@@ -67,19 +68,20 @@ public final class AbloxClient {
     @discardableResult
     public func reconnect() -> Bool {
         guard let endpoint = lastEndpoint, let code = lastRoomCode else { return false }
-        connect(to: endpoint, roomCode: code)
+        connect(to: endpoint, roomCode: code, salt: lastSalt)
         return true
     }
 
-    public func connect(to endpoint: NWEndpoint, roomCode: String) {
+    public func connect(to endpoint: NWEndpoint, roomCode: String, salt: String) {
         queue.async { [weak self] in
             guard let self else { return }
             self.disconnectOnQueue(reason: nil)
             self.lastEndpoint = endpoint
             self.lastRoomCode = roomCode
+            self.lastSalt = salt
             self.state = .connecting
 
-            let connection = PeerConnection(endpoint: endpoint, roomCode: roomCode, codec: self.codec, queue: self.queue)
+            let connection = PeerConnection(endpoint: endpoint, roomCode: roomCode, salt: salt, codec: self.codec, queue: self.queue)
 
             connection.onStateChange = { [weak self] connectionState in
                 guard let self else { return }
@@ -178,7 +180,9 @@ public final class AbloxClient {
 
         case .chat:
             guard let payload = try? codec.decodePayload(ChatPayload.self, from: packet) else { return }
-            onChat?(packet.senderID, payload)
+            // Everything arrives through the host, which stamps who really
+            // said it; the header only says who sent the packet on.
+            onChat?(payload.senderID ?? packet.senderID, payload)
 
         case .leave:
             if let payload = try? codec.decodePayload(LeavePayload.self, from: packet), payload.peerID == hostPeerID {

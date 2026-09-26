@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import CryptoKit
+import CommonCrypto
 
 /// Builds the TLS-secured `NWParameters` every Ablox connection uses.
 ///
@@ -17,9 +18,12 @@ import CryptoKit
 ///
 /// So Ablox authenticates with a **pre-shared key** instead, the same
 /// mechanism Apple's own peer-to-peer networking samples use. The host shows a
-/// short room code; joining players type it in. Both sides run it through
-/// HMAC-SHA256 to derive the PSK, and the TLS handshake only completes if the
-/// codes match.
+/// short room code; joining players type it in. Both sides stretch it with
+/// PBKDF2-HMAC-SHA256 — 120,000 rounds, salted with a random value the host
+/// advertises for this session — to derive the PSK, and the TLS handshake
+/// only completes if the codes match. The stretching is what makes a recorded
+/// handshake expensive to attack: a six-character code has under a billion
+/// possibilities, which a single hash would give up in seconds.
 ///
 /// What this buys, concretely:
 ///
@@ -48,9 +52,20 @@ import CryptoKit
 /// trade. It would not be for anything carrying real user data.
 public enum TLSPeerSecurity {
 
-    /// Domain-separation string mixed into the HMAC, so a code reused in some
+    /// Domain-separation string mixed into the salt, so a code reused in some
     /// other app never derives the same key here.
-    private static let keyDerivationContext = "ablox.psk.v1"
+    private static let keyDerivationContext = "ablox.psk.v2"
+
+    /// About a tenth of a second on an iPad, once per session or join —
+    /// and a hundred thousand times the work for anyone guessing.
+    private static let stretchRounds: UInt32 = 120_000
+
+    /// A fresh session salt for the host to advertise. Not a secret.
+    /// (`SystemRandomNumberGenerator` is the system's secure generator.)
+    public static func newSalt() -> String {
+        var generator = SystemRandomNumberGenerator()
+        return (0..<16).map { _ in String(format: "%02x", UInt8.random(in: 0...255, using: &generator)) }.joined()
+    }
 
     /// PSK identity hint sent in the clear during the handshake. Not a secret;
     /// it just labels which key is in play.
@@ -61,11 +76,12 @@ public enum TLSPeerSecurity {
     /// - Parameter roomCode: the shared session code. Normalised (uppercased,
     ///   whitespace and dashes stripped) so "abcd-ef" and "ABCDEF" match —
     ///   otherwise a typo in formatting reads as a wrong code.
-    public static func parameters(roomCode: String) -> NWParameters {
+    ///   - salt: the session's salt, from the host's advertisement.
+    public static func parameters(roomCode: String, salt: String) -> NWParameters {
         let tlsOptions = NWProtocolTLS.Options()
         let security = tlsOptions.securityProtocolOptions
 
-        let key = derivedKey(from: roomCode)
+        let key = derivedKey(from: roomCode, salt: salt)
         key.withUnsafeBytes { keyBytes in
             let keyData = DispatchData(bytes: keyBytes)
             let identity = Data(pskIdentity.utf8)
@@ -110,12 +126,28 @@ public enum TLSPeerSecurity {
         return parameters
     }
 
-    /// HMAC-SHA256(code, context). 32 bytes.
-    private static func derivedKey(from roomCode: String) -> SymmetricKey {
+    /// PBKDF2-HMAC-SHA256(code, context + salt). 32 bytes.
+    private static func derivedKey(from roomCode: String, salt: String) -> SymmetricKey {
         let normalized = RoomCode.normalize(roomCode)
-        let codeKey = SymmetricKey(data: Data(normalized.utf8))
-        let mac = HMAC<SHA256>.authenticationCode(for: Data(keyDerivationContext.utf8), using: codeKey)
-        return SymmetricKey(data: Data(mac))
+        let password = Array(normalized.utf8).map { CChar(bitPattern: $0) }
+        let saltBytes = Array((keyDerivationContext + ":" + salt).utf8)
+        var derived = [UInt8](repeating: 0, count: 32)
+        let status = CCKeyDerivationPBKDF(
+            CCPBKDFAlgorithm(kCCPBKDF2),
+            password, password.count,
+            saltBytes, saltBytes.count,
+            CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA256),
+            stretchRounds,
+            &derived, derived.count
+        )
+        if status != Int32(kCCSuccess) {
+            // Practically unreachable. Both ends would fall back the same way,
+            // so they still agree; it is only weaker.
+            let codeKey = SymmetricKey(data: Data(normalized.utf8))
+            let mac = HMAC<SHA256>.authenticationCode(for: Data((keyDerivationContext + salt).utf8), using: codeKey)
+            return SymmetricKey(data: Data(mac))
+        }
+        return SymmetricKey(data: Data(derived))
     }
 }
 

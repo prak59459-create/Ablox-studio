@@ -16,7 +16,7 @@ import Foundation
 /// and every iPad still agree.
 public struct WorldIndex: Sendable {
 
-    public struct Entry: Sendable {
+    public struct Entry: Equatable, Sendable {
         public let id: UUID
         /// Position in `WorldDocument.blocks`.
         public let order: Int
@@ -28,15 +28,19 @@ public struct WorldIndex: Sendable {
     }
 
     /// Every block, in document order.
-    public let entries: [Entry]
+    public private(set) var entries: [Entry] = []
     /// Visible, colliding blocks — what a shot or a camera line can hit.
-    public let solidBlocks: [(id: UUID, bounds: BoundingBox)]
+    public private(set) var solidBlocks: [(id: UUID, bounds: BoundingBox)] = []
 
-    private let orderByID: [UUID: Int]
-    private let cells: [Int64: [Int]]
+    private var orderByID: [UUID: Int] = [:]
+    private var cells: [Int64: [Int]] = [:]
     /// Blocks too big to be worth putting in every cell they cover (a
     /// ground plate, a sky dome). Checked by every query; there are few.
-    private let large: [Int]
+    private var large: [Int] = []
+    /// Where each block is in `solidBlocks`, or -1.
+    private var solidSlot: [Int] = []
+    /// Blocks something else hangs from: moving one moves those too.
+    private var parents: Set<UUID> = []
 
     /// Grid cells are this many metres on a side, on the ground plane.
     public static let cellSize: Float = 4
@@ -44,49 +48,101 @@ public struct WorldIndex: Sendable {
     static let maximumCellsPerBlock = 256
 
     public init(world: WorldDocument) {
-        let blocks = world.blocks
-        var byID: [UUID: BlockData] = [:]
-        byID.reserveCapacity(blocks.count)
-        var orders: [UUID: Int] = [:]
-        orders.reserveCapacity(blocks.count)
-        for (order, block) in blocks.enumerated() where byID[block.id] == nil {
-            // First one wins, as with `WorldDocument.block(id:)`.
-            byID[block.id] = block
-            orders[block.id] = order
-        }
+        append(world.blocks[...], in: world.blocks)
+    }
 
-        var entries: [Entry] = []
+    // MARK: Keeping up
+
+    // A round changes the world all the time — a coin appears, a platform
+    // slides — and starting again from nothing each time costs a pass over
+    // every block. These two cover what almost every change is, and give up
+    // (so the caller starts again) on anything else.
+
+    /// Adds blocks that were put on the end of the world. Both paths go
+    /// through here, so a grown index is exactly the one a fresh build
+    /// would make.
+    mutating func append(_ added: ArraySlice<BlockData>, in blocks: [BlockData]) {
         entries.reserveCapacity(blocks.count)
-        var solids: [(id: UUID, bounds: BoundingBox)] = []
-        var cells: [Int64: [Int]] = [:]
-        var large: [Int] = []
-
-        for (order, block) in blocks.enumerated() {
-            let transform = Self.worldTransform(of: block, lookup: byID)
-            let bounds = WorldDocument.bounds(of: block, at: transform)
-            let entry = Entry(id: block.id, order: order, bounds: bounds, position: transform.position,
-                              isVisible: block.isVisible, hasCollision: block.hasCollision, behavior: block.behavior)
-            let index = entries.count
+        solidSlot.reserveCapacity(blocks.count)
+        // Every new block is findable first: one may hang from another
+        // added in the same batch.
+        for order in added.indices where orderByID[blocks[order].id] == nil {
+            // First one wins, as with `WorldDocument.block(id:)`.
+            orderByID[blocks[order].id] = order
+        }
+        for order in added.indices {
+            let block = blocks[order]
+            if let parent = block.parentID { parents.insert(parent) }
+            let entry = makeEntry(block, order: order, in: blocks)
             entries.append(entry)
-            if block.isVisible, block.hasCollision { solids.append((block.id, bounds)) }
-
-            let range = Self.cellRange(of: bounds)
-            if !Self.fitsGrid(range, limit: Self.maximumCellsPerBlock) {
-                large.append(index)
+            if block.isVisible, block.hasCollision {
+                solidSlot.append(solidBlocks.count)
+                solidBlocks.append((block.id, entry.bounds))
             } else {
-                for x in range.x0...range.x1 {
-                    for z in range.z0...range.z1 {
-                        cells[Self.key(x, z), default: []].append(index)
-                    }
-                }
+                solidSlot.append(-1)
+            }
+            place(order, bounds: entry.bounds)
+        }
+    }
+
+    /// Re-reads blocks changed where they stand: moved, turned, resized,
+    /// recoloured. False, with nothing changed, when that could leave the
+    /// index wrong — a block that others hang from (they moved too), one
+    /// given a different parent or identity, or one that started or
+    /// stopped being solid.
+    mutating func update(orders changed: [Int], in blocks: [BlockData], was before: [BlockData]) -> Bool {
+        guard blocks.count == entries.count, before.count == entries.count else { return false }
+        for order in changed {
+            let block = blocks[order]
+            guard block.id == before[order].id, block.parentID == before[order].parentID, !parents.contains(block.id),
+                  (block.isVisible && block.hasCollision) == (solidSlot[order] >= 0) else { return false }
+        }
+        for order in changed {
+            let block = blocks[order], old = entries[order]
+            let entry = makeEntry(block, order: order, in: blocks)
+            entries[order] = entry
+            if solidSlot[order] >= 0 { solidBlocks[solidSlot[order]].bounds = entry.bounds }
+            if Self.cellRange(of: entry.bounds) != Self.cellRange(of: old.bounds) {
+                unplace(order, bounds: old.bounds)
+                place(order, bounds: entry.bounds)
             }
         }
+        return true
+    }
 
-        self.entries = entries
-        self.solidBlocks = solids
-        self.orderByID = orders
-        self.cells = cells
-        self.large = large
+    private func makeEntry(_ block: BlockData, order: Int, in blocks: [BlockData]) -> Entry {
+        let transform = Self.worldTransform(of: block) { id in orderByID[id].map { blocks[$0] } }
+        let bounds = WorldDocument.bounds(of: block, at: transform)
+        return Entry(id: block.id, order: order, bounds: bounds, position: transform.position,
+                     isVisible: block.isVisible, hasCollision: block.hasCollision, behavior: block.behavior)
+    }
+
+    private mutating func place(_ order: Int, bounds: BoundingBox) {
+        let range = Self.cellRange(of: bounds)
+        guard Self.fitsGrid(range, limit: Self.maximumCellsPerBlock) else {
+            large.append(order)
+            return
+        }
+        for x in range.x0...range.x1 {
+            for z in range.z0...range.z1 {
+                cells[Self.key(x, z), default: []].append(order)
+            }
+        }
+    }
+
+    private mutating func unplace(_ order: Int, bounds: BoundingBox) {
+        let range = Self.cellRange(of: bounds)
+        guard Self.fitsGrid(range, limit: Self.maximumCellsPerBlock) else {
+            large.removeAll { $0 == order }
+            return
+        }
+        for x in range.x0...range.x1 {
+            for z in range.z0...range.z1 {
+                let key = Self.key(x, z)
+                cells[key]?.removeAll { $0 == order }
+                if cells[key]?.isEmpty == true { cells[key] = nil }
+            }
+        }
     }
 
     // MARK: Lookup
@@ -129,10 +185,15 @@ public struct WorldIndex: Sendable {
     /// `WorldDocument.worldTransform(of:)` — so the numbers match exactly —
     /// but with each parent found in a dictionary instead of a search.
     static func worldTransform(of block: BlockData, lookup: [UUID: BlockData]) -> Transform3D {
+        worldTransform(of: block) { lookup[$0] }
+    }
+
+    static func worldTransform(of block: BlockData, parent find: (UUID) -> BlockData?) -> Transform3D {
         var result = block.transform
+        guard block.parentID != nil else { return result }
         var seen: Set<UUID> = [block.id]
         var cursor = block.parentID
-        while let current = cursor, let parent = lookup[current] {
+        while let current = cursor, let parent = find(current) {
             guard seen.insert(current).inserted else { break }
             result = result.concatenating(parent: parent.transform)
             cursor = parent.parentID
@@ -164,10 +225,13 @@ public struct WorldIndex: Sendable {
     }
 }
 
-/// Keeps one `WorldIndex` and rebuilds it only when the blocks change.
+/// Keeps one `WorldIndex` up to date with the blocks.
 ///
 /// The check is an array comparison, which is instant while the world has
 /// not changed (the two arrays share storage) and a single pass when it has.
+/// Blocks added on the end, and a few blocks moved where they stand — a
+/// coin dropped, a platform sliding, which is nearly every change in a round
+/// — are folded into the index; anything else builds it again.
 public final class WorldIndexCache: @unchecked Sendable {
     private var blocks: [BlockData]?
     private var cached: WorldIndex?
@@ -178,10 +242,31 @@ public final class WorldIndexCache: @unchecked Sendable {
     public func index(for world: WorldDocument) -> WorldIndex {
         lock.lock()
         defer { lock.unlock() }
-        if let cached, let blocks, blocks == world.blocks { return cached }
-        let fresh = WorldIndex(world: world)
-        blocks = world.blocks
-        cached = fresh
-        return fresh
+        let now = world.blocks
+        if var index = cached, let old = blocks {
+            if old == now { return index }
+            if now.count > old.count, now[..<old.count].elementsEqual(old) {
+                index.append(now[old.count...], in: now)
+                return keep(index, now)
+            }
+            if now.count == old.count {
+                var changed: [Int] = []
+                let limit = Swift.max(8, now.count / 8)
+                for order in now.indices where now[order] != old[order] {
+                    changed.append(order)
+                    if changed.count > limit { break }
+                }
+                if changed.count <= limit, index.update(orders: changed, in: now, was: old) {
+                    return keep(index, now)
+                }
+            }
+        }
+        return keep(WorldIndex(world: world), now)
+    }
+
+    private func keep(_ index: WorldIndex, _ now: [BlockData]) -> WorldIndex {
+        blocks = now
+        cached = index
+        return index
     }
 }
