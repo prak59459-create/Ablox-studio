@@ -141,6 +141,10 @@ public extension AvatarProfile {
         let name = String(String.UnicodeScalarView(cleaned)).trimmingCharacters(in: .whitespacesAndNewlines)
         copy.displayName = ChatModerator().cleanName(String(name.prefix(Self.maximumNameLength)))
         if copy.displayName.isEmpty { copy.displayName = "Player" }
+        let title = String(String.UnicodeScalarView(title.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        copy.title = ChatModerator().cleanName(String(title.prefix(Self.maximumNameLength)))
+        if copy.title == "Player" { copy.title = "" }
         copy.height = height.isFinite ? Swift.min(Swift.max(height, Self.chosenHeightRange.lowerBound), Self.chosenHeightRange.upperBound) : 1
         copy.bodyColor = bodyColor.clamped
         copy.headColor = headColor.clamped

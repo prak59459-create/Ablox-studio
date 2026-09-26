@@ -77,6 +77,8 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
     /// Set by a game's script; purely how they look — speed is separate.
     public var ride: Ride
     public var rideColor: ColorRGBA
+    /// A few words under their name — a badge they earned, "Builder".
+    public var title: String
 
     public init(
         displayName: String = "Player",
@@ -86,7 +88,8 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         hat: HatStyle = .none,
         height: Float = 1.0,
         ride: Ride = .none,
-        rideColor: ColorRGBA = ColorRGBA(hex: "#EF4444")!
+        rideColor: ColorRGBA = ColorRGBA(hex: "#EF4444")!,
+        title: String = ""
     ) {
         self.displayName = displayName
         self.bodyColor = bodyColor
@@ -96,10 +99,11 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         self.height = height
         self.ride = ride
         self.rideColor = rideColor
+        self.title = title
     }
 
     private enum CodingKeys: String, CodingKey {
-        case displayName, bodyColor, headColor, accentColor, hat, height, ride, rideColor
+        case displayName, bodyColor, headColor, accentColor, hat, height, ride, rideColor, title
     }
 
     // Written by hand so a profile saved before rides existed — on this
@@ -114,6 +118,7 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         height = try c.decode(Float.self, forKey: .height)
         ride = (try? c.decodeIfPresent(Ride.self, forKey: .ride)) ?? Ride.none
         rideColor = (try? c.decodeIfPresent(ColorRGBA.self, forKey: .rideColor)) ?? ColorRGBA(hex: "#EF4444")!
+        title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? ""
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -126,6 +131,7 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         try c.encode(height, forKey: .height)
         try c.encode(ride, forKey: .ride)
         try c.encode(rideColor, forKey: .rideColor)
+        if !title.isEmpty { try c.encode(title, forKey: .title) }
     }
 
     /// Something a character rides, drawn around the avatar.

@@ -231,4 +231,7 @@ public enum ScriptEffect: Codable, Equatable, Hashable, Sendable {
     /// Keep this: the player's saved data for the world being played, to be
     /// written to their iPad. Sent to that player only, after `p.save`.
     case store(SaveData)
+    /// Someone waved, danced or sent an emoji: every iPad plays it on that
+    /// avatar. See `Gesture`.
+    case gesture(speaker: PeerID, wire: String)
 }

@@ -351,6 +351,8 @@ public struct PlayerInputPayload: Codable, Hashable, Sendable {
         /// This player's saved data for the world being played, read from
         /// their iPad as they arrive. The host bounds it like any other claim.
         case saved(SaveData)
+        /// A wave, a dance, an emoji over the head — see `Gesture`.
+        case gesture(String)
     }
 
     public var peerID: PeerID
@@ -415,7 +417,9 @@ public enum AbloxProtocol {
     ///    chat says who really sent it (`ChatPayload.senderID`). An older
     ///    iPad could not finish the TLS handshake, so the lobby must be able
     ///    to tell it why before it tries.
-    public static let version = 6
+    /// 7: gestures — emotes and emoji stamps (`Input.gesture`,
+    ///    `ScriptEffect.gesture`).
+    public static let version = 7
 
     /// Bonjour service type advertised by hosts.
     public static let bonjourServiceType = "_ablox._tcp"

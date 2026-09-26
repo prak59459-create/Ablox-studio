@@ -428,6 +428,18 @@ extension GameRuntime: ScriptObjectResolver {
                 self.pending.append(self.broadcast(.script(.say(speaker: state.peer, name: state.name, text: text))))
                 return .null
             }
+        case "emote":
+            // `p.emote("wave")`, `n.emote("dance")`, `p.emote("stamp:🎉")`:
+            // every iPad plays it, as if they had chosen it themselves.
+            return method(name) { [unowned self] arguments, line in
+                let wire = (arguments.first ?? .null).displayText
+                guard let gesture = Gesture(wire: wire) else {
+                    throw ScriptError(line: line, kind: .runtime,
+                                      message: L("“{}” is not an emote. Try {}.", wire, Emote.allCases.map(\.rawValue).joined(separator: ", ")))
+                }
+                self.pending.append(self.broadcast(.script(.gesture(speaker: state.peer, wire: gesture.wire))))
+                return .null
+            }
         case "destroy":
             return npcMethod(state, name) { [unowned self] _, _ in
                 self.removeNPC(state)

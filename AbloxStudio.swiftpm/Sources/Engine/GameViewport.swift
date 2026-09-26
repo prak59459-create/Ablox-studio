@@ -4,6 +4,26 @@ import ARKit
 import simd
 import Combine
 
+/// Lets the play screen reach into the viewport for the things that are
+/// actions rather than state: a screenshot, back to the start.
+@MainActor
+public final class ViewportLink {
+    weak var coordinator: GameViewport.Coordinator?
+
+    public init() {}
+
+    /// The 3D view as a picture (no buttons, no chat), or nil.
+    public func snapshot(_ completion: @escaping (UIImage?) -> Void) {
+        guard let coordinator else { return completion(nil) }
+        coordinator.snapshot(completion)
+    }
+
+    /// Back to the world's spawn point.
+    public func returnToStart() {
+        coordinator?.returnToStart()
+    }
+}
+
 /// The 3D play surface: a non-AR `ARView` driving the world, the local
 /// avatar, and everyone else's.
 ///
@@ -32,6 +52,14 @@ public struct GameViewport: UIViewRepresentable {
     /// Settings → Comfort and the play screen's extras: shake, field of
     /// view, zoom, vibration, battery and heat, auto-jump.
     var preferences: PlayPreferences
+    /// Watching someone else: the camera follows them instead.
+    var spectating: PeerID?
+    /// The player's own choice of first person where the game leaves the
+    /// camera to them.
+    var preferFirstPerson: Bool
+    /// Photo mode: no names or bubbles, and the camera may go further out.
+    var photoMode: Bool
+    var link: ViewportLink?
 
     public init(
         session: SessionCoordinator,
@@ -44,6 +72,10 @@ public struct GameViewport: UIViewRepresentable {
         graphicsQuality: GraphicsQuality = .auto,
         showFrameRate: Bool = false,
         preferences: PlayPreferences = PlayPreferences(),
+        spectating: PeerID? = nil,
+        preferFirstPerson: Bool = false,
+        photoMode: Bool = false,
+        link: ViewportLink? = nil,
         onBlockTapped: ((UUID) -> Void)? = nil
     ) {
         self.session = session
@@ -56,6 +88,10 @@ public struct GameViewport: UIViewRepresentable {
         self.graphicsQuality = graphicsQuality
         self.showFrameRate = showFrameRate
         self.preferences = preferences
+        self.spectating = spectating
+        self.preferFirstPerson = preferFirstPerson
+        self.photoMode = photoMode
+        self.link = link
         self.onBlockTapped = onBlockTapped
     }
 
@@ -81,7 +117,8 @@ public struct GameViewport: UIViewRepresentable {
 
     public func updateUIView(_ view: ARView, context: Context) {
         context.coordinator.parent = self
-        context.coordinator.setFeedbackEnabled(sound: soundEnabled, haptics: hapticsEnabled)
+        link?.coordinator = context.coordinator
+        context.coordinator.setFeedbackEnabled(sound: soundEnabled && preferences.effectsVolume > 0.02, haptics: hapticsEnabled)
         context.coordinator.setPreferences(preferences)
         context.coordinator.setGraphics(quality: graphicsQuality, showFrameRate: showFrameRate)
         context.coordinator.syncWorld(session.world)
@@ -128,6 +165,8 @@ public struct GameViewport: UIViewRepresentable {
         private var localAvatar: AvatarEntity?
         /// Speech bubbles over heads, drawn over the 3D view.
         private var chatBubbles: ChatBubbleOverlay?
+        /// Names and titles over heads, and emoji stamps.
+        private var nameTags: NameTagOverlay?
 
         private weak var view: ARView?
         private var updateSubscription: Cancellable?
@@ -198,6 +237,11 @@ public struct GameViewport: UIViewRepresentable {
             worldScene.anchor.addChild(local)
             localAvatar = local
 
+            let tags = NameTagOverlay(frame: view.bounds)
+            tags.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            view.addSubview(tags)
+            nameTags = tags
+
             let bubbles = ChatBubbleOverlay(frame: view.bounds)
             bubbles.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             view.addSubview(bubbles)
@@ -239,6 +283,26 @@ public struct GameViewport: UIViewRepresentable {
             chatBubbles?.removeAll()
             chatBubbles?.removeFromSuperview()
             chatBubbles = nil
+            nameTags?.removeAll()
+            nameTags?.removeFromSuperview()
+            nameTags = nil
+        }
+
+        // MARK: Screenshots and the start
+
+        func snapshot(_ completion: @escaping (UIImage?) -> Void) {
+            guard let view else { return completion(nil) }
+            // The view's own layers only: no buttons, no chat, no names.
+            view.snapshot(saveToHDR: false) { image in
+                completion(image)
+            }
+        }
+
+        func returnToStart() {
+            let world = parent.session.world
+            let index = parent.session.people.firstIndex { $0.peerID == parent.session.localPeerID } ?? 0
+            respawn(in: world, index: index)
+            publisher.reset()
         }
 
         // MARK: Sync
@@ -352,6 +416,16 @@ public struct GameViewport: UIViewRepresentable {
                         // "face where the camera looks" would undo it.
                         parent.cameraYaw = -yaw
                         publisher.reset()
+                    case let .gesture(speaker, wire):
+                        switch Gesture(wire: wire) {
+                        case let .emote(emote)?:
+                            let avatar = speaker == parent.session.localPeerID ? localAvatar : avatars[speaker]
+                            avatar?.play(emote)
+                        case let .stamp(emoji)?:
+                            nameTags?.showStamp(emoji, for: speaker)
+                        case nil:
+                            break
+                        }
                     case let .shake(strength, seconds):
                         shakeStrength = preferences.shake(strength: strength)
                         shakeRemaining = shakeStrength > 0 ? Float(seconds) : 0
@@ -424,8 +498,13 @@ public struct GameViewport: UIViewRepresentable {
             }
             currentlyTouching = touchedNow
 
-            // 4. Drive the local avatar directly — no easing, it is ours.
-            localAvatar?.teleport(to: localSnapshot.position, yawDegrees: localSnapshot.yawDegrees)
+            // 4. Drive the local avatar directly — no easing, it is ours —
+            //    with the walk cycle, or the emote it is playing.
+            if let local = localAvatar {
+                let travelled = localSnapshot.position.horizontalDistance(to: Vec3(local.position))
+                local.teleport(to: localSnapshot.position, yawDegrees: localSnapshot.yawDegrees)
+                local.animate(travelled: travelled, deltaTime: dt)
+            }
 
             // 5. Ease everyone else toward their last known transform.
             for avatar in avatars.values {
@@ -438,6 +517,7 @@ public struct GameViewport: UIViewRepresentable {
 
             updateCamera(dt: dt, index: index)
             updateChatBubbles()
+            updateNameTags()
             updateWeapons(dt: dt)
             if parent.isFiring { fireIfReady(index: index) }
             fadeTracers(dt: dt)
@@ -601,11 +681,27 @@ public struct GameViewport: UIViewRepresentable {
             }
         }
 
+        /// Where the camera is centred: the local player, or whoever they
+        /// are watching.
+        private var subjectPosition: Vec3 {
+            if let watched = parent.spectating, let avatar = avatars[watched] {
+                return Vec3(avatar.position(relativeTo: nil))
+            }
+            return localSnapshot.position
+        }
+
         /// The camera the world's script asked for: behind the player (the
         /// default, pulled in when a wall is in the way), at their eyes,
         /// looking down from above, or fixed in the world.
         private func updateCamera(dt: Float, index: WorldIndex) {
-            let settings = parent.session.scripted.camera
+            var settings = parent.session.scripted.camera
+            // The player may choose first person where the game leaves the
+            // camera behind them; watching someone is always from behind.
+            if settings.mode == .thirdPerson, parent.preferFirstPerson, parent.spectating == nil {
+                settings.mode = .firstPerson
+            }
+            if parent.spectating != nil { settings.mode = .thirdPerson }
+            if parent.photoMode { settings.distance = max(settings.distance, 6) * 1.6 }
             let size = parent.session.localAppearance.height
             camera.camera.fieldOfViewInDegrees = preferences.fieldOfView(game: settings.fieldOfView)
 
@@ -659,10 +755,10 @@ public struct GameViewport: UIViewRepresentable {
                 break
             }
 
-            let pitch = max(-75, min(20, parent.cameraPitch))
+            let pitch = parent.photoMode ? max(-85, min(60, parent.cameraPitch)) : max(-75, min(20, parent.cameraPitch))
             let orbit = Quat.euler(degrees: Vec3(pitch, parent.cameraYaw, 0))
 
-            let focus = localSnapshot.position + Vec3(0, 1.4 * size, 0) + jitter
+            let focus = subjectPosition + Vec3(0, 1.4 * size, 0) + jitter
             // Pinch-to-zoom (and Settings) scale the game's own distance.
             let desiredDistance: Float = settings.distance * preferences.cameraZoom
             let offset = orbit.act(Vec3(0, 0, 1)) * desiredDistance
@@ -670,6 +766,7 @@ public struct GameViewport: UIViewRepresentable {
             // Keep the camera out of geometry: if the line from the player to
             // the camera crosses a block, sit just in front of it.
             var distance = desiredDistance
+            if !parent.photoMode {
             let ray = Ray(origin: focus, direction: offset)
             // Only the parts near the line from the player to the camera.
             let reach = BoundingBox(min: focus.componentMin(focus + offset), max: focus.componentMax(focus + offset)).expanded(by: 0.5)
@@ -677,6 +774,7 @@ public struct GameViewport: UIViewRepresentable {
                 if let hit = ray.intersects(entry.bounds.expanded(by: 0.25)), hit < distance {
                     distance = max(1.5, hit)
                 }
+            }
             }
 
             let target = focus + orbit.act(Vec3(0, 0, 1)) * distance
@@ -686,6 +784,38 @@ public struct GameViewport: UIViewRepresentable {
             camera.look(at: focus.simd, from: cameraAnchor.position, relativeTo: nil)
             let looking = focus - Vec3(cameraAnchor.position)
             if looking.lengthSquared > 1e-4 { viewDirection = looking.normalized }
+        }
+
+        // MARK: Name tags
+
+        /// Everyone's name (and title) over their head, and their stamps.
+        private func updateNameTags() {
+            guard let view, let overlay = nameTags else { return }
+            let session = parent.session
+            let eye = Vec3(camera.position(relativeTo: nil))
+            var people: [PeerID: PlayerSnapshot] = [:]
+            for player in session.roster { people[player.peerID] = player }
+            var tags: [NameTagOverlay.Tag] = []
+            // Our own head too, for our stamps; our own name is not shown.
+            var subjects: [(PeerID, AvatarEntity)] = avatars.map { ($0.key, $0.value) }
+            if let local = localAvatar { subjects.append((session.localPeerID, local)) }
+            for (peer, avatar) in subjects {
+                guard avatar.isEnabled, avatar.parent != nil else { continue }
+                let top = Vec3(avatar.position(relativeTo: nil)) + Vec3(0, 2.05 * avatar.scale.y, 0)
+                let toTop = top - eye
+                let distance = toTop.length
+                guard distance > 0.5, distance < 70, toTop.dot(viewDirection) > 0.2 * distance,
+                      let point = view.project(top.simd) else { continue }
+                let player = people[peer]
+                let isLocal = peer == session.localPeerID
+                tags.append(NameTagOverlay.Tag(
+                    id: peer,
+                    name: isLocal ? "" : (player?.profile.displayName ?? avatar.profile.displayName),
+                    title: isLocal ? "" : (player?.profile.title ?? ""),
+                    anchor: point, distance: distance, isNPC: player?.isNPC ?? false
+                ))
+            }
+            overlay.update(tags, showNames: !parent.photoMode)
         }
 
         // MARK: Chat bubbles

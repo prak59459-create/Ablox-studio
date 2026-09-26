@@ -99,6 +99,10 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
     public var musicVolume: Double = 0.7
     /// Ping and signal in the corner while playing.
     public var showNetworkStatus = false
+    /// The small map in the corner.
+    public var showMap = true
+    /// How long this visit has lasted, in the top bar.
+    public var showClock = false
 
     public struct PointOffset: Codable, Hashable, Sendable {
         public var x: Double = 0
@@ -133,6 +137,8 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
         effectsVolume = try c.decodeIfPresent(Double.self, forKey: .effectsVolume) ?? d.effectsVolume
         musicVolume = try c.decodeIfPresent(Double.self, forKey: .musicVolume) ?? d.musicVolume
         showNetworkStatus = try c.decodeIfPresent(Bool.self, forKey: .showNetworkStatus) ?? d.showNetworkStatus
+        showMap = try c.decodeIfPresent(Bool.self, forKey: .showMap) ?? d.showMap
+        showClock = try c.decodeIfPresent(Bool.self, forKey: .showClock) ?? d.showClock
         clamp()
     }
 

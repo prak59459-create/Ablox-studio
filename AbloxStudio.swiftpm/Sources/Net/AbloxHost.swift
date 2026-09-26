@@ -561,9 +561,28 @@ public final class AbloxHost {
     }
 
     /// Seconds since the host started: the one clock the rules, the script
-    /// and every shot are measured against.
+    /// and every shot are measured against. Time spent paused (playing
+    /// alone) does not count, so a timer resumes where it stopped.
     private var elapsed: Double {
-        Date().timeIntervalSince(startedAt)
+        let now = pausedAt ?? Date()
+        return now.timeIntervalSince(startedAt) - pausedTotal
+    }
+
+    private var pausedAt: Date?
+    private var pausedTotal: TimeInterval = 0
+
+    /// Stops or restarts the game's clock. Only for a game with nobody else
+    /// in it — pausing everyone's game from one iPad would be a trick.
+    public func setPaused(_ paused: Bool) {
+        queue.async { [weak self] in
+            guard let self, self.joined.isEmpty else { return }
+            if paused, self.pausedAt == nil {
+                self.pausedAt = Date()
+            } else if !paused, let since = self.pausedAt {
+                self.pausedTotal += Date().timeIntervalSince(since)
+                self.pausedAt = nil
+            }
+        }
     }
 
     /// Blocks and settings the script changed, to everyone's copy of the

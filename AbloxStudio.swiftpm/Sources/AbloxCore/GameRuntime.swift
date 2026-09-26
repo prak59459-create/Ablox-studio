@@ -26,6 +26,8 @@ public final class GameRuntime {
         case death, respawn, button, input, chat
         /// A player's saved data has arrived: `p.saved` is ready to read.
         case loaded
+        /// Someone waved, danced or sent an emoji stamp.
+        case emote
     }
 
     /// What `game.respawn_time = 5` and friends change.
@@ -250,6 +252,16 @@ public final class GameRuntime {
                 if let state = states[peer], !state.isNPC { receiveSave(data, for: state) }
                 return
             }
+            // Gestures work between rounds too: waving at the end is half
+            // the point.
+            if case let .gesture(wire) = input {
+                guard let state = states[peer], !state.isNPC, let gesture = Gesture(wire: wire),
+                      clock - state.lastGesture >= Gesture.minimumInterval else { return }
+                state.lastGesture = clock
+                pending.append(broadcast(.script(.gesture(speaker: peer, wire: gesture.wire))))
+                if hasStarted, !isRoundOver { run(.emote, [object(for: state), .string(gesture.wire)]) }
+                return
+            }
             guard hasStarted, !isRoundOver, let state = states[peer], !state.isNPC else { return }
             switch input {
             case let .fire(origin, direction):
@@ -267,7 +279,7 @@ public final class GameRuntime {
                 guard state.isAlive, state.armed?.startReload(at: clock) == true else { return }
                 sendAmmo(state)
                 send(state, .playSound(name: SoundCue.reload.rawValue))
-            case .saved:
+            case .saved, .gesture:
                 break
             }
         }
@@ -878,6 +890,8 @@ extension GameRuntime {
     /// What the host knows about one character — a person or an NPC —
     /// beyond their avatar.
     final class PlayerState {
+        /// When their last wave or stamp went out (`Gesture.minimumInterval`).
+        var lastGesture: Double = -.infinity
         enum Goal: Equatable {
             case none
             case point(Vec3)

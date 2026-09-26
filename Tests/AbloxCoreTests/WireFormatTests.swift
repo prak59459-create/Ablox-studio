@@ -299,7 +299,7 @@ final class WireFormatTests: XCTestCase {
         // These are compatibility surface: changing one breaks older iPads,
         // so a deliberate test failure is the reminder to bump the version.
         XCTAssertEqual(AbloxProtocol.bonjourServiceType, "_ablox._tcp")
-        XCTAssertEqual(AbloxProtocol.version, 6)
+        XCTAssertEqual(AbloxProtocol.version, 7)
         XCTAssertEqual(PacketHeader.encodedSize, 33)
         XCTAssertEqual(PacketKind.handshake.rawValue, 1)
         XCTAssertEqual(PacketKind.leave.rawValue, 11)

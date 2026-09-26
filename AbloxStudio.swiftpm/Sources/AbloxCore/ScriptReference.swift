@@ -60,7 +60,8 @@ public enum ScriptReference {
             Entry("on button(p, id)", L("A player presses a screen button.")),
             Entry("on input(p, id, text)", L("A player sends text from a text box.")),
             Entry("on chat(p, text)", L("A player says something in the chat — commands, passwords, quizzes.")),
-            Entry("on loaded(p)", L("A player's saved data has arrived. Read p.saved here."))
+            Entry("on loaded(p)", L("A player's saved data has arrived. Read p.saved here.")),
+            Entry("on emote(p, name)", L("Someone waved, danced or sent an emoji stamp: \"wave\", \"dance\", \"stamp:🎉\"…"))
         ])
     }
 
@@ -112,6 +113,7 @@ public enum ScriptReference {
                   L("Makes a character the game controls. It has everything a player has.")),
             Entry("n.move_to(block(\"Door\"))  n.follow(p)  n.stop()", L("Walks somewhere, keeps following someone, or stops.")),
             Entry("n.jump_now()  n.shoot(p)  n.say(\"Halt!\")", L("Jumps, fires its weapon at someone, or speaks in a bubble over its head.")),
+            Entry("p.emote(\"wave\")  n.emote(\"dance\")", L("Plays an emote (wave, dance, clap, cheer, bow, point, laugh, sit) or an emoji stamp on everyone's screen.")),
             Entry("n.destroy()", L("Removes it. A knocked-out NPC is removed unless “on death” brings it back."))
         ])
     }

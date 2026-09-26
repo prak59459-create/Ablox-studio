@@ -121,6 +121,21 @@ public final class SessionCoordinator: ObservableObject {
         public let expiresAt: Date
     }
 
+    /// Something the game said — a banner or a line from the game — kept
+    /// so a player who missed it can read it again.
+    public struct LogEntry: Identifiable, Equatable {
+        public let id = UUID()
+        public let date: Date
+        public let text: String
+    }
+
+    /// The last fifty things the game said, oldest first.
+    @Published public private(set) var messageLog: [LogEntry] = []
+
+    /// Playing alone: nobody can join, and the game can really pause.
+    @Published public private(set) var isSolo = false
+    @Published public private(set) var isPaused = false
+
     // MARK: Identity
 
     public let localPeerID: PeerID
@@ -490,6 +505,9 @@ public final class SessionCoordinator: ObservableObject {
         scriptLog = []
         // The last game's chat and speech bubbles belong to that game.
         chatLog = []
+        messageLog = []
+        isSolo = false
+        isPaused = false
         announcementTask?.cancel()
         announcement = nil
     }
@@ -530,6 +548,26 @@ public final class SessionCoordinator: ObservableObject {
 
     /// Fire, reload or a screen button. Like touches, only a report: the
     /// host's script decides what it did.
+    /// Waves, dances or floats an emoji over this player's head, for
+    /// everyone. See `Gesture`.
+    public func send(gesture: Gesture) {
+        send(input: .gesture(gesture.wire))
+    }
+
+    /// Stops the game's clock while playing alone (timers, NPCs, the round).
+    public func setPaused(_ paused: Bool) {
+        guard isSolo, role == .hosting else { return }
+        isPaused = paused
+        host?.setPaused(paused)
+    }
+
+    private func remember(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        messageLog.append(LogEntry(date: Date(), text: trimmed))
+        if messageLog.count > 50 { messageLog.removeFirst(messageLog.count - 50) }
+    }
+
     public func send(input: PlayerInputPayload.Input) {
         switch role {
         case .hosting: host?.reportLocalInput(input)
@@ -587,6 +625,7 @@ public final class SessionCoordinator: ObservableObject {
             case let .script(.chat(line)):
                 // A line from the game itself, not from a person.
                 appendChat(ChatPayload(senderName: L("Game"), text: line), from: SessionCoordinator.gamePeerID)
+                remember(line)
             case let .script(.say(speaker, name, text)):
                 // A character in the game talking: under its own name, so the
                 // bubble goes over its head and it can be muted like anyone.
@@ -646,6 +685,7 @@ public final class SessionCoordinator: ObservableObject {
     }
 
     private func show(announcement message: String, for duration: Double) {
+        remember(L(message))
         announcementTask?.cancel()
         announcement = Announcement(message: message, expiresAt: Date().addingTimeInterval(duration))
         announcementTask = Task { @MainActor [weak self] in
@@ -713,6 +753,7 @@ public final class SessionCoordinator: ObservableObject {
     /// "offline" implementation of the game to drift out of sync.
     public func startSoloSession(world: WorldDocument) {
         startHosting(world: world, capacity: 1)
+        isSolo = true
     }
 
     public var localPlayer: PlayerSnapshot? {
