@@ -5,6 +5,7 @@ import SwiftUI
 struct ProjectBrowserView: View {
     @EnvironmentObject private var store: ProjectStore
     @EnvironmentObject private var settings: StudioSettings
+    @EnvironmentObject private var updater: AppUpdater
 
     @State private var openSession: StudioSession?
     @State private var isCreating = false
@@ -23,6 +24,9 @@ struct ProjectBrowserView: View {
     /// gone — presenting the editor over a sheet still on its way out is
     /// refused.
     @State private var downloadedGame: WorldDocument?
+    /// Updates: the Settings-style card, and the hand-over to Swift Playgrounds.
+    @State private var showingUpdates = false
+    @State private var installingUpdate = false
 
     var body: some View {
         ZStack {
@@ -30,6 +34,7 @@ struct ProjectBrowserView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
+                    UpdateBanner(updater: updater) { installingUpdate = true }
                     header
                     projectsSection
                     collaborateSection
@@ -77,6 +82,26 @@ struct ProjectBrowserView: View {
         .sheet(item: $joiningPeer) { peer in
             joinSheet(peer)
         }
+        .sheet(isPresented: $showingUpdates) {
+            ScrollView {
+                UpdateSettingsCard(updater: updater) {
+                    showingUpdates = false
+                    installingUpdate = true
+                }
+                .padding(24)
+            }
+            .presentationDetents([.medium, .large])
+        }
+        // Projects stay where they are across an update, with their earlier
+        // versions, so there is no separate backup to offer here.
+        .sheet(isPresented: $installingUpdate) {
+            UpdateInstallSheet(updater: updater, backup: nil)
+        }
+        // The first time a new version runs: what changed.
+        .sheet(isPresented: Binding(get: { updater.justUpdated != nil && openSession == nil },
+                                    set: { if !$0 { updater.justUpdated = nil } })) {
+            if let manifest = updater.justUpdated { WhatsNewSheet(manifest: manifest) }
+        }
         .alert(L("Delete this project?"), isPresented: .constant(pendingDeletion != nil)) {
             Button(L("Cancel"), role: .cancel) { pendingDeletion = nil }
             Button(L("Delete"), role: .destructive) {
@@ -86,7 +111,10 @@ struct ProjectBrowserView: View {
         } message: {
             Text(L("“{}” moves to Recently Deleted, where it can be put back for 30 days.", pendingDeletion?.name ?? ""))
         }
-        .onAppear { browser.start() }
+        .onAppear {
+            browser.start()
+            updater.start()
+        }
         .onDisappear { browser.stop() }
     }
 
@@ -101,6 +129,11 @@ struct ProjectBrowserView: View {
             Spacer()
 
             languageMenu
+
+            Button { showingUpdates = true } label: {
+                Label(L("Updates"), systemImage: updater.availability == .current ? "arrow.triangle.2.circlepath" : "arrow.down.app.fill")
+            }
+            .buttonStyle(NeonButtonStyle(.secondary))
 
             if !store.deleted.isEmpty {
                 Button { showingDeleted = true } label: {

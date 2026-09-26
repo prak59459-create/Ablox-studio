@@ -25,8 +25,13 @@ public struct DiscoveredPeer: Identifiable, Hashable {
     /// Whether this build can talk to that one.
     public var isCompatible: Bool { protocolVersion == AbloxProtocol.version }
 
+    /// That iPad has a newer Ablox: this one is the one to update.
+    public var isNewer: Bool { protocolVersion > AbloxProtocol.version }
+
     public var subtitle: String {
-        if !isCompatible { return "Different Ablox version" }
+        if !isCompatible {
+            return isNewer ? L("Has a newer Ablox — update this iPad to join") : L("Has an older Ablox — that iPad needs to update")
+        }
         if isStudioSession { return "Studio · \(playerCount)/\(capacity) editing" }
         return "\(playerCount)/\(capacity) players"
     }

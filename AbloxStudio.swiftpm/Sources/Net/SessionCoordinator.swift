@@ -309,7 +309,9 @@ public final class SessionCoordinator: ObservableObject {
 
     public func join(_ peer: DiscoveredPeer, roomCode code: String) {
         guard peer.isCompatible else {
-            status = .error("That iPad is running a different version of Ablox.")
+            status = .error(peer.isNewer
+                ? L("That iPad has a newer Ablox. Update this one in Settings, then join.")
+                : L("That iPad has an older Ablox. It needs to update before you can join."))
             return
         }
         guard !peer.isFull else {

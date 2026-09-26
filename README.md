@@ -17,6 +17,14 @@ and press Run. It also opens in Xcode 15+.
 Say yes to the **Local Network** prompt if you want to build with someone else
 — without it, Studio cannot see other iPads.
 
+### Updating
+
+From 1.1 on, Studio keeps itself up to date the same way Ablox does: it finds
+a new version, downloads and checks it, and you tap **Install** and send it
+to Swift Playgrounds. **Updates** in the top bar shows the version and the
+settings. Publishing a release is `scripts/release.sh 1.2`, then writing the
+notes in `update.json`; see the Ablox repository's `docs/updates.md`.
+
 ## What it does
 
 **Three-pane editor.** Explorer on the left, viewport in the middle, Inspector

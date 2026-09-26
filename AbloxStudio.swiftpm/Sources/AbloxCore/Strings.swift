@@ -29,7 +29,7 @@ public enum Strings {
 
     /// Exposed so the tests can see duplicates, which the dictionary hides.
     public static let entries: [(String, String)] =
-        coreEntries + clientEntries + studioEntries + guideEntries + catalogueEntries + scriptEntries
+        coreEntries + clientEntries + studioEntries + guideEntries + catalogueEntries + scriptEntries + updateEntries
 
     // MARK: - Shared vocabulary
 
@@ -1277,5 +1277,53 @@ public enum Strings {
         ("Loading the game list…", "ゲーム一覧を読み込み中…"),
         ("Ablox uses the same list and branch on this iPad.", "このiPadの Ablox も同じ一覧とブランチを使います。"),
         ("{} script files", "スクリプト {} 個"),
+    ]
+
+    // MARK: - Updates
+
+    /// Keeping the app itself up to date (`AppUpdater`), in both apps.
+    static let updateEntries: [(String, String)] = [
+        ("{} {} is out", "{} {} が出ました"),
+        ("Downloading…", "ダウンロード中…"),
+        ("Getting it ready…", "準備中…"),
+        ("Downloaded and ready. Two taps and you have it.", "ダウンロード済み。あと2タップで新しくなります"),
+        ("Friends with the new version cannot play with this one until it updates.", "新しいバージョンの友だちとは、アップデートするまでいっしょに遊べません"),
+        ("A newer version of this app is ready to download.", "このアプリの新しいバージョンをダウンロードできます"),
+        ("Install", "インストール"),
+        ("Download", "ダウンロード"),
+        ("Later", "あとで"),
+        ("Updates", "アップデート"),
+        ("This is version {}", "いまのバージョン: {}"),
+        ("New in {}", "{} の新しいところ"),
+        ("Check now", "今すぐ確認"),
+        ("Look for updates by itself", "アップデートを自動で探す"),
+        ("When the app opens, and every few hours while it is open.", "アプリを開いたときと、開いているあいだ数時間ごとに探します。"),
+        ("Download them by itself", "自動でダウンロードする"),
+        ("On Wi-Fi only, so it is ready when you are. Nothing is installed without you.", "Wi-Fi のときだけ。準備だけしておき、あなたがOKするまでインストールはしません。"),
+        ("Last looked {}", "最後に確認: {}"),
+        ("Looking…", "確認中…"),
+        ("Ready to install", "インストールできます"),
+        ("Up to date", "最新です"),
+        ("Update available", "アップデートあり"),
+        ("Install {} {}", "{} {} をインストール"),
+        ("Downloaded and checked. Everything you have stays.", "ダウンロードとチェックは完了。今までのデータはそのまま残ります。"),
+        ("Tap the button below and choose Swift Playgrounds. (Not in the list? Choose “Save to Files” and put it in the Playgrounds folder.)", "下のボタンを押して「Swift Playgrounds」を選びます。（見つからないときは『ファイルに保存』で Playgrounds フォルダに保存）"),
+        ("Send to Swift Playgrounds", "Swift Playgrounds に送る"),
+        ("In Swift Playgrounds, open the new {} and press ▶︎.", "Swift Playgrounds で新しい {} を開いて ▶︎ を押します。"),
+        ("That's it. Your worlds, coins and saved games carry over. When the new one runs, you can delete the old one.", "これで完了。ワールド・コイン・セーブはそのまま引きつがれます。新しいほうが動いたら、古いほうは消してOKです。"),
+        ("A backup of everything was made just now. Keep a copy in Files too, to be extra safe:", "いま全部のバックアップを作りました。念のため「ファイル」にも保存しておけます:"),
+        ("Save the backup", "バックアップを保存"),
+        ("Updated to {}", "{} になりました"),
+        ("Everything you had is still here.", "今までのものは全部そのままです。"),
+        ("Let's go", "はじめる"),
+        ("Bring back the backup made before the last update", "前回のアップデート前のバックアップをもどす"),
+        ("GitHub did not answer properly. Try again in a few minutes.", "GitHub からうまく返事がありませんでした。数分後にもう一度ためしてください。"),
+        ("The new version could not be read. Try again later.", "新しいバージョンを読みこめませんでした。あとでもう一度ためしてください。"),
+        ("This iPad is not connected to the internet.", "この iPad はインターネットにつながっていません。"),
+        ("Has a newer Ablox — update this iPad to join", "新しい Ablox です — この iPad をアップデートすると入れます"),
+        ("Has an older Ablox — that iPad needs to update", "古い Ablox です — その iPad のアップデートが必要です"),
+        ("Their Ablox is older", "相手の Ablox が古い"),
+        ("That iPad has a newer Ablox. Update this one in Settings, then join.", "その iPad の Ablox のほうが新しいです。設定からこの iPad をアップデートしてから入ってください。"),
+        ("That iPad has an older Ablox. It needs to update before you can join.", "その iPad の Ablox は古いバージョンです。アップデートしてもらってから入ってください。"),
     ]
 }

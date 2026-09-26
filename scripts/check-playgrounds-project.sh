@@ -120,6 +120,15 @@ else
     echo "  ! python3 not found; skipping the translation check"
 fi
 
+# ---------------------------------------------------------------- release --
+#
+# The version in Package.swift, AppRelease.swift and update.json must agree,
+# or iPads are offered an update that never arrives. See scripts/release.sh.
+
+if command -v python3 > /dev/null && [ -f "$repo_root/update.json" ]; then
+    "$repo_root/scripts/check-release.sh" || status=1
+fi
+
 if [ "$status" -eq 0 ]; then
     printf '  \033[32m✓\033[0m no known-bad patterns\n'
 fi
