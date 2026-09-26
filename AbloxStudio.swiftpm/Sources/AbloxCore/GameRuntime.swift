@@ -24,6 +24,8 @@ public final class GameRuntime {
         case start, tick, join, leave, touch, tap, fire, hit
         case hitBlock = "hit_block"
         case death, respawn, button, input, chat
+        /// A player's saved data has arrived: `p.saved` is ready to read.
+        case loaded
     }
 
     /// What `game.respawn_time = 5` and friends change.
@@ -209,6 +211,9 @@ public final class GameRuntime {
             }
             pending.append(contentsOf: machine.advance(to: time))
             flushDeferredUpdates()
+            // Before the round-over check: what was saved as a round ended
+            // still has to reach the iPad.
+            flushSaves()
             guard hasStarted, !isRoundOver else { return }
 
             for state in orderedStates {
@@ -236,6 +241,12 @@ public final class GameRuntime {
     public func handle(_ input: PlayerInputPayload.Input, from peer: PeerID, at time: Double) -> [Effect] {
         collect {
             clock = Swift.max(clock, time)
+            // Saved data is kept even between rounds: arriving while a round
+            // is over must not lose it for the rest of the session.
+            if case let .saved(data) = input {
+                if let state = states[peer], !state.isNPC { receiveSave(data, for: state) }
+                return
+            }
             guard hasStarted, !isRoundOver, let state = states[peer], !state.isNPC else { return }
             switch input {
             case let .fire(origin, direction):
@@ -253,6 +264,8 @@ public final class GameRuntime {
                 guard state.isAlive, state.armed?.startReload(at: clock) == true else { return }
                 sendAmmo(state)
                 send(state, .playSound(name: SoundCue.reload.rawValue))
+            case .saved:
+                break
             }
         }
     }
@@ -392,6 +405,9 @@ public final class GameRuntime {
         run(.start, [])
         for state in orderedStates where !isRoundOver && !state.isNPC {
             welcome(state, replayingScreen: false)
+            // Saved data survives a restarted round; `on loaded` runs again
+            // so the new round can read it the same way the first one did.
+            if state.saved != nil, !isRoundOver { run(.loaded, [object(for: state)]) }
         }
     }
 
@@ -885,6 +901,13 @@ extension GameRuntime {
         var ui: [String: UIElement] = [:]
         /// Values the script stored on the character: `p.kills = 3`.
         var custom: [String: ScriptValue] = [:]
+        /// What this player has saved in this world, once it has arrived from
+        /// their iPad. Nil until then — and `p.save` waits for it, or the first
+        /// save of a session would overwrite everything saved before.
+        var saved: SaveData?
+        /// Changed since it was last sent back to their iPad.
+        var saveChanged = false
+        var lastSaveSent = -Double.infinity
 
         // NPCs only.
         var body: PlayerSnapshot?

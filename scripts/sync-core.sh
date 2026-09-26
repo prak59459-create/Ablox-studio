@@ -49,6 +49,7 @@ MIRRORED_FILES=(
   "Sources/UI/Components/AbloxMark.swift:Sources/UI/Components/AbloxMark.swift"
   "Sources/UI/ProjectStore.swift:Sources/UI/ProjectStore.swift"
   "Sources/UI/Components/CodePad.swift:Sources/UI/Components/CodePad.swift"
+  "Sources/UI/Components/WorldHistory.swift:Sources/UI/Components/WorldHistory.swift"
 )
 
 if [[ ! -d "$UPSTREAM_APP" ]]; then

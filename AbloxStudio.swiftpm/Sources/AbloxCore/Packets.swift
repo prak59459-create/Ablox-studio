@@ -348,6 +348,9 @@ public struct PlayerInputPayload: Codable, Hashable, Sendable {
         case reload
         /// Text typed into a script's input box and sent.
         case text(id: String, value: String)
+        /// This player's saved data for the world being played, read from
+        /// their iPad as they arrive. The host bounds it like any other claim.
+        case saved(SaveData)
     }
 
     public var peerID: PeerID
@@ -402,7 +405,8 @@ public enum AbloxProtocol {
     /// 2: `playerInput` and script effects (screen GUI, weapons, camera).
     /// 3: `.absc` script files, free-form GUI, NPCs and world editing.
     /// 4: an NPC's `say` is a speech bubble over its head (`ScriptEffect.say`).
-    public static let version = 4
+    /// 5: saved game data (`PlayerInputPayload.Input.saved`, `ScriptEffect.store`).
+    public static let version = 5
 
     /// Bonjour service type advertised by hosts.
     public static let bonjourServiceType = "_ablox._tcp"

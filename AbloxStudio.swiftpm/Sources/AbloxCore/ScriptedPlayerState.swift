@@ -128,8 +128,9 @@ public struct ScriptedPlayerState: Equatable, Sendable {
             lastHitWasKnockout = killed
         case .damageFlash:
             damageFlashCount &+= 1
-        case .launch, .face, .tracer, .chat, .say:
-            // Acted on by the viewport and the chat log; nothing to remember.
+        case .launch, .face, .tracer, .chat, .say, .store:
+            // Acted on by the viewport, the chat log or the save store;
+            // nothing to remember.
             break
         }
     }

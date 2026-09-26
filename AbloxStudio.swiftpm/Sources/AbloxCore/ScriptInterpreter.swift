@@ -340,6 +340,13 @@ public final class ScriptInterpreter {
             case let (.map(map), .string(key)):
                 map[key] = value.isNull ? nil : value
                 try checkSize(map.count, line: target.line)
+            case let (.object(object), .string(name)):
+                // `p["coins"] = 5` is `p.coins = 5` with the name in a
+                // variable — what saving a list of a player's values needs.
+                guard let resolver else {
+                    throw ScriptError(line: target.line, kind: .runtime, message: L("“{}” cannot be changed here.", name))
+                }
+                try resolver.setMember(of: object, named: name, to: value, line: target.line)
             default:
                 throw ScriptError(line: target.line, kind: .runtime,
                                   message: L("A {} cannot be indexed with a {}.", base.typeName, index.typeName))
@@ -425,6 +432,9 @@ public final class ScriptInterpreter {
                 return list.items[Int(position) - 1]
             case let (.map(map), .string(key)):
                 return map[key] ?? .null
+            case let (.object(object), .string(name)):
+                guard let resolver else { return .null }
+                return try resolver.member(of: object, named: name, line: line)
             case let (.string(text), .number(position)):
                 guard position == position.rounded(), position >= 1, Int(position) <= text.count else { return .null }
                 return .string(String(text[text.index(text.startIndex, offsetBy: Int(position) - 1)]))

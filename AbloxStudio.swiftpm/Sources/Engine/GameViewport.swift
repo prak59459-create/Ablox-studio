@@ -120,6 +120,8 @@ public struct GameViewport: UIViewRepresentable {
 
         private var avatars: [PeerID: AvatarEntity] = [:]
         private var localAvatar: AvatarEntity?
+        /// Speech bubbles over heads, drawn over the 3D view.
+        private var chatBubbles: ChatBubbleOverlay?
 
         private weak var view: ARView?
         private var updateSubscription: Cancellable?
@@ -133,6 +135,7 @@ public struct GameViewport: UIViewRepresentable {
         /// nowhere since the first phase; this is what finally plays them.
         private let feedback = FeedbackPlayer()
         private var lastWorldRevision: Date?
+        private var lastWorldID: UUID?
 
         /// Blocks currently overlapped, so a touch is reported on entry rather
         /// than every frame the player stands there.
@@ -183,6 +186,11 @@ public struct GameViewport: UIViewRepresentable {
             worldScene.anchor.addChild(local)
             localAvatar = local
 
+            let bubbles = ChatBubbleOverlay(frame: view.bounds)
+            bubbles.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            view.addSubview(bubbles)
+            chatBubbles = bubbles
+
             updateSubscription = view.scene.subscribe(to: SceneEvents.Update.self) { [weak self] event in
                 // Scene updates are delivered on the main thread, but the
                 // closure itself is non-isolated, so the hop has to be stated
@@ -203,6 +211,9 @@ public struct GameViewport: UIViewRepresentable {
             updateSubscription = nil
             worldScene.removeAll()
             avatars.removeAll()
+            chatBubbles?.removeAll()
+            chatBubbles?.removeFromSuperview()
+            chatBubbles = nil
         }
 
         // MARK: Sync
@@ -211,7 +222,14 @@ public struct GameViewport: UIViewRepresentable {
             // `modifiedAt` is the cheap revision check; a full diff of every
             // block on every SwiftUI update would be wasteful, and WorldScene
             // does its own per-block diffing anyway.
-            guard world.modifiedAt != lastWorldRevision else { return }
+            //
+            // The world's id is checked too. Every catalogue game carries the
+            // same `modifiedAt` — the day the catalogue was built — and the
+            // viewport is made before the session switches to the new game,
+            // so a date-only check kept drawing the previous game's map while
+            // the player walked (and collided) in the new one.
+            guard world.id != lastWorldID || world.modifiedAt != lastWorldRevision else { return }
+            lastWorldID = world.id
             lastWorldRevision = world.modifiedAt
             // RealityKit physics only matters for parts that can fall. The
             // players' own movement never used it, and a static body per part
@@ -389,6 +407,7 @@ public struct GameViewport: UIViewRepresentable {
             if !effects.isEmpty { apply(effects: effects) }
 
             updateCamera(dt: dt, index: index)
+            updateChatBubbles()
             updateWeapons(dt: dt)
             if parent.isFiring { fireIfReady(index: index) }
             fadeTracers(dt: dt)
@@ -577,6 +596,50 @@ public struct GameViewport: UIViewRepresentable {
             camera.look(at: focus.simd, from: cameraAnchor.position, relativeTo: nil)
             let looking = focus - Vec3(cameraAnchor.position)
             if looking.lengthSquared > 1e-4 { viewDirection = looking.normalized }
+        }
+
+        // MARK: Chat bubbles
+
+        /// Puts what each person said in the last few seconds over their
+        /// head. Runs every frame so the bubbles stay glued to moving heads;
+        /// the work is a walk back through the newest chat lines and one
+        /// projection per speaker.
+        private func updateChatBubbles() {
+            guard let view, let overlay = chatBubbles else { return }
+            let session = parent.session
+            let now = Date()
+
+            var lines: [PeerID: [ChatBubbleOverlay.Message]] = [:]
+            for entry in session.chatLog.reversed() {
+                let age = now.timeIntervalSince(entry.timestamp)
+                // The log is in order, so everything before this is older.
+                if age > ChatBubbleOverlay.lifetime { break }
+                // The game's own lines have no head to sit over.
+                guard entry.senderID != SessionCoordinator.gamePeerID,
+                      session.muteList.allows(entry.senderID, localPeerID: session.localPeerID) else { continue }
+                var list = lines[entry.senderID] ?? []
+                guard list.count < ChatBubbleOverlay.linesPerSpeaker else { continue }
+                list.insert(ChatBubbleOverlay.Message(id: entry.id, text: entry.text, age: age), at: 0)
+                lines[entry.senderID] = list
+            }
+            guard !lines.isEmpty || overlay.isShowingAnything else { return }
+
+            let eye = Vec3(camera.position(relativeTo: nil))
+            var speakers: [ChatBubbleOverlay.Speaker] = []
+            for (peer, messages) in lines {
+                let avatar = peer == session.localPeerID ? localAvatar : avatars[peer]
+                // Hidden, culled, or our own head in first person: no bubble.
+                guard let avatar, avatar.isEnabled, avatar.parent != nil else { continue }
+                let top = Vec3(avatar.position(relativeTo: nil)) + Vec3(0, 2.35 * avatar.scale.y, 0)
+                let toTop = top - eye
+                let distance = toTop.length
+                // Behind the camera, a projection lands on the screen
+                // mirrored; better not to draw it at all.
+                guard distance > 0.5, distance < 70, toTop.dot(viewDirection) > 0.2 * distance,
+                      let point = view.project(top.simd) else { continue }
+                speakers.append(ChatBubbleOverlay.Speaker(id: peer, messages: messages, anchor: point, distance: distance))
+            }
+            overlay.update(speakers)
         }
 
         // MARK: Weapons

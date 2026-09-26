@@ -88,6 +88,11 @@ public final class SessionCoordinator: ObservableObject {
         }
     }
 
+    /// Where games keep what they save for this iPad's player (`p.save`),
+    /// supplied by the app. Nil — Studio's play tests — saves nothing, so
+    /// trying a game out never touches someone's real progress.
+    public var saveStore: GameSaveStore?
+
     /// Chat safety, supplied by the app's settings.
     ///
     /// Filtering happens on receipt so it covers everyone's messages, not
@@ -199,7 +204,7 @@ public final class SessionCoordinator: ObservableObject {
         // The world pulls its `.absc` files from GitHub each time it is
         // played. Fetched before the round starts, so the game begins with
         // the newest scripts rather than changing under everyone.
-        self.world = world
+        enter(world)
         status = .connecting
         let attempt = UUID()
         scriptRefreshAttempt = attempt
@@ -219,7 +224,7 @@ public final class SessionCoordinator: ObservableObject {
     }
 
     private func beginHosting(world: WorldDocument, isStudioSession: Bool, isPublic: Bool, capacity: Int) {
-        self.world = world
+        enter(world)
         let code = RoomCode.generate()
         roomCode = code
 
@@ -288,6 +293,9 @@ public final class SessionCoordinator: ObservableObject {
         self.host = host
         host.start()
         host.startRound()
+        // The host plays too: its own saved data goes in the same way a
+        // guest's does, straight after the round it will read it in.
+        if let saved = savedData(for: world) { host.reportLocalInput(.saved(saved)) }
     }
 
     /// Switches the room between public and private while hosting.
@@ -341,10 +349,15 @@ public final class SessionCoordinator: ObservableObject {
 
         client.onWorld = { [weak self] world in
             Task { @MainActor in
+                guard let self else { return }
                 // A fresh world means a fresh welcome from the host's script,
                 // so whatever the last one put on screen goes first.
-                self?.scripted.reset()
-                self?.world = world
+                self.scripted.reset()
+                self.enter(world)
+                // Now that we know which game this is, hand the host what this
+                // iPad has saved in it. A reconnect sends it again; the host
+                // keeps only the first copy it got for this visit.
+                if let saved = self.savedData(for: world) { self.client?.send(input: .saved(saved)) }
             }
         }
 
@@ -469,6 +482,8 @@ public final class SessionCoordinator: ObservableObject {
         pendingEffects = []
         scripted.reset()
         scriptLog = []
+        // The last game's chat and speech bubbles belong to that game.
+        chatLog = []
         announcementTask?.cancel()
         announcement = nil
     }
@@ -570,6 +585,8 @@ public final class SessionCoordinator: ObservableObject {
                 // A character in the game talking: under its own name, so the
                 // bubble goes over its head and it can be muted like anyone.
                 appendChat(ChatPayload(senderName: name, text: text), from: speaker)
+            case let .script(.store(data)):
+                keep(data)
             case let .script(effect):
                 scripted.apply(effect)
             default:
@@ -578,6 +595,41 @@ public final class SessionCoordinator: ObservableObject {
         }
         // Animated and physical effects are the viewport's job.
         pendingEffects.append(contentsOf: effects)
+    }
+
+    // MARK: Changing worlds
+
+    /// Makes `world` the one being played. A different world than the last
+    /// one also puts the local player at its spawn point — queued before
+    /// anything the host's script sends, so the script can still move them —
+    /// rather than wherever they stood in the previous game.
+    private func enter(_ world: WorldDocument) {
+        let isDifferent = world.id != self.world.id
+        self.world = world
+        if isDifferent {
+            pendingEffects.append(.teleportPlayer(to: world.spawnPosition(forPlayerIndex: 0)))
+        }
+    }
+
+    // MARK: Saved game data
+
+    /// What this iPad has saved in `world`, or nil when saving is off or the
+    /// world has no script to read it.
+    private func savedData(for world: WorldDocument) -> SaveData? {
+        guard let saveStore, world.hasScript else { return nil }
+        return saveStore.load(worldID: world.id) ?? SaveData()
+    }
+
+    /// Writes what the host's script saved. Small and at most once a second,
+    /// so it goes straight to disk rather than waiting for the app to close —
+    /// an iPad that runs out of battery mid-game keeps its progress.
+    private func keep(_ data: SaveData) {
+        guard let saveStore, world.hasScript else { return }
+        do {
+            try saveStore.save(data, worldID: world.id, worldName: world.name)
+        } catch {
+            scriptLog.append(ScriptLogLine(text: L("Could not save this game's progress: {}", error.localizedDescription), isError: true))
+        }
     }
 
     /// Called by the viewport once it has consumed the queue.

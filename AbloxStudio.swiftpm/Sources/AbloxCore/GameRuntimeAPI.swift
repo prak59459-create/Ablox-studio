@@ -29,7 +29,7 @@ extension GameRuntime: ScriptObjectResolver {
 
     /// Members only a person has: their screen and camera.
     public static let playerOnlyMemberNames: [String] = [
-        "camera", "camera_distance", "fov", "controls", "default_ui",
+        "camera", "camera_distance", "fov", "controls", "default_ui", "saved", "save",
         "camera_look", "camera_reset", "message", "sound", "chat", "fade", "shake",
         "ui_text", "ui_button", "ui_panel", "ui_image", "ui_bar", "ui_input", "ui_set", "ui_remove", "ui_clear"
     ]
@@ -257,7 +257,12 @@ extension GameRuntime: ScriptObjectResolver {
         case "fov": return .number(Double(state.camera.fieldOfView))
         case "controls": return .bool(state.showsControls)
         case "default_ui": return .bool(state.showsDefaultUI)
+        case "saved": return savedValue(of: state)
 
+        case "save":
+            return method(name) { [unowned self] arguments, line in
+                try self.save(arguments, for: state, line: line)
+            }
         case "give":
             return method(name) { [unowned self] arguments, line in
                 let weapon = try self.weaponNamed(arguments.first ?? .null, line: line)

@@ -11,6 +11,8 @@ struct ProjectBrowserView: View {
     @State private var newName = ""
     @State private var selectedTemplate: ProjectStore.Template = .starter
     @State private var pendingDeletion: ProjectStore.Entry?
+    @State private var showingVersions: ProjectStore.Entry?
+    @State private var showingDeleted = false
 
     @StateObject private var browser = BrowserModel()
     @State private var joiningPeer: DiscoveredPeer?
@@ -48,6 +50,12 @@ struct ProjectBrowserView: View {
             }
         }
         .sheet(isPresented: $isCreating) { createSheet }
+        .sheet(item: $showingVersions) { entry in
+            WorldVersionsSheet(entry: entry).environmentObject(store)
+        }
+        .sheet(isPresented: $showingDeleted) {
+            RecentlyDeletedSheet().environmentObject(store)
+        }
         .sheet(isPresented: $isAsking) {
             MapAISheet { world in
                 // Straight into the editor: the point of generating a level is
@@ -76,7 +84,7 @@ struct ProjectBrowserView: View {
                 pendingDeletion = nil
             }
         } message: {
-            Text(L("“{}” will be removed from this iPad. This cannot be undone.", pendingDeletion?.name ?? ""))
+            Text(L("“{}” moves to Recently Deleted, where it can be put back for 30 days.", pendingDeletion?.name ?? ""))
         }
         .onAppear { browser.start() }
         .onDisappear { browser.stop() }
@@ -93,6 +101,13 @@ struct ProjectBrowserView: View {
             Spacer()
 
             languageMenu
+
+            if !store.deleted.isEmpty {
+                Button { showingDeleted = true } label: {
+                    Label(L("Recently deleted"), systemImage: "trash")
+                }
+                .buttonStyle(NeonButtonStyle(.secondary))
+            }
 
             Button {
                 isBrowsingGames = true
@@ -192,6 +207,9 @@ struct ProjectBrowserView: View {
                         Menu {
                             Button { store.duplicate(entry) } label: {
                                 Label(L("Duplicate"), systemImage: "doc.on.doc")
+                            }
+                            Button { showingVersions = entry } label: {
+                                Label(L("Earlier versions"), systemImage: "clock.arrow.circlepath")
                             }
                             Divider()
                             Button(role: .destructive) { pendingDeletion = entry } label: {

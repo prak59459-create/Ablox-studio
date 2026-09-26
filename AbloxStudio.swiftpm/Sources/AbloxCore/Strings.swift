@@ -193,6 +193,46 @@ public enum Strings {
     // MARK: - Ablox (the player client)
 
     static let clientEntries: [(String, String)] = [
+        // Saved data, backups, earlier versions, recently deleted
+        ("A backup file holds your avatar, coins, saved games and worlds. Keep it in Files or send it to another iPad, then open it there with “Restore from a backup”.", "バックアップファイルには、アバター・コイン・ゲームのセーブ・ワールドが入ります。「ファイル」に取っておくか別のiPadに送って、そこで「バックアップから戻す」で開きます。"),
+        ("A version is kept every few minutes while you build. Going back keeps the current one as a version too, so you can change your mind.", "作っている間、数分ごとに版が保存されます。もどしても今の状態が版として残るので、やっぱりやめることもできます。"),
+        ("Could not save this game's progress: {}", "このゲームの進みぐあいを保存できませんでした: {}"),
+        ("Delete all saved games", "ゲームのセーブをすべて消す"),
+        ("Delete every saved game?", "すべてのゲームのセーブを消しますか？"),
+        ("Delete now", "今すぐ消す"),
+        ("Delete these worlds for good?", "これらのワールドを完全に消しますか？"),
+        ("Delete this saved game?", "このゲームのセーブを消しますか？"),
+        ("Deleted worlds stay here for 30 days, then go for good.", "消したワールドは30日間ここに残り、そのあと完全に消えます。"),
+        ("Earlier versions", "以前の版"),
+        ("Earlier versions of “{}”", "「{}」の以前の版"),
+        ("Empty", "空にする"),
+        ("Every game starts again from nothing. Worlds and coins are not touched.", "どのゲームも最初からになります。ワールドとコインはそのままです。"),
+        ("Games keep your progress — coins, quests, what you unlocked — on this iPad by themselves, even in a friend's room. It comes back next time you play the same game.", "ゲームの進みぐあい（コイン・クエスト・解放したもの）は、友だちの部屋で遊んでいても、このiPadに自動で保存されます。次に同じゲームで遊ぶとつづきから始まります。"),
+        ("Go back", "もどす"),
+        ("Go back to this", "この版にもどす"),
+        ("Go back to this version?", "この版にもどしますか？"),
+        ("Make a backup", "バックアップを作る"),
+        ("No earlier versions yet", "以前の版はまだありません"),
+        ("No game has saved anything yet.", "まだどのゲームもセーブしていません。"),
+        ("Nothing deleted", "消したワールドはありません"),
+        ("Put back", "もとにもどす"),
+        ("Recently deleted", "最近消したもの"),
+        ("Restore from a backup", "バックアップから戻す"),
+        ("Restored: {} saved games and {} worlds.", "戻しました: ゲームのセーブ {} 個、ワールド {} 個。"),
+        ("Save it to Files, or AirDrop it to the iPad you are moving to.", "「ファイル」に保存するか、引っこし先のiPadにAirDropで送ってください。"),
+        ("Saved data", "保存データ"),
+        ("That backup was made by a newer Ablox. Update this iPad first.", "このバックアップは新しいAbloxで作られています。先にこのiPadのAbloxを更新してください。"),
+        ("That file could not be read: {}", "そのファイルを読めませんでした: {}"),
+        ("That file is not an Ablox backup.", "そのファイルはAbloxのバックアップではありません。"),
+        ("That file is too big to be an Ablox backup.", "Abloxのバックアップにしては大きすぎるファイルです。"),
+        ("The backup could not be written: {}", "バックアップを書き出せませんでした: {}"),
+        ("The world as it is now is kept, so this can be undone.", "今のワールドも残るので、あとで取り消せます。"),
+        ("They appear once the world has been saved a few times.", "ワールドが何回か保存されると、ここに出てきます。"),
+        ("This cannot be undone.", "元にはもどせません。"),
+        ("Worlds you delete wait here for 30 days.", "消したワールドは30日間ここで待っています。"),
+        ("Your progress in “{}” will start again from nothing.", "「{}」の進みぐあいが最初からになります。"),
+        ("{} days left", "のこり {} 日"),
+        ("“{}” moves to Recently Deleted, where it can be put back for 30 days.", "「{}」は「最近消したもの」に移ります。30日間はもとにもどせます。"),
         // Main menu and lobbies
         ("Worlds", "ワールド"),
         ("Play", "プレイ"),
@@ -852,6 +892,15 @@ public enum Strings {
     /// in the middle of writing a game, so the Japanese says what to do in the
     /// plainest words that are still accurate.
     static let scriptEntries: [(String, String)] = [
+        // Saved game data
+        ("“save” needs a name first, like p.save(\"coins\", 10).", "「save」には名前が必要です。例: p.save(\"coins\", 10)"),
+        ("That is too much to save (the limit is {} KB).", "保存するデータが大きすぎます（{} KB まで）。"),
+        ("Saved lists and maps can only go {} deep.", "保存するリストやマップは {} 段までです。"),
+        ("Only a real number can be saved.", "保存できるのはふつうの数だけです。"),
+        ("Only numbers, text, true/false, lists and maps can be saved — not {}.", "保存できるのは数・文字・true/false・リスト・マップだけです（{} は保存できません）。"),
+        ("A player's saved data has arrived. Read p.saved here.", "プレイヤーのセーブデータがとどいた。ここで p.saved を読む。"),
+        ("Keeps something on the player's iPad for next time, reads it back, or forgets it. p.saved is nil until on loaded.",
+         "次のためにプレイヤーのiPadに保存する・読み出す・消す。on loaded までは p.saved は nil。"),
         // Reading a script
         ("Line {}: {}", "{}行目: {}"),
         ("The script is too long.", "スクリプトが長すぎます。"),

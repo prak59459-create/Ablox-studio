@@ -59,7 +59,8 @@ public enum ScriptReference {
             Entry("on respawn(p)", L("A knocked-out player comes back.")),
             Entry("on button(p, id)", L("A player presses a screen button.")),
             Entry("on input(p, id, text)", L("A player sends text from a text box.")),
-            Entry("on chat(p, text)", L("A player says something in the chat — commands, passwords, quizzes."))
+            Entry("on chat(p, text)", L("A player says something in the chat — commands, passwords, quizzes.")),
+            Entry("on loaded(p)", L("A player's saved data has arrived. Read p.saved here."))
         ])
     }
 
@@ -99,7 +100,9 @@ public enum ScriptReference {
                   L("Weapons: blaster, rifle, shotgun, pistol, or your own.")),
             Entry("p.damage(20)  p.heal(20)  p.kill()  p.respawn()", L("Hurt, heal, knock out, or bring back.")),
             Entry("p.message(\"Hi\", 2)  p.chat(\"Hi\")  p.sound(\"hit\")", L("A message, chat line or sound for this player only.")),
-            Entry("p.kills = 0", L("Store your own values on a player."))
+            Entry("p.kills = 0", L("Store your own values on a player.")),
+            Entry("p.save(\"coins\", 120)  p.saved.coins  p.save(\"coins\")",
+                  L("Keeps something on the player's iPad for next time, reads it back, or forgets it. p.saved is nil until on loaded."))
         ])
     }
 

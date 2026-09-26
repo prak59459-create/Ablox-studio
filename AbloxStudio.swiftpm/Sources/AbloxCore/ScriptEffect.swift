@@ -228,4 +228,7 @@ public enum ScriptEffect: Codable, Equatable, Hashable, Sendable {
     /// A character said something: a line in the chat under their name, and
     /// a speech bubble over their head.
     case say(speaker: PeerID, name: String, text: String)
+    /// Keep this: the player's saved data for the world being played, to be
+    /// written to their iPad. Sent to that player only, after `p.save`.
+    case store(SaveData)
 }
