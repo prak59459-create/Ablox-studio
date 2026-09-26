@@ -31,6 +31,8 @@ public final class FeedbackPlayer {
 
     public var isSoundEnabled: Bool = true
     public var isHapticsEnabled: Bool = true
+    /// Settings → Comfort → Vibration strength, 0 to 1.
+    public var hapticIntensity: Double = 1
 
     private var throttle = SoundThrottle()
     private let startedAt = Date()
@@ -104,11 +106,17 @@ public final class FeedbackPlayer {
 
     private func playHaptic(_ feedback: SoundCue.Feedback) {
         #if canImport(UIKit)
+        // Notification taps have no strength of their own; a light setting
+        // plays them as a soft tap instead.
+        if hapticIntensity < 0.6, feedback == .success || feedback == .warning || feedback == .failure {
+            lightImpact.impactOccurred(intensity: CGFloat(hapticIntensity))
+            return
+        }
         switch feedback {
         case .none: break
-        case .light: lightImpact.impactOccurred()
-        case .medium: mediumImpact.impactOccurred()
-        case .heavy: heavyImpact.impactOccurred()
+        case .light: lightImpact.impactOccurred(intensity: CGFloat(hapticIntensity))
+        case .medium: mediumImpact.impactOccurred(intensity: CGFloat(hapticIntensity))
+        case .heavy: heavyImpact.impactOccurred(intensity: CGFloat(hapticIntensity))
         case .success: notification.notificationOccurred(.success)
         case .warning: notification.notificationOccurred(.warning)
         case .failure: notification.notificationOccurred(.error)

@@ -28,7 +28,11 @@ public struct ChatModerator: Sendable {
     /// playground arguments. Lowercase, matched case-insensitively.
     public static let defaultBlockedTerms: [String] = [
         "damn", "crap", "stupid", "idiot", "dumb", "loser",
-        "shutup", "shut up", "hate you", "kill you", "ugly"
+        "shutup", "shut up", "hate you", "kill you", "ugly",
+        // Japanese is written without spaces, so these match inside a
+        // sentence. Kept to words with no innocent longer word around them:
+        // not ばか, which is in ばかり ("only").
+        "死ね", "殺す", "ころす", "きもい", "キモい", "キモイ", "うざい", "ウザい", "ウザイ", "ブス", "アホ", "バーカ"
     ]
 
     /// Extra terms a host adds for their own group.
@@ -79,7 +83,10 @@ public struct ChatModerator: Sendable {
         for term in blockedTerms {
             var searchRange = output.startIndex..<output.endIndex
             while let found = output.range(of: term, options: [.caseInsensitive], range: searchRange) {
-                if Self.isWholeWord(found, in: output) {
+                // Whole words for terms in a spaced script; anywhere for
+                // Japanese, which has no spaces to find a word by.
+                let spaced = term.unicodeScalars.allSatisfy(\.isASCII)
+                if !spaced || Self.isWholeWord(found, in: output) {
                     let mask = String(repeating: "*", count: output.distance(from: found.lowerBound, to: found.upperBound))
                     output.replaceSubrange(found, with: mask)
                     didFilter = true

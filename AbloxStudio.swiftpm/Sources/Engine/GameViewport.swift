@@ -29,6 +29,9 @@ public struct GameViewport: UIViewRepresentable {
     var graphicsQuality: GraphicsQuality
     /// A small frame-rate counter at the top of the screen.
     var showFrameRate: Bool
+    /// Settings → Comfort and the play screen's extras: shake, field of
+    /// view, zoom, vibration, battery and heat, auto-jump.
+    var preferences: PlayPreferences
 
     public init(
         session: SessionCoordinator,
@@ -40,6 +43,7 @@ public struct GameViewport: UIViewRepresentable {
         isFiring: Bool = false,
         graphicsQuality: GraphicsQuality = .auto,
         showFrameRate: Bool = false,
+        preferences: PlayPreferences = PlayPreferences(),
         onBlockTapped: ((UUID) -> Void)? = nil
     ) {
         self.session = session
@@ -51,6 +55,7 @@ public struct GameViewport: UIViewRepresentable {
         self.isFiring = isFiring
         self.graphicsQuality = graphicsQuality
         self.showFrameRate = showFrameRate
+        self.preferences = preferences
         self.onBlockTapped = onBlockTapped
     }
 
@@ -77,6 +82,7 @@ public struct GameViewport: UIViewRepresentable {
     public func updateUIView(_ view: ARView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.setFeedbackEnabled(sound: soundEnabled, haptics: hapticsEnabled)
+        context.coordinator.setPreferences(preferences)
         context.coordinator.setGraphics(quality: graphicsQuality, showFrameRate: showFrameRate)
         context.coordinator.syncWorld(session.world)
         context.coordinator.syncRoster(session.roster, localPeerID: session.localPeerID)
@@ -158,6 +164,12 @@ public struct GameViewport: UIViewRepresentable {
         private var shakeRemaining: Float = 0
         private var shakeStrength: Float = 0
 
+        /// Settings → Comfort and friends.
+        private var preferences = PlayPreferences()
+        /// The best graphics level the battery and the iPad's heat allow.
+        private var powerCap: GraphicsProfile.Level?
+        private var powerClock: Float = 5
+
         init(parent: GameViewport) {
             self.parent = parent
             self.localSnapshot = PlayerSnapshot(
@@ -204,6 +216,19 @@ public struct GameViewport: UIViewRepresentable {
         func setFeedbackEnabled(sound: Bool, haptics: Bool) {
             feedback.isSoundEnabled = sound
             feedback.isHapticsEnabled = haptics
+        }
+
+        func setPreferences(_ preferences: PlayPreferences) {
+            guard preferences != self.preferences else { return }
+            let batteryChanged = preferences.batterySaver != self.preferences.batterySaver
+                || preferences.coolDownWhenHot != self.preferences.coolDownWhenHot
+            self.preferences = preferences
+            switch preferences.hapticStrength {
+            case .light: feedback.hapticIntensity = 0.45
+            case .medium: feedback.hapticIntensity = 0.8
+            case .strong: feedback.hapticIntensity = 1
+            }
+            if batteryChanged { powerClock = 5 }
         }
 
         func detach() {
@@ -328,8 +353,8 @@ public struct GameViewport: UIViewRepresentable {
                         parent.cameraYaw = -yaw
                         publisher.reset()
                     case let .shake(strength, seconds):
-                        shakeStrength = strength
-                        shakeRemaining = Float(seconds)
+                        shakeStrength = preferences.shake(strength: strength)
+                        shakeRemaining = shakeStrength > 0 ? Float(seconds) : 0
                     default:
                         break
                     }
@@ -363,6 +388,11 @@ public struct GameViewport: UIViewRepresentable {
             // The world's gravity (Earth's by default) times the player's own.
             let worldGravity = world.environment.gravity / -9.81
             movement.gravity *= scale.gravity * (worldGravity.isFinite ? max(0, min(5, worldGravity)) : 1)
+            // Auto-jump: up a step too tall to walk, or over a gap with
+            // somewhere to land.
+            if preferences.autoJump, !scale.frozen, localSnapshot.isGrounded, shouldAutoJump(index: index) {
+                input.isJumping = true
+            }
             let motion = CharacterSolver.step(snapshot: localSnapshot, input: input, config: movement, deltaTime: dt)
             localSnapshot.velocity = motion.velocity
             localSnapshot.yawDegrees = motion.yawDegrees
@@ -418,6 +448,64 @@ public struct GameViewport: UIViewRepresentable {
                 cullClock = 0
                 cullFarAway(index: index)
             }
+            powerClock += dt
+            if powerClock >= 5 {
+                powerClock = 0
+                checkPowerAndHeat()
+            }
+        }
+
+        /// Low Power Mode, the battery saver and a hot iPad all cap the
+        /// graphics — checked every few seconds, since they change slowly.
+        private func checkPowerAndHeat() {
+            let heat: DeviceHeat
+            switch ProcessInfo.processInfo.thermalState {
+            case .nominal: heat = .nominal
+            case .fair: heat = .fair
+            case .serious: heat = .serious
+            case .critical: heat = .critical
+            @unknown default: heat = .fair
+            }
+            let cap = preferences.graphicsCap(lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled, heat: heat)
+            guard cap != powerCap else { return }
+            powerCap = cap
+            apply(profile: .profile(for: capped(appliedLevel)))
+        }
+
+        /// The level chosen by the setting or the governor, before any cap.
+        private var appliedLevel: GraphicsProfile.Level {
+            graphicsQuality.fixedLevel ?? governor.level
+        }
+
+        private func capped(_ level: GraphicsProfile.Level) -> GraphicsProfile.Level {
+            guard let powerCap else { return level }
+            return min(level, powerCap)
+        }
+
+        /// Whether the way ahead needs a jump: a solid edge between knee and
+        /// head height just in front, or a gap with ground a jump away.
+        private func shouldAutoJump(index: WorldIndex) -> Bool {
+            let flat = Vec3(localSnapshot.velocity.x, 0, localSnapshot.velocity.z)
+            guard flat.length > 1 else { return false }
+            let direction = flat.normalized
+            let size = parent.session.localAppearance.height
+            let feet = localSnapshot.position
+            func solid(_ box: BoundingBox) -> Bool {
+                index.entries(near: box).contains { $0.hasCollision && $0.isVisible && $0.bounds.intersects(box) }
+            }
+            let near = feet + direction * (0.4 * size + 0.3)
+            let step = BoundingBox(min: Vec3(near.x - 0.15, feet.y + 0.5, near.z - 0.15),
+                                   max: Vec3(near.x + 0.15, feet.y + 1.1, near.z + 0.15))
+            let headroom = BoundingBox(min: Vec3(near.x - 0.15, feet.y + 1.4, near.z - 0.15),
+                                       max: Vec3(near.x + 0.15, feet.y + 2.4 * size, near.z + 0.15))
+            if solid(step) && !solid(headroom) { return true }
+
+            let ahead = feet + direction * (0.4 * size + 0.6)
+            let floor = BoundingBox(min: Vec3(ahead.x - 0.2, feet.y - 3, ahead.z - 0.2), max: Vec3(ahead.x + 0.2, feet.y + 0.05, ahead.z + 0.2))
+            guard !solid(floor) else { return false }
+            let landing = feet + direction * 3
+            let ground = BoundingBox(min: Vec3(landing.x - 0.4, feet.y - 1.5, landing.z - 0.4), max: Vec3(landing.x + 0.4, feet.y + 0.6, landing.z + 0.4))
+            return solid(ground)
         }
 
         // MARK: Graphics
@@ -427,7 +515,7 @@ public struct GameViewport: UIViewRepresentable {
                 graphicsQuality = quality
                 // Auto starts from the top and steps down if it has to.
                 governor = FrameRateGovernor(startingAt: quality.fixedLevel ?? .high)
-                apply(profile: .profile(for: governor.level))
+                apply(profile: .profile(for: capped(governor.level)))
             }
             setFrameRateLabel(visible: showFrameRate)
         }
@@ -457,7 +545,7 @@ public struct GameViewport: UIViewRepresentable {
         /// another level, and keeps the counter up to date.
         private func watchFrameRate(_ frameTime: Float) {
             if let level = governor.record(frameTime: Double(frameTime)), graphicsQuality == .auto {
-                apply(profile: .profile(for: level))
+                apply(profile: .profile(for: capped(level)))
             }
             fpsClock += frameTime
             if fpsClock >= 0.5, let fpsLabel, !fpsLabel.isHidden {
@@ -519,7 +607,7 @@ public struct GameViewport: UIViewRepresentable {
         private func updateCamera(dt: Float, index: WorldIndex) {
             let settings = parent.session.scripted.camera
             let size = parent.session.localAppearance.height
-            camera.camera.fieldOfViewInDegrees = max(10, min(150, settings.fieldOfView))
+            camera.camera.fieldOfViewInDegrees = preferences.fieldOfView(game: settings.fieldOfView)
 
             // A shake is a small random offset that dies away.
             var jitter = Vec3.zero
@@ -549,7 +637,8 @@ public struct GameViewport: UIViewRepresentable {
                 let focus = localSnapshot.position + Vec3(0, 1 * size, 0)
                 // Tipped slightly, and turned with the camera yaw, so "up" on
                 // the stick is still "away from the camera".
-                let offset = Quat.yaw(degrees: parent.cameraYaw).act(Vec3(0, settings.distance, settings.distance * 0.3))
+                let height = settings.distance * preferences.cameraZoom
+                let offset = Quat.yaw(degrees: parent.cameraYaw).act(Vec3(0, height, height * 0.3))
                 let eye = focus + offset + jitter
                 cameraAnchor.position = Vec3.lerp(Vec3(cameraAnchor.position), eye, 1 - exp(-12 * dt)).simd
                 camera.look(at: focus.simd, from: cameraAnchor.position, relativeTo: nil)
@@ -574,7 +663,8 @@ public struct GameViewport: UIViewRepresentable {
             let orbit = Quat.euler(degrees: Vec3(pitch, parent.cameraYaw, 0))
 
             let focus = localSnapshot.position + Vec3(0, 1.4 * size, 0) + jitter
-            let desiredDistance: Float = settings.distance
+            // Pinch-to-zoom (and Settings) scale the game's own distance.
+            let desiredDistance: Float = settings.distance * preferences.cameraZoom
             let offset = orbit.act(Vec3(0, 0, 1)) * desiredDistance
 
             // Keep the camera out of geometry: if the line from the player to

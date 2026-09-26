@@ -100,6 +100,10 @@ public final class SessionCoordinator: ObservableObject {
     /// opt its own messages out of your filter.
     public var moderator = ChatModerator()
 
+    /// False when Settings → Family has chat off: other players' lines are
+    /// neither shown nor sent. The game's own lines and NPCs still speak.
+    public var allowsPlayerChat = true
+
     /// Muting is applied when the log is read rather than when a message
     /// arrives, so unmuting someone brings their backlog back instead of
     /// leaving a hole in the conversation.
@@ -540,7 +544,7 @@ public final class SessionCoordinator: ObservableObject {
 
     public func sendChat(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty, allowsPlayerChat else { return }
         switch role {
         case .hosting: host?.sendChat(trimmed)
         case .joined:
@@ -660,6 +664,10 @@ public final class SessionCoordinator: ObservableObject {
     }
 
     private func appendChat(_ payload: ChatPayload, from sender: PeerID) {
+        if !allowsPlayerChat, sender != SessionCoordinator.gamePeerID,
+           !(roster.first { $0.peerID == sender }?.isNPC ?? false) {
+            return
+        }
         let filtered = moderator.filter(payload.text)
         chatLog.append(ChatEntry(
             senderID: sender,
