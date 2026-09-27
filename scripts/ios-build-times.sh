@@ -23,6 +23,18 @@ rm -rf "$derived"
 xcodebuild -version
 cd "$app_dir"
 
+# Xcode names the schemes after the package's products and targets, and the
+# set changes with the targets. When the expected one is missing, build the
+# app's own target instead, and say which schemes there were.
+schemes="$(xcodebuild -list 2>/dev/null | awk '/Schemes:/ { on = 1; next } on && NF { sub(/^[[:space:]]+/, ""); print }')"
+if ! grep -qxF "$scheme" <<< "$schemes"; then
+  echo "No scheme named \"$scheme\". The package has:"
+  sed 's/^/  /' <<< "$schemes"
+  app_target="$(grep -A1 -E '\.executableTarget\(' Package.swift | grep -oE 'name: "[^"]+"' | head -1 | cut -d'"' -f2)"
+  if grep -qxF "$app_target" <<< "$schemes"; then scheme="$app_target"; else scheme="$(head -1 <<< "$schemes")"; fi
+  echo "Building \"$scheme\"."
+fi
+
 stats="/tmp/ablox-stats"
 rm -rf "$stats"; mkdir -p "$stats"
 flags="-Xfrontend -debug-time-function-bodies -Xfrontend -warn-long-expression-type-checking=150 -Xfrontend -stats-output-dir -Xfrontend $stats"
