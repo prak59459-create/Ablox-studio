@@ -33,7 +33,8 @@ public struct CloudConfig: Codable, Hashable, Sendable {
     /// Filled in by whoever builds Ablox for their family or class, so the
     /// iPads need nothing typed in (docs/firebase_*.md, step 4). Empty: each
     /// iPad enters it in Settings → Family → Internet.
-    public static let builtIn = CloudConfig(databaseURL: "", apiKey: "")
+    public static let builtIn = CloudConfig(databaseURL: "https://ablox-ee138-default-rtdb.asia-southeast1.firebasedatabase.app",
+                                            apiKey: "AIzaSyCPUcRIkBS69RJf38uPoO5YZMC4RxjXmpc")
 
     /// The database's address with nothing after it — only a Firebase
     /// Realtime Database, so the key is never sent anywhere else.
@@ -174,7 +175,8 @@ public struct CloudProfile: Codable, Hashable, Sendable {
     /// On, and heard from in the last few minutes (an iPad that went flat
     /// never gets to say it is leaving).
     public func isOnline(now: Double) -> Bool {
-        online && now - seen < 5 * 60_000
+        let fiveMinutes: Double = 300_000
+        return online && now - seen < fiveMinutes
     }
 }
 

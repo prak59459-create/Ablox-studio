@@ -13,6 +13,14 @@ public struct EditorDocument: Sendable {
         case move
         case rotate
         case scale
+        /// Draw a box round parts to pick them all.
+        case boxSelect
+        /// Tap parts to paint them.
+        case paint
+        /// Tap a part to take its colour.
+        case eyedropper
+        /// Tap the ground to raise, dig or level it.
+        case terrain
 
         public var id: String { rawValue }
 
@@ -22,6 +30,10 @@ public struct EditorDocument: Sendable {
             case .move: return L("Move")
             case .rotate: return L("Rotate")
             case .scale: return L("Scale")
+            case .boxSelect: return L("Box select")
+            case .paint: return L("Paint")
+            case .eyedropper: return L("Pick colour")
+            case .terrain: return L("Ground")
             }
         }
 
@@ -31,6 +43,10 @@ public struct EditorDocument: Sendable {
             case .move: return "move.3d"
             case .rotate: return "rotate.3d"
             case .scale: return "scale.3d"
+            case .boxSelect: return "rectangle.dashed"
+            case .paint: return "paintbrush.pointed.fill"
+            case .eyedropper: return "eyedropper"
+            case .terrain: return "mountain.2.fill"
             }
         }
     }
@@ -48,6 +64,16 @@ public struct EditorDocument: Sendable {
     public var gridSize: Float = 0.5
     /// Rotation snap in degrees.
     public var angleSnap: Float = 15
+
+    /// Layers hidden in the editor, and layers whose parts cannot be picked.
+    /// Only the editor's: the game shows every layer.
+    public var hiddenLayers: Set<String> = []
+    public var lockedLayers: Set<String> = []
+    /// The paint tool's colour, and the colours used lately.
+    public var paintColor: ColorRGBA = ColorRGBA(hex: "#F43F5E")!
+    public var recentColors: [ColorRGBA] = []
+    public var terrainAction: TerrainAction = .raise
+    public var terrainBrush = 1
 
     /// Set whenever the world changes and cleared on save, to drive the
     /// "unsaved changes" dot.

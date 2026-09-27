@@ -405,6 +405,9 @@ public struct ZipArchive {
 
     private static func u32(_ b: [UInt8], _ i: Int) -> Int {
         guard i + 4 <= b.count else { return 0 }
-        return Int(b[i]) | Int(b[i + 1]) << 8 | Int(b[i + 2]) << 16 | Int(b[i + 3]) << 24
+        // In steps: as one expression this took the compiler a fifth of a second.
+        let low: Int = u16(b, i)
+        let high: Int = u16(b, i + 2)
+        return low | high << 16
     }
 }

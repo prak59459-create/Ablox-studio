@@ -86,6 +86,21 @@ public struct EditorViewport: UIViewRepresentable {
         private var dragLast: CGPoint?
         private var isDragging = false
 
+        /// The box being drawn with the box-select tool.
+        private var boxStart: CGPoint?
+        private let boxView = UIView()
+        /// Co-editors and pins, as labels over the view.
+        private var labels: [String: UILabel] = [:]
+        private var updateSubscription: Cancellable?
+        /// Blocks hidden because their layer is.
+        private var layerHidden: Set<UUID> = []
+
+        /// Settings → Drag speed.
+        private var sensitivity: Float {
+            let stored = UserDefaults.standard.object(forKey: "ablox.studio.dragSensitivity") as? Double ?? 1
+            return Float(max(0.25, min(3, stored)))
+        }
+
         init(parent: EditorViewport) {
             self.parent = parent
         }
@@ -101,10 +116,67 @@ public struct EditorViewport: UIViewRepresentable {
 
             addGrid()
             updateCamera()
+
+            boxView.isHidden = true
+            boxView.isUserInteractionEnabled = false
+            boxView.layer.borderColor = UIColor.cyan.cgColor
+            boxView.layer.borderWidth = 2
+            boxView.backgroundColor = UIColor.cyan.withAlphaComponent(0.12)
+            view.addSubview(boxView)
+
+            updateSubscription = view.scene.subscribe(to: SceneEvents.Update.self) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateLabels() }
+            }
         }
 
         func detach() {
+            updateSubscription?.cancel()
+            updateSubscription = nil
             worldScene.removeAll()
+            labels.values.forEach { $0.removeFromSuperview() }
+            labels.removeAll()
+        }
+
+        /// Co-editors' names where they are working, and pins pointed in the
+        /// chat, kept over the right place as the camera moves.
+        private func updateLabels() {
+            guard let view else { return }
+            let session = parent.session
+            var wanted: [String: (text: String, point: Vec3, color: UIColor)] = [:]
+            let colors: [UIColor] = [.systemPink, .systemOrange, .systemGreen, .systemPurple, .systemTeal]
+            for (index, person) in session.collaborators.enumerated() where person.peerID != session.localID {
+                guard let point = session.presence[person.peerID] else { continue }
+                wanted["p" + person.peerID.raw.uuidString] = ("● " + person.profile.displayName, point, colors[index % colors.count])
+            }
+            for pin in session.pins {
+                wanted["pin" + pin.id.uuidString] = ("📍 " + pin.name, pin.point, .systemYellow)
+            }
+            for (key, label) in labels where wanted[key] == nil {
+                label.removeFromSuperview()
+                labels[key] = nil
+            }
+            for (key, item) in wanted {
+                let label = labels[key] ?? {
+                    let made = UILabel()
+                    made.font = .systemFont(ofSize: 12, weight: .bold)
+                    made.textColor = .white
+                    made.layer.cornerRadius = 8
+                    made.clipsToBounds = true
+                    made.textAlignment = .center
+                    view.addSubview(made)
+                    labels[key] = made
+                    return made
+                }()
+                label.text = "  " + item.text + "  "
+                label.backgroundColor = item.color.withAlphaComponent(0.85)
+                label.sizeToFit()
+                if let point = view.project((item.point + Vec3(0, 1, 0)).simd) {
+                    label.isHidden = false
+                    label.center = point
+                } else {
+                    label.isHidden = true
+                }
+            }
         }
 
         /// A faint reference grid at y = 0, so an empty world is not a void.
@@ -132,7 +204,17 @@ public struct EditorViewport: UIViewRepresentable {
                 // Physics only in play mode: blocks must stay where they are
                 // put while you are building.
                 worldScene.sync(to: world, physicsEnabled: isPlaying)
+                layerHidden.removeAll()
             }
+            // Hidden layers, in this editor only.
+            let hidden = Set(world.blocks.filter { session.document.hiddenLayers.contains($0.layerName) }.map(\.id))
+            for id in layerHidden.subtracting(hidden) {
+                worldScene.apply(effect: .setVisible(blockID: id, visible: world.block(id: id)?.isVisible ?? true))
+            }
+            for id in hidden.subtracting(layerHidden) {
+                worldScene.apply(effect: .setVisible(blockID: id, visible: false))
+            }
+            layerHidden = hidden
             lastMode = session.mode
             gridEntity?.isEnabled = !isPlaying
 
@@ -162,7 +244,23 @@ public struct EditorViewport: UIViewRepresentable {
             let position = focus + offset
             cameraAnchor.position = position.simd
             camera.look(at: focus.simd, from: position.simd, relativeTo: nil)
+            parent.session.noteFocus(focus)
         }
+
+        /// Straight down, from the front, from the side, or back to the
+        /// usual angle.
+        func setView(_ angle: ViewAngle) {
+            switch angle {
+            case .top: pitch = -89; yaw = 0
+            case .front: pitch = -5; yaw = 0
+            case .side: pitch = -5; yaw = 90
+            case .usual: pitch = -28; yaw = -30
+            }
+            updateCamera()
+        }
+
+        /// Where the camera is looking, on the ground.
+        var focusPoint: Vec3 { focus }
 
         /// Where a new part should land: where the camera is looking, dropped
         /// onto the ground plane.
@@ -194,19 +292,70 @@ public struct EditorViewport: UIViewRepresentable {
         // MARK: Gestures
 
         @objc func handleTap(_ recognizer: UITapGestureRecognizer) {
-            guard let view, parent.session.mode == .edit else { return }
+            // Parts can be picked and changed while testing too; the change
+            // shows straight away.
+            guard let view else { return }
             let location = recognizer.location(in: view)
+            let session = parent.session
+            let hitID = view.entity(at: location).flatMap { worldScene.blockID(forHit: $0) }
+                .flatMap { id in layerHidden.contains(id) ? nil : id }
 
-            guard let entity = view.entity(at: location),
-                  let blockID = worldScene.blockID(forHit: entity) else {
-                parent.session.select(nil)
+            switch session.document.tool {
+            case .paint:
+                // Read first: the edit must not read the document it is changing.
+                let color = session.document.paintColor
+                if let hitID { session.edit { $0.paint(hitID, with: color) } }
+                return
+            case .eyedropper:
+                if let hitID, let block = session.document.world.block(id: hitID) {
+                    session.setPaintColor(block.color.withAlpha(1))
+                    session.setTool(.paint)
+                }
+                return
+            case .terrain:
+                if let point = groundPoint(at: location, hit: hitID) {
+                    session.edit { $0.shapeTerrain($0.terrainAction, at: point, brush: $0.terrainBrush) }
+                }
+                return
+            case .select, .move, .rotate, .scale, .boxSelect:
+                break
+            }
+
+            guard let blockID = hitID, let block = session.document.world.block(id: blockID) else {
+                session.select(nil)
                 return
             }
+            guard session.document.isPickable(block) else { return }
 
             // Two fingers, or a tap while something is selected, extends the
             // selection instead of replacing it.
             let additive = recognizer.numberOfTouches > 1
-            parent.session.select(blockID, additive: additive)
+            session.select(blockID, additive: additive)
+        }
+
+        /// The point on the ground (or on top of the part) under a finger.
+        private func groundPoint(at location: CGPoint, hit: UUID?) -> Vec3? {
+            guard let view else { return nil }
+            if let hit, let bounds = parent.session.document.world.worldBounds(of: hit) {
+                return Vec3(bounds.center.x, bounds.max.y, bounds.center.z)
+            }
+            guard let through = view.ray(through: location) else { return nil }
+            let ray = Ray(origin: Vec3(through.origin), direction: Vec3(through.direction))
+            guard let t = ray.intersectionWithHorizontalPlane(atHeight: 0) else { return nil }
+            return ray.point(at: t)
+        }
+
+        /// Selects the parts whose middles are inside the box drawn.
+        private func finishBox(to end: CGPoint, additive: Bool) {
+            guard let view, let start = boxStart else { return }
+            let rect = CGRect(x: min(start.x, end.x), y: min(start.y, end.y), width: abs(end.x - start.x), height: abs(end.y - start.y))
+            let world = parent.session.document.world
+            let ids = world.blocks.compactMap { block -> UUID? in
+                guard !layerHidden.contains(block.id), let bounds = world.worldBounds(of: block.id),
+                      let point = view.project(bounds.center.simd), rect.contains(point) else { return nil }
+                return block.id
+            }
+            parent.session.edit { $0.selectBlocks(ids, additive: additive) }
         }
 
         @objc func handleOrbit(_ recognizer: UIPanGestureRecognizer) {
@@ -239,12 +388,35 @@ public struct EditorViewport: UIViewRepresentable {
         /// One-finger drag: transforms the selection with the active tool, or
         /// pans the camera when nothing is selected.
         @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
-            guard let view, parent.session.mode == .edit else { return }
-            let translation = recognizer.translation(in: view)
-            recognizer.setTranslation(.zero, in: view)
-
+            guard let view else { return }
             let session = parent.session
             let tool = session.document.tool
+
+            if tool == .boxSelect {
+                let location = recognizer.location(in: view)
+                switch recognizer.state {
+                case .began:
+                    boxStart = location
+                    boxView.frame = CGRect(origin: location, size: .zero)
+                    boxView.isHidden = false
+                case .changed:
+                    if let start = boxStart {
+                        boxView.frame = CGRect(x: min(start.x, location.x), y: min(start.y, location.y),
+                                               width: abs(location.x - start.x), height: abs(location.y - start.y))
+                    }
+                case .ended:
+                    finishBox(to: location, additive: false)
+                    boxView.isHidden = true
+                    boxStart = nil
+                default:
+                    boxView.isHidden = true
+                    boxStart = nil
+                }
+                return
+            }
+
+            let translation = recognizer.translation(in: view)
+            recognizer.setTranslation(.zero, in: view)
             let hasSelection = !session.document.selection.isEmpty
 
             switch recognizer.state {
@@ -254,6 +426,16 @@ public struct EditorViewport: UIViewRepresentable {
 
             case .changed:
                 guard isDragging else {
+                    // Painting and shaping by dragging over parts and ground.
+                    if tool == .paint || tool == .terrain {
+                        let location = recognizer.location(in: view)
+                        let hit = view.entity(at: location).flatMap { worldScene.blockID(forHit: $0) }
+                        if tool == .paint, let hit {
+                            let color = session.document.paintColor
+                            session.edit { $0.paint(hit, with: color) }
+                        }
+                        return
+                    }
                     pan(by: translation)
                     return
                 }
@@ -295,7 +477,7 @@ public struct EditorViewport: UIViewRepresentable {
                 let orbit = Quat.yaw(degrees: yaw)
                 let right = orbit.act(Vec3(1, 0, 0))
                 let forward = orbit.act(Vec3(0, 0, 1))
-                let scale = distance * 0.0016
+                let scale = distance * 0.0016 * sensitivity
                 var offset = right * (dx * scale) + forward * (dy * scale)
 
                 // Two fingers on the move tool lifts vertically instead.
@@ -305,13 +487,16 @@ public struct EditorViewport: UIViewRepresentable {
                 session.edit { $0.translateSelection(by: offset) }
 
             case .rotate:
-                session.edit { $0.rotateSelection(byDegrees: Vec3(0, dx * 0.6, 0)) }
+                session.edit { $0.rotateSelection(byDegrees: Vec3(0, dx * 0.6 * sensitivity, 0)) }
 
             case .scale:
                 // Drag right or up to grow. A multiplicative step keeps the
                 // feel consistent at any current size.
-                let factor = 1 + (dx - dy) * 0.004
+                let factor = 1 + (dx - dy) * 0.004 * sensitivity
                 session.edit { $0.scaleSelection(by: Vec3(repeating: max(0.9, min(1.1, factor)))) }
+
+            case .boxSelect, .paint, .eyedropper, .terrain:
+                break
             }
         }
 
@@ -351,5 +536,40 @@ public final class ViewportCommands: ObservableObject {
     @MainActor
     public func insertionPoint() -> Vec3 {
         coordinator?.insertionPoint() ?? .zero
+    }
+
+    @MainActor
+    public func setView(_ angle: ViewAngle) {
+        coordinator?.setView(angle)
+    }
+
+    /// The middle of the screen, on the ground: where "here" is.
+    @MainActor
+    public func focusPoint() -> Vec3 {
+        coordinator?.focusPoint ?? .zero
+    }
+}
+
+/// The camera's preset angles.
+public enum ViewAngle: String, CaseIterable, Identifiable, Sendable {
+    case usual, top, front, side
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .usual: return L("Usual view")
+        case .top: return L("From above (2D)")
+        case .front: return L("From the front")
+        case .side: return L("From the side")
+        }
+    }
+
+    public var symbolName: String {
+        switch self {
+        case .usual: return "cube"
+        case .top: return "square.grid.3x3"
+        case .front: return "square.stack.3d.forward.dottedline"
+        case .side: return "square.stack.3d.down.right"
+        }
     }
 }

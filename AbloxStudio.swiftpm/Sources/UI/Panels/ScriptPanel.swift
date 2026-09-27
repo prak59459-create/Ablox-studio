@@ -18,6 +18,9 @@ struct ScriptPanel: View {
     @State private var editingSource = false
     @State private var pulling = false
     @State private var pullNote: PullNote?
+    @State private var blockEditing: ScriptFileSelection?
+    @State private var showLibrary = false
+    @State private var showPush = false
 
     init(session: StudioSession) {
         self.session = session
@@ -57,6 +60,26 @@ struct ScriptPanel: View {
                         .buttonStyle(NeonButtonStyle(.secondary))
                     }
 
+                    HStack(spacing: 8) {
+                        Button {
+                            if let id = addFile(named: "blocks", source: BlockProgram().fileSource) {
+                                blockEditing = ScriptFileSelection(id: id)
+                            }
+                        } label: {
+                            Label(L("New with blocks"), systemImage: "square.stack.3d.up.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(NeonButtonStyle(.secondary))
+
+                        Button {
+                            showLibrary = true
+                        } label: {
+                            Label(L("My library"), systemImage: "books.vertical")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(NeonButtonStyle(.secondary))
+                    }
+
                     if let importMessage {
                         Text(verbatim: importMessage)
                             .font(.caption)
@@ -80,6 +103,17 @@ struct ScriptPanel: View {
         .background(.ultraThinMaterial)
         .sheet(item: $editing) { selection in
             ScriptEditorView(session: session, fileID: selection.id)
+        }
+        .sheet(item: $blockEditing) { selection in
+            BlockProgramEditor(session: session, fileID: selection.id) {
+                turnIntoCode(selection.id)
+            }
+        }
+        .sheet(isPresented: $showLibrary) {
+            ScriptLibrarySheet(session: session)
+        }
+        .sheet(isPresented: $showPush) {
+            GitHubPushSheet(session: session)
         }
         .sheet(item: $exportItem) { item in
             ScriptExportSheet(item: item)
@@ -150,13 +184,35 @@ struct ScriptPanel: View {
         }
     }
 
+    /// Whether a file was made with blocks (and opens as blocks).
+    private func isBlocks(_ file: ScriptFile) -> Bool {
+        file.source.hasPrefix(BlockProgram.marker)
+    }
+
+    /// Makes a block file ordinary code — the cards are dropped, the code
+    /// they made stays — and opens it in the code editor.
+    private func turnIntoCode(_ id: UUID) {
+        if let file = files.first(where: { $0.id == id }), let program = BlockProgram(file: file) {
+            session.edit { $0.updateScript(id, source: program.source) }
+        }
+        // After the block sheet has gone.
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            editing = ScriptFileSelection(id: id)
+        }
+    }
+
     private func fileRow(_ file: ScriptFile) -> some View {
         HStack(spacing: 10) {
             Button {
-                editing = ScriptFileSelection(id: file.id)
+                if isBlocks(file) {
+                    blockEditing = ScriptFileSelection(id: file.id)
+                } else {
+                    editing = ScriptFileSelection(id: file.id)
+                }
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: "doc.plaintext")
+                    Image(systemName: isBlocks(file) ? "square.stack.3d.up.fill" : "doc.plaintext")
                         .foregroundStyle(file.isEnabled ? Ablox.Palette.accent : Ablox.Palette.inkFaint)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(verbatim: file.name)
@@ -190,6 +246,18 @@ struct ScriptPanel: View {
                     exportItem = ScriptExport(file: file)
                 } label: {
                     Label(L("Export .absc"), systemImage: "square.and.arrow.up")
+                }
+                Button {
+                    ScriptLibraryStore.save(file)
+                } label: {
+                    Label(L("Save to my library"), systemImage: "books.vertical")
+                }
+                if isBlocks(file) {
+                    Button {
+                        turnIntoCode(file.id)
+                    } label: {
+                        Label(L("Turn into code"), systemImage: "curlybraces")
+                    }
                 }
                 Button(role: .destructive) {
                     session.edit { $0.removeScript(file.id) }
@@ -255,6 +323,14 @@ struct ScriptPanel: View {
                     }
                     .buttonStyle(NeonButtonStyle(.primary))
                     .disabled(pulling)
+
+                    Button {
+                        showPush = true
+                    } label: {
+                        Label(L("Push to GitHub"), systemImage: "arrow.up.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(NeonButtonStyle(.secondary))
 
                     if let pullNote {
                         Text(verbatim: pullNote.text)
@@ -540,16 +616,29 @@ private struct ScriptExportSheet: View {
 
 /// The editor: one `.absc` file as code, with Check and Test run for the
 /// whole world, the examples, and the reference beside it.
+///
+/// The code is coloured in a theme of the player's choice, problem lines get
+/// a red dotted underline (tap the problem to go there), suggestions sit
+/// above the keyboard, and the More menu has snippets, tidying, the outline,
+/// find and replace in every file, what changed, breakpoints and robots.
 struct ScriptEditorView: View {
     @ObservedObject var session: StudioSession
     let fileID: UUID
     @Environment(\.dismiss) private var dismiss
 
     @State private var draft = ""
+    /// The file as it was when the editor opened, for "What changed".
+    @State private var opened = ""
     @State private var problems: [ScriptError] = []
     @State private var report: ScriptTestReport?
     @State private var showReference = true
     @State private var commitTask: Task<Void, Never>?
+    @StateObject private var handle = CodeEditorHandle()
+    @AppStorage("ablox.studio.codeTheme") private var themeName = CodeTheme.night.rawValue
+    @State private var tool: ScriptEditorTool?
+    @State private var logFilter = LogFilter.all
+    @State private var logSearch = ""
+    @State private var note: String?
 
     init(session: StudioSession, fileID: UUID) {
         self.session = session
@@ -563,6 +652,26 @@ struct ScriptEditorView: View {
         session.document.world.scripts.map { $0.id == fileID ? ScriptFile(id: $0.id, name: $0.name, source: draft, isEnabled: $0.isEnabled) : $0 }
     }
 
+    private var worldWithDraft: WorldDocument {
+        var world = session.document.world
+        world.scripts = filesWithDraft
+        return world
+    }
+
+    private var theme: CodeTheme { CodeTheme(rawValue: themeName) ?? .night }
+
+    private static let builtins = Set(GameRuntime.gameAPINames + ScriptInterpreter.standardLibraryNames)
+
+    /// This file's problems (the others' are listed, but have no line here).
+    private func isHere(_ problem: ScriptError) -> Bool {
+        problem.file == nil || problem.file == file?.name
+    }
+
+    private var styling: CodeStyling {
+        CodeStyling(theme: theme, builtins: Self.builtins,
+                    problemLines: Set((problems + (report?.problems ?? [])).filter(isHere).map(\.line).filter { $0 > 0 }))
+    }
+
     var body: some View {
         NavigationStack {
             HStack(spacing: 0) {
@@ -570,19 +679,22 @@ struct ScriptEditorView: View {
                     // Code, not prose: the editor turns off capitals at the
                     // start of a line and "corrections" of `func` into `fun`.
                     // It types with the Ablox keyboard when that is on.
-                    AbloxTextEditor(L("Script"), text: $draft, autoFocus: true)
+                    AbloxTextEditor(L("Script"), text: $draft, autoFocus: true, handle: handle, styling: styling)
                         .padding(8)
-                        .background(Color.black.opacity(0.35))
+                        .background(Color(theme.background))
                         .onChange(of: draft) { _, _ in scheduleCommit() }
+
+                    CompletionBar(handle: handle, source: draft, blockNames: session.document.world.blocks.map(\.name))
+                        .background(Color.black.opacity(0.3))
 
                     Divider().background(Color.white.opacity(0.08))
                     results
-                        .frame(height: 190)
+                        .frame(height: 200)
                 }
 
                 if showReference {
                     Divider().background(Color.white.opacity(0.08))
-                    ScriptReferenceView()
+                    ScriptReferenceView { code in handle.replace(with: code) }
                         .frame(width: 340)
                         .transition(.move(edge: .trailing))
                 }
@@ -604,21 +716,11 @@ struct ScriptEditorView: View {
                         Label(L("Check"), systemImage: "checkmark.seal")
                     }
                     Button {
-                        testRun()
+                        testRun(robots: false)
                     } label: {
                         Label(L("Test run"), systemImage: "play.circle")
                     }
-                    Menu {
-                        ForEach(ScriptSamples.all) { sample in
-                            Button {
-                                draft = sample.source
-                            } label: {
-                                Label(sample.title, systemImage: sample.symbolName)
-                            }
-                        }
-                    } label: {
-                        Label(L("Examples"), systemImage: "doc.on.doc")
-                    }
+                    moreMenu
                     Button {
                         withAnimation { showReference.toggle() }
                     } label: {
@@ -628,8 +730,28 @@ struct ScriptEditorView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .sheet(item: $tool) { tool in
+            switch tool {
+            case .outline:
+                OutlineSheet(source: draft) { line in
+                    // Once the sheet has gone, so the editor can take focus.
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 350_000_000)
+                        handle.jump(toLine: line)
+                    }
+                }
+            case .find:
+                FindReplaceSheet(session: session, beforeReplace: { commitNow() },
+                                 afterReplace: { draft = file?.source ?? draft })
+            case .diff:
+                DiffSheet(title: L("What changed"), old: opened, new: draft)
+            case .debug:
+                DebugSheet(world: worldWithDraft, fileName: file?.name ?? "")
+            }
+        }
         .onAppear {
             draft = file?.source ?? ""
+            opened = draft
             // One undo step for the whole visit, not one per keystroke.
             session.edit { $0.beginGesture() }
             check()
@@ -640,77 +762,174 @@ struct ScriptEditorView: View {
         }
     }
 
+    private var moreMenu: some View {
+        Menu {
+            Menu {
+                ForEach(ScriptSnippets.all) { snippet in
+                    Button {
+                        handle.replace(with: snippet.code + "\n")
+                    } label: {
+                        Label(snippet.title, systemImage: snippet.symbolName)
+                    }
+                }
+            } label: {
+                Label(L("Insert a snippet"), systemImage: "text.badge.plus")
+            }
+            Button {
+                draft = ScriptFormatter.format(draft)
+            } label: {
+                Label(L("Tidy the indents"), systemImage: "text.alignleft")
+            }
+            Button {
+                tool = .outline
+            } label: {
+                Label(L("Outline"), systemImage: "list.bullet.indent")
+            }
+            Button {
+                commitNow()
+                tool = .find
+            } label: {
+                Label(L("Find in every file"), systemImage: "magnifyingglass")
+            }
+            Button {
+                tool = .diff
+            } label: {
+                Label(L("What changed"), systemImage: "plus.forwardslash.minus")
+            }
+            Divider()
+            Button {
+                commitNow()
+                tool = .debug
+            } label: {
+                Label(L("Debug with breakpoints"), systemImage: "ladybug")
+            }
+            Button {
+                testRun(robots: true)
+            } label: {
+                Label(L("Test run with robots"), systemImage: "figure.walk.motion")
+            }
+            Divider()
+            Button {
+                if let file {
+                    ScriptLibraryStore.save(ScriptFile(name: file.name, source: draft))
+                    note = L("Saved “{}” to your library.", file.name)
+                }
+            } label: {
+                Label(L("Save to my library"), systemImage: "books.vertical")
+            }
+            Picker(selection: $themeName) {
+                ForEach(CodeTheme.allCases) { theme in
+                    Text(theme.displayName).tag(theme.rawValue)
+                }
+            } label: {
+                Label(L("Colours"), systemImage: "paintpalette")
+            }
+            .pickerStyle(.menu)
+            Menu {
+                ForEach(ScriptSamples.all) { sample in
+                    Button {
+                        draft = sample.source
+                    } label: {
+                        Label(sample.title, systemImage: sample.symbolName)
+                    }
+                }
+            } label: {
+                Label(L("Examples"), systemImage: "doc.on.doc")
+            }
+        } label: {
+            Label(L("More"), systemImage: "ellipsis.circle")
+        }
+    }
+
     // MARK: Results
 
     private var results: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 6) {
-                if problems.isEmpty, report == nil {
-                    Label(L("No problems found"), systemImage: "checkmark.seal.fill")
-                        .foregroundStyle(Ablox.Palette.success)
-                        .font(.subheadline.weight(.semibold))
+        VStack(spacing: 0) {
+            if report != nil {
+                HStack(spacing: 8) {
+                    Picker(L("Show"), selection: $logFilter) {
+                        ForEach(LogFilter.allCases) { filter in
+                            Text(filter.displayName).tag(filter)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 260)
+                    AbloxTextField(L("Search the log"), text: $logSearch)
+                        .textFieldStyle(.plain)
+                        .font(.caption)
+                        .padding(6)
+                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
                 }
-                ForEach(Array(problems.enumerated()), id: \.offset) { _, problem in
-                    Label {
-                        Text(verbatim: problem.description)
-                    } icon: {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                    }
-                    .font(.system(.footnote, design: .monospaced))
-                    .foregroundStyle(problem.kind == .syntax ? Ablox.Palette.danger : Ablox.Palette.warning)
-                }
-                if let report {
-                    Text(L("Test run: two players, nobody pressing anything"))
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(Ablox.Palette.inkMuted)
-                        .padding(.top, 4)
-                    ForEach(Array(report.notes.enumerated()), id: \.offset) { _, note in
-                        Text(verbatim: "• " + note)
-                            .font(.footnote)
-                            .foregroundStyle(Ablox.Palette.ink)
-                    }
-                    ForEach(Array(report.output.enumerated()), id: \.offset) { _, line in
-                        Text(verbatim: "> " + line)
-                            .font(.system(.footnote, design: .monospaced))
-                            .foregroundStyle(Ablox.Palette.accent)
-                    }
-                    if report.notes.isEmpty, report.output.isEmpty, report.isClean {
-                        Text(L("It ran without errors, but did nothing anyone could see."))
-                            .font(.footnote)
-                            .foregroundStyle(Ablox.Palette.inkMuted)
-                    }
-                }
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    if let note {
+                        Text(verbatim: note)
+                            .font(.caption)
+                            .foregroundStyle(Ablox.Palette.success)
+                    }
+                    if let report {
+                        Text(L("Test run: two players, nobody pressing anything"))
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Ablox.Palette.inkMuted)
+                        TestReportView(report: report, filter: logFilter, search: logSearch, onProblem: jump(to:))
+                        if report.notes.isEmpty, report.output.isEmpty, report.robotNotes.isEmpty, report.isClean {
+                            Text(L("It ran without errors, but did nothing anyone could see."))
+                                .font(.footnote)
+                                .foregroundStyle(Ablox.Palette.inkMuted)
+                        }
+                    } else {
+                        if problems.isEmpty {
+                            Label(L("No problems found"), systemImage: "checkmark.seal.fill")
+                                .foregroundStyle(Ablox.Palette.success)
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        ForEach(Array(problems.enumerated()), id: \.offset) { _, problem in
+                            ProblemRow(problem: problem, onTap: jump(to:))
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+            }
         }
     }
 
     // MARK: Actions
 
+    /// Goes to a problem's line when it is in this file.
+    private func jump(to problem: ScriptError) {
+        guard isHere(problem), problem.line > 0 else { return }
+        handle.jump(toLine: problem.line)
+    }
+
     private func check() {
         commitNow()
         report = nil
+        note = nil
         problems = GameRuntime.check(filesWithDraft)
     }
 
-    private func testRun() {
+    private func testRun(robots: Bool) {
         commitNow()
-        var world = session.document.world
-        world.scripts = filesWithDraft
-        let result = GameRuntime.testRun(world: world, seconds: 5)
+        note = nil
+        let result = GameRuntime.testRun(world: worldWithDraft, seconds: 5, robots: robots)
         problems = result.problems
         report = result
     }
 
     /// Saves after a pause in typing, so co-editors see the script without
-    /// being sent every keystroke.
+    /// being sent every keystroke, and checks it again so the underlines
+    /// follow the code.
     private func scheduleCommit() {
         commitTask?.cancel()
         commitTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 800_000_000)
             guard !Task.isCancelled else { return }
             commitNow()
+            if report == nil { problems = GameRuntime.check(filesWithDraft) }
         }
     }
 
@@ -722,31 +941,118 @@ struct ScriptEditorView: View {
     }
 }
 
-/// Everything a script can use, grouped, beside the editor.
-struct ScriptReferenceView: View {
+/// The editor's sheets.
+enum ScriptEditorTool: String, Identifiable {
+    case outline, find, diff, debug
+    var id: String { rawValue }
+}
+
+/// A problem, tappable to go to its line.
+struct ProblemRow: View {
+    let problem: ScriptError
+    var onTap: ((ScriptError) -> Void)?
+
     var body: some View {
-        List {
-            ForEach(ScriptReference.sections) { section in
-                Section {
-                    ForEach(section.entries) { entry in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(verbatim: entry.code)
-                                .font(.system(.caption, design: .monospaced).weight(.semibold))
-                                .foregroundStyle(Ablox.Palette.accent)
-                                .textSelection(.enabled)
-                            Text(verbatim: entry.explanation)
-                                .font(.caption)
-                                .foregroundStyle(Ablox.Palette.inkMuted)
-                                .fixedSize(horizontal: false, vertical: true)
+        Button {
+            onTap?(problem)
+        } label: {
+            Label {
+                Text(verbatim: problem.description)
+                    .multilineTextAlignment(.leading)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+            }
+            .font(.system(.footnote, design: .monospaced))
+            .foregroundStyle(problem.kind == .syntax ? Ablox.Palette.danger : Ablox.Palette.warning)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(onTap == nil)
+    }
+}
+
+/// Everything a script can use, grouped, beside the editor, with a search
+/// box; the plus puts an entry in at the cursor.
+struct ScriptReferenceView: View {
+    var onInsert: ((String) -> Void)?
+    @State private var query = ""
+
+    init(onInsert: ((String) -> Void)? = nil) {
+        self.onInsert = onInsert
+    }
+
+    /// A section with the entries that match the search.
+    private struct Match: Identifiable {
+        let section: ScriptReference.Section
+        let entries: [ScriptReference.Entry]
+        var id: ScriptReference.Section.ID { section.id }
+    }
+
+    private var matches: [Match] {
+        let words = query.trimmingCharacters(in: .whitespaces)
+        return ScriptReference.sections.compactMap { section in
+            let entries = words.isEmpty ? section.entries : section.entries.filter {
+                $0.code.localizedCaseInsensitiveContains(words) || $0.explanation.localizedCaseInsensitiveContains(words)
+            }
+            return entries.isEmpty ? nil : Match(section: section, entries: entries)
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").foregroundStyle(Ablox.Palette.inkFaint)
+                AbloxTextField(L("Search the reference"), text: $query)
+                    .textFieldStyle(.plain)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .font(.callout)
+            }
+            .padding(10)
+            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .padding([.horizontal, .top], 12)
+
+            List {
+                if matches.isEmpty {
+                    Text(L("Nothing matches that."))
+                        .foregroundStyle(Ablox.Palette.inkMuted)
+                }
+                ForEach(matches) { match in
+                    Section {
+                        ForEach(match.entries) { entry in
+                            HStack(alignment: .top, spacing: 6) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(verbatim: entry.code)
+                                        .font(.system(.caption, design: .monospaced).weight(.semibold))
+                                        .foregroundStyle(Ablox.Palette.accent)
+                                        .textSelection(.enabled)
+                                    Text(verbatim: entry.explanation)
+                                        .font(.caption)
+                                        .foregroundStyle(Ablox.Palette.inkMuted)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                Spacer(minLength: 0)
+                                if let onInsert {
+                                    Button {
+                                        onInsert(entry.code)
+                                    } label: {
+                                        Image(systemName: "plus.circle")
+                                            .frame(width: 30, height: 30)
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .accessibilityLabel(L("Put it in the code"))
+                                }
+                            }
+                            .padding(.vertical, 2)
                         }
-                        .padding(.vertical, 2)
+                    } header: {
+                        Label(match.section.title, systemImage: match.section.symbolName)
                     }
-                } header: {
-                    Label(section.title, systemImage: section.symbolName)
                 }
             }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
     }
 }

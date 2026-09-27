@@ -95,6 +95,7 @@ public actor CloudAuth {
         var request = URLRequest(url: components.url!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(Bundle.main.bundleIdentifier, forHTTPHeaderField: "X-Ios-Bundle-Identifier")
         request.httpBody = Data(#"{"returnSecureToken":true}"#.utf8)
         let body = try await send(request)
         guard let uid = body["localId"].string, let token = body["idToken"].string, let refresh = body["refreshToken"].string else {
@@ -111,6 +112,7 @@ public actor CloudAuth {
         var request = URLRequest(url: components.url!)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue(Bundle.main.bundleIdentifier, forHTTPHeaderField: "X-Ios-Bundle-Identifier")
         var form = URLComponents()
         form.queryItems = [URLQueryItem(name: "grant_type", value: "refresh_token"), URLQueryItem(name: "refresh_token", value: refreshToken)]
         request.httpBody = Data((form.percentEncodedQuery ?? "").utf8)

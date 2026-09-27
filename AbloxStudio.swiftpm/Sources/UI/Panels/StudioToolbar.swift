@@ -102,8 +102,6 @@ struct StudioToolbar: View {
         }
         .padding(3)
         .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-        .disabled(session.mode == .play)
-        .opacity(session.mode == .play ? 0.4 : 1)
     }
 
     private var snapControls: some View {
@@ -177,8 +175,6 @@ struct StudioToolbar: View {
             }
             .disabled(session.document.selection.isEmpty)
         }
-        .disabled(session.mode == .play)
-        .opacity(session.mode == .play ? 0.4 : 1)
     }
 
     private func toolbarButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {

@@ -55,6 +55,15 @@ public final class ScriptInterpreter {
     /// Names the standard library and the game define, for "did you mean".
     private var builtinNames: Set<String> = []
 
+    /// Every step taken since the interpreter was made — Studio's "which
+    /// handler is heavy".
+    public private(set) var totalSteps = 0
+    /// Lines (packed, as syntax nodes carry them) to report when a statement
+    /// on one runs, and what to call: Studio's breakpoints, which look at the
+    /// variables there and let the script carry on.
+    public var watchedLines: Set<Int> = []
+    public var onWatchedLine: ((Int, ScriptScope) -> Void)?
+
     public init(program: ScriptProgram, seed: UInt64 = 1, limits: Limits = Limits()) {
         self.program = program
         self.random = ScriptRandom(seed: seed)
@@ -160,6 +169,7 @@ public final class ScriptInterpreter {
     public var remainingSteps: Int { stepsRemaining }
 
     private func step(_ line: Int) throws {
+        totalSteps &+= 1
         stepsRemaining -= 1
         if stepsRemaining < 0 {
             throw ScriptError(line: line, kind: .limit,
@@ -198,6 +208,7 @@ public final class ScriptInterpreter {
 
     private func execute(_ statement: ScriptStmt, in scope: ScriptScope, isTopLevel: Bool) throws -> Flow {
         try step(statement.line)
+        if !watchedLines.isEmpty, watchedLines.contains(statement.line) { onWatchedLine?(statement.line, scope) }
 
         switch statement.kind {
         case let .declare(name, value):

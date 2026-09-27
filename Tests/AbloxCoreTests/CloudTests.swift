@@ -19,6 +19,8 @@ final class CloudTests: XCTestCase {
         XCTAssertFalse(CloudConfig(databaseURL: "https://a.firebaseio.com/users", apiKey: "AIzaSyA1234567890abcdefghij").isUsable)
         XCTAssertFalse(CloudConfig(databaseURL: "https://a.firebaseio.com", apiKey: "short").isUsable)
         XCTAssertFalse(CloudConfig(databaseURL: "https://a.firebaseio.com", apiKey: "AIzaSyA1234567890abc/efghij").isUsable)
+        XCTAssertTrue(CloudConfig.builtIn.isUsable, "Ablox's own database works with no setup")
+        XCTAssertEqual(CloudSettings().config, CloudConfig.builtIn)
     }
 
     func testInternetThingsStartOff() throws {

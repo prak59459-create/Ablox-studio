@@ -37,6 +37,8 @@ public final class WorldScene {
     private var parentIDs: Set<UUID> = []
     /// The world picture each block shows, for putting its look back.
     private var pictures: [UUID: WorldImage] = [:]
+    /// The lamps and spotlights lit, by block. At most `BlockLight.maximumLit`.
+    private var lamps: [UUID: Entity] = [:]
 
     public init(collisionShapes: Bool = true) {
         self.collisionShapes = collisionShapes
@@ -101,7 +103,44 @@ public final class WorldScene {
             effectHidden.remove(id)
             culled.remove(id)
             pictures.removeValue(forKey: id)
+            lamps.removeValue(forKey: id)
         }
+    }
+
+    /// Puts a lamp or spotlight in the block, or takes it out.
+    private func updateLamp(_ block: BlockData, on entity: ModelEntity) {
+        guard let setting = block.light else {
+            lamps.removeValue(forKey: block.id)?.removeFromParent()
+            return
+        }
+        if lamps[block.id] == nil, lamps.count >= BlockLight.maximumLit { return }
+        lamps[block.id]?.removeFromParent()
+        let color = UIColor(red: CGFloat(setting.color.r), green: CGFloat(setting.color.g), blue: CGFloat(setting.color.b), alpha: 1)
+        let lamp: Entity
+        switch setting.kind {
+        case .point:
+            let light = PointLight()
+            light.light.color = color
+            light.light.intensity = 40_000 * setting.intensity
+            light.light.attenuationRadius = setting.range
+            lamp = light
+        case .spot:
+            let light = SpotLight()
+            light.light.color = color
+            light.light.intensity = 60_000 * setting.intensity
+            light.light.attenuationRadius = setting.range
+            light.light.innerAngleInDegrees = 25
+            light.light.outerAngleInDegrees = 45
+            // Straight down out of the block, like a ceiling light.
+            light.orientation = simd_quatf(angle: -.pi / 2, axis: SIMD3<Float>(1, 0, 0))
+            lamp = light
+        }
+        lamp.name = "ablox.lamp"
+        // The block's size must not stretch the light.
+        let scale = block.scale
+        lamp.scale = SIMD3<Float>(1 / max(scale.x, 0.01), 1 / max(scale.y, 0.01), 1 / max(scale.z, 0.01))
+        entity.addChild(lamp)
+        lamps[block.id] = lamp
     }
 
     private func upsert(_ block: BlockData, in world: WorldDocument, physicsChanged: Bool, forceTopLevel: Bool = false) {
@@ -127,6 +166,7 @@ public final class WorldScene {
         pictures[block.id] = picture
         BlockEntityFactory.apply(block, to: entity, physicsEnabled: physicsEnabled && block.hasCollision,
                                  collisionShapes: collisionShapes, picture: picture)
+        updateLamp(block, on: entity)
         if culled.contains(block.id) || effectHidden.contains(block.id) { entity.isEnabled = false }
         lastAppliedBlocks[block.id] = block
         reparentIfNeeded(entity, block: block, forceTopLevel: forceTopLevel)
@@ -308,6 +348,7 @@ public final class WorldScene {
         effectHidden.removeAll()
         culled.removeAll()
         parentIDs.removeAll()
+        lamps.removeAll()
     }
 
     // MARK: Runtime effects

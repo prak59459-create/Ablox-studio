@@ -128,15 +128,19 @@ public struct ScriptSource: Codable, Hashable, Sendable {
             throw ListingError.malformed
         }
 
-        let files = entries
-            .filter { $0.type == "file" }
-            .filter { $0.name.lowercased().hasSuffix(".\(ScriptFile.fileExtension)") }
-            .filter { ScriptFile.cleanName($0.name) == $0.name }
-            .filter { ($0.size ?? 0) <= Limits.maximumFileBytes }
-            .map { RemoteFile(name: $0.name, size: $0.size ?? 0) }
-            // Plain lowercased order, not the device's locale: the same
-            // repository must pull the same files on every iPad.
-            .sorted { $0.name.lowercased() < $1.name.lowercased() }
+        // A plain loop rather than a chain of filters: the chain took the
+        // compiler half a second on its own.
+        let suffix = "." + ScriptFile.fileExtension
+        var files: [RemoteFile] = []
+        for entry in entries {
+            let size: Int = entry.size ?? 0
+            guard entry.type == "file", entry.name.lowercased().hasSuffix(suffix),
+                  ScriptFile.cleanName(entry.name) == entry.name, size <= Limits.maximumFileBytes else { continue }
+            files.append(RemoteFile(name: entry.name, size: size))
+        }
+        // Plain lowercased order, not the device's locale: the same
+        // repository must pull the same files on every iPad.
+        files.sort { (a: RemoteFile, b: RemoteFile) -> Bool in a.name.lowercased() < b.name.lowercased() }
         return Array(files.prefix(ScriptFile.Limits.maximumFiles))
     }
 }

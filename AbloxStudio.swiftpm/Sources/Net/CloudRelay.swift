@@ -244,15 +244,14 @@ public final class CloudRelayGuest: @unchecked Sendable {
             self?.accept(connection, uid: uid)
         }
         return try await withCheckedThrowingContinuation { continuation in
-            var resumed = false
+            let once = ResumeOnce()
             listener.stateUpdateHandler = { state in
-                guard !resumed else { return }
                 switch state {
                 case .ready:
-                    resumed = true
+                    guard once.claim() else { return }
                     continuation.resume(returning: listener.port?.rawValue ?? 0)
                 case let .failed(error):
-                    resumed = true
+                    guard once.claim() else { return }
                     continuation.resume(throwing: error)
                 default:
                     break
@@ -334,5 +333,20 @@ public final class CloudRelayGuest: @unchecked Sendable {
                 pipe.start()
             }
         }
+    }
+}
+
+/// Lets a continuation be resumed once, whichever thread gets there first.
+private final class ResumeOnce: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = false
+
+    /// True the first time only.
+    func claim() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !done else { return false }
+        done = true
+        return true
     }
 }

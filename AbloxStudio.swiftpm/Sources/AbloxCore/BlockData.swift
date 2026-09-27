@@ -461,6 +461,19 @@ public struct BlockData: Codable, Hashable, Identifiable, Sendable {
     public var particles: ParticleKind?
     /// A picture on it, from `WorldDocument.images` (schema 2).
     public var imageID: UUID?
+    /// A lamp or a spotlight in it. An older iPad shows the block, unlit.
+    public var light: BlockLight?
+    /// Studio's layer for it (nil: the main one). Only the editor reads it.
+    public var layer: String?
+    /// Written only when locked, so a world's file does not grow a flag on
+    /// every block.
+    private var lockedFlag: Bool?
+
+    /// Locked in Studio: not picked or moved by accident. Games ignore it.
+    public var isLocked: Bool {
+        get { lockedFlag ?? false }
+        set { lockedFlag = newValue ? true : nil }
+    }
 
     public init(
         id: UUID = UUID(),
@@ -543,6 +556,48 @@ public struct BlockData: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
+// MARK: - Lamps
+
+/// Light a block gives off: all round (a lamp) or in a cone (a spotlight,
+/// pointing the way the block's top faces).
+public struct BlockLight: Codable, Hashable, Sendable {
+    public enum Kind: String, Codable, CaseIterable, Sendable {
+        case point, spot
+
+        public var displayName: String {
+            switch self {
+            case .point: return L("Lamp")
+            case .spot: return L("Spotlight")
+            }
+        }
+    }
+
+    public var kind: Kind
+    public var color: ColorRGBA
+    /// 0 to 1: how bright.
+    public var intensity: Float
+    /// Metres it reaches.
+    public var range: Float
+
+    public init(kind: Kind = .point, color: ColorRGBA = ColorRGBA(r: 1, g: 0.9, b: 0.7), intensity: Float = 0.6, range: Float = 10) {
+        self.kind = kind
+        self.color = color
+        self.intensity = Swift.max(0, Swift.min(1, intensity.isFinite ? intensity : 0.6))
+        self.range = Swift.max(1, Swift.min(50, range.isFinite ? range : 10))
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(kind: (try? c.decodeIfPresent(Kind.self, forKey: .kind)) ?? .point,
+                  color: (try? c.decodeIfPresent(ColorRGBA.self, forKey: .color)) ?? ColorRGBA(r: 1, g: 0.9, b: 0.7),
+                  intensity: (try? c.decodeIfPresent(Float.self, forKey: .intensity)) ?? 0.6,
+                  range: (try? c.decodeIfPresent(Float.self, forKey: .range)) ?? 10)
+    }
+
+    /// Most lamps lit at once: each is drawn with every part it reaches.
+    public static let maximumLit = 8
+}
+
 // MARK: - Decoding tolerance
 
 public extension BlockData {
@@ -567,6 +622,9 @@ public extension BlockData {
         gimmick = try c.decodeIfPresent(GimmickSettings.self, forKey: .gimmick) ?? .default
         particles = try? c.decodeIfPresent(ParticleKind.self, forKey: .particles)
         imageID = try? c.decodeIfPresent(UUID.self, forKey: .imageID)
+        light = try? c.decodeIfPresent(BlockLight.self, forKey: .light)
+        layer = (try? c.decodeIfPresent(String.self, forKey: .layer)).flatMap { $0.map { String($0.prefix(40)) } }
+        lockedFlag = (try? c.decodeIfPresent(Bool.self, forKey: .lockedFlag)) ?? nil
     }
 }
 

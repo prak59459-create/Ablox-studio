@@ -202,6 +202,8 @@ public struct EditHistory: Sendable {
     public var canUndo: Bool { !undoStack.isEmpty }
     public var canRedo: Bool { !redoStack.isEmpty }
     public var undoLabel: String? { undoStack.last?.label }
+    /// Every step that can be undone, oldest first.
+    public var steps: [String] { undoStack.map(\.label) }
     public var redoLabel: String? { redoStack.last?.label }
     public var depth: Int { undoStack.count }
 

@@ -8,6 +8,10 @@ struct InspectorPanel: View {
     /// Choosing a picture from Files, and the block it is for (nil: just
     /// add it to the world).
     @State private var importingPicture = false
+    @State private var repeatCount = 4
+    @State private var repeatOffset = Vec3(3, 0, 0)
+    @State private var namingLayer = false
+    @State private var layerName = ""
     @State private var pictureFor: UUID?
     @State private var pictureProblem: String?
 
@@ -102,9 +106,151 @@ struct InspectorPanel: View {
             nameField(block)
             transformSection(block)
             appearanceSection(block)
+            lightSection(block)
             behaviorSection(block)
             flagsSection(block)
+            arrangeSection
             tagsSection(block)
+        }
+    }
+
+    // MARK: Lamps
+
+    private func lightSection(_ block: BlockData) -> some View {
+        InspectorGroup(L("Light")) {
+            VStack(alignment: .leading, spacing: 9) {
+                Toggle(L("Gives off light"), isOn: Binding(
+                    get: { block.light != nil },
+                    set: { on in session.edit { $0.mutateSelection(label: "Light") { $0.light = on ? BlockLight() : nil } } }
+                ))
+                .font(.caption)
+                .tint(Ablox.Palette.accent)
+                if let light = block.light {
+                    labelledPicker(L("Kind"), selection: Binding(
+                        get: { light.kind },
+                        set: { kind in session.edit { $0.mutateSelection(label: "Light") { $0.light?.kind = kind } } }
+                    ), options: BlockLight.Kind.allCases) { $0.displayName }
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 26), spacing: 6)], spacing: 6) {
+                        ForEach(lightColors, id: \.hexString) { color in
+                            ColorSwatch(color: color, isSelected: light.color == color, size: 24) {
+                                session.edit { $0.mutateSelection(label: "Light colour") { $0.light?.color = color } }
+                            }
+                        }
+                    }
+                    labelledSlider(L("Brightness"), value: light.intensity, range: 0.1...1) { value in
+                        session.edit { $0.mutateSelection(label: "Brightness") { $0.light = BlockLight(kind: light.kind, color: light.color, intensity: value, range: light.range) } }
+                    }
+                    labelledSlider(L("Reach"), value: light.range, range: 2...40, unit: " m") { value in
+                        session.edit { $0.mutateSelection(label: "Reach") { $0.light = BlockLight(kind: light.kind, color: light.color, intensity: light.intensity, range: value) } }
+                    }
+                    Text(L("Up to {} lights shine at once.", BlockLight.maximumLit))
+                        .font(.system(size: 10))
+                        .foregroundStyle(Ablox.Palette.inkFaint)
+                }
+            }
+        }
+    }
+
+    private var lightColors: [ColorRGBA] {
+        ["#FFF7E0", "#FFE4A0", "#FFFFFF", "#BAE6FD", "#FCA5A5", "#BBF7D0", "#E9D5FF", "#FDE047"].compactMap { ColorRGBA(hex: $0) }
+    }
+
+    // MARK: Arranging: layers, locks, rows, rings, mirrors, lining up
+
+    @ViewBuilder
+    private var arrangeSection: some View {
+        let selected = session.document.selectedBlocks
+        InspectorGroup(L("Arrange")) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Toggle(L("Locked"), isOn: Binding(
+                        get: { !selected.isEmpty && selected.allSatisfy(\.isLocked) },
+                        set: { locked in session.edit { $0.setLocked(locked) } }
+                    ))
+                    .font(.caption)
+                    .tint(Ablox.Palette.accent)
+                }
+                HStack {
+                    Text(L("Layer")).font(.caption2).foregroundStyle(Ablox.Palette.inkMuted)
+                    Spacer()
+                    Menu {
+                        ForEach(session.document.layers, id: \.self) { layer in
+                            Button(layer.isEmpty ? L("Main") : layer) { session.edit { $0.setLayer(layer) } }
+                        }
+                        Button {
+                            layerName = ""
+                            namingLayer = true
+                        } label: {
+                            Label(L("New layer…"), systemImage: "plus")
+                        }
+                    } label: {
+                        let names = Set(selected.map(\.layerName))
+                        Text(names.count == 1 ? (names.first!.isEmpty ? L("Main") : names.first!) : L("Mixed"))
+                            .font(.caption)
+                    }
+                }
+
+                if selected.count > 1 {
+                    if let distance = session.document.selectionDistance {
+                        Label(L("{} m apart (first two)", String(format: "%.2f", distance)), systemImage: "ruler")
+                            .font(.caption)
+                            .foregroundStyle(Ablox.Palette.accent)
+                    }
+                    Text(L("Line up")).font(.caption2).foregroundStyle(Ablox.Palette.inkMuted)
+                    ForEach(Axis3.allCases) { axis in
+                        HStack(spacing: 6) {
+                            Text(axis.name).font(.caption2.monospaced().weight(.bold)).frame(width: 14)
+                            Button(L("Min")) { session.edit { $0.align(axis, to: .minimum) } }
+                            Button(L("Middle")) { session.edit { $0.align(axis, to: .center) } }
+                            Button(L("Max")) { session.edit { $0.align(axis, to: .maximum) } }
+                            Button(L("Spread")) { session.edit { $0.distribute(axis) } }
+                                .disabled(selected.count < 3)
+                        }
+                        .font(.caption2)
+                        .buttonStyle(.bordered)
+                    }
+                } else if let bounds = session.document.selectionBounds {
+                    Label(L("{} × {} × {} m", format(bounds.size.x), format(bounds.size.y), format(bounds.size.z)), systemImage: "ruler")
+                        .font(.caption)
+                        .foregroundStyle(Ablox.Palette.accent)
+                }
+
+                Text(L("Repeat")).font(.caption2).foregroundStyle(Ablox.Palette.inkMuted)
+                Stepper(L("{} more", repeatCount), value: $repeatCount, in: 1...50).font(.caption)
+                vectorField(L("Each one moved by"), value: repeatOffset, step: 0.5, unit: "m") { repeatOffset = $0 }
+                HStack(spacing: 6) {
+                    Button {
+                        let count = repeatCount, offset = repeatOffset
+                        session.edit { $0.repeatInRow(count: count, offset: offset) }
+                    } label: {
+                        Label(L("In a row"), systemImage: "square.grid.3x1.below.line.grid.1x2")
+                    }
+                    Button {
+                        let count = repeatCount + 1, radius = Swift.max(1, repeatOffset.length * 2)
+                        session.edit { $0.repeatInRing(count: count, radius: radius) }
+                    } label: {
+                        Label(L("In a ring"), systemImage: "circle.dashed")
+                    }
+                }
+                .font(.caption)
+                .buttonStyle(.bordered)
+
+                Text(L("Mirror")).font(.caption2).foregroundStyle(Ablox.Palette.inkMuted)
+                HStack(spacing: 6) {
+                    ForEach(Axis3.allCases) { axis in
+                        Button(L("Flip {}", axis.name)) { session.edit { $0.mirror(axis, copy: false) } }
+                    }
+                    Button(L("Mirrored copy")) { session.edit { $0.mirror(.x, copy: true) } }
+                }
+                .font(.caption2)
+                .buttonStyle(.bordered)
+            }
+        }
+        .sheet(isPresented: $namingLayer) {
+            TextPromptSheet(title: L("New layer"), placeholder: L("Layer name"), confirm: L("Create"), text: $layerName) {
+                let name = layerName
+                session.edit { $0.setLayer(name) }
+            }
         }
     }
 
@@ -446,6 +592,8 @@ struct InspectorPanel: View {
                 }
             }
 
+            arrangeSection
+
             InspectorGroup(L("Actions")) {
                 VStack(spacing: 7) {
                     Button { session.duplicateSelection() } label: {
@@ -518,6 +666,10 @@ struct InspectorPanel: View {
                         session.edit { $0.setEnvironment(updated) }
                     }
                 }
+            }
+
+            InspectorGroup(L("How heavy")) {
+                WeightView(weight: WorldWeight.assess(session.document.world))
             }
 
             InspectorGroup(L("Sky and weather")) {

@@ -660,15 +660,21 @@ public struct AbloxTextEditor: UIViewRepresentable {
     var fontSize: CGFloat = 15
     /// Starts typing once it is on screen (a script opened to be edited).
     var autoFocus = false
+    /// For code: a way to reach the cursor, and colours for the code.
+    var handle: CodeEditorHandle?
+    var styling: CodeStyling?
 
     @AppStorage(KeyboardPreference.key) private var usesAbloxKeyboard = false
 
-    public init(_ title: String, text: Binding<String>, monospaced: Bool = true, fontSize: CGFloat = 15, autoFocus: Bool = false) {
+    public init(_ title: String, text: Binding<String>, monospaced: Bool = true, fontSize: CGFloat = 15, autoFocus: Bool = false,
+                handle: CodeEditorHandle? = nil, styling: CodeStyling? = nil) {
         self.title = title
         self._text = text
         self.monospaced = monospaced
         self.fontSize = fontSize
         self.autoFocus = autoFocus
+        self.handle = handle
+        self.styling = styling
     }
 
     public func makeUIView(context: Context) -> UITextView {
@@ -699,10 +705,20 @@ public struct AbloxTextEditor: UIViewRepresentable {
 
     public func updateUIView(_ view: UITextView, context: Context) {
         context.coordinator.parent = self
-        if view.text != text { view.text = text }
+        handle?.textView = view
+        let coordinator = context.coordinator
+        handle?.onChange = { [weak view, weak coordinator] in
+            if let view, let coordinator { coordinator.textViewDidChange(view) }
+        }
+        let changed = view.text != text
+        if changed { view.text = text }
         view.font = monospaced
             ? .monospacedSystemFont(ofSize: fontSize, weight: .regular)
             : .systemFont(ofSize: fontSize)
+        if let styling, changed || styling != context.coordinator.lastStyling {
+            context.coordinator.lastStyling = styling
+            styling.apply(to: view, fontSize: fontSize)
+        }
         let wantsCustom = usesAbloxKeyboard
         if wantsCustom != context.coordinator.usingCustom {
             context.coordinator.usingCustom = wantsCustom
@@ -723,6 +739,7 @@ public struct AbloxTextEditor: UIViewRepresentable {
     public final class Coordinator: NSObject, UITextViewDelegate, UIGestureRecognizerDelegate {
         var parent: AbloxTextEditor
         var usingCustom = false
+        var lastStyling: CodeStyling?
         let id = UUID()
 
         init(_ parent: AbloxTextEditor) {
@@ -731,6 +748,12 @@ public struct AbloxTextEditor: UIViewRepresentable {
 
         public func textViewDidChange(_ textView: UITextView) {
             parent.text = textView.text
+            parent.styling?.apply(to: textView, fontSize: parent.fontSize)
+            parent.handle?.cursorMoved()
+        }
+
+        public func textViewDidChangeSelection(_ textView: UITextView) {
+            parent.handle?.cursorMoved()
         }
 
         public func textViewDidBeginEditing(_ textView: UITextView) {

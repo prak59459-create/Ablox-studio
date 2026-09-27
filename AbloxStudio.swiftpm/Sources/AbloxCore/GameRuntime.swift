@@ -116,6 +116,10 @@ public final class GameRuntime {
     var joinCounter = 0
     var clock: Double
     var roundStartedAt: Double = 0
+    var lineWatch: (lines: Set<Int>, found: (Int, ScriptScope, Set<String>) -> Void)?
+    /// Studio's profiler: how much each handler and timer cost.
+    public var measuresCosts = false
+    public internal(set) var handlerCosts: [String: HandlerCost] = [:]
     /// Seconds since 1970. The day and moving platforms are counted on it,
     /// because every iPad in the room has (nearly) the same one.
     public var wallClock: @Sendable () -> Double = { Date().timeIntervalSince1970 }
@@ -529,6 +533,11 @@ public final class GameRuntime {
         interpreter.resolver = self
         installGameAPI(on: interpreter)
         self.interpreter = interpreter
+        if let watch = lineWatch {
+            interpreter.watchedLines = watch.lines
+            let builtins = Set(Self.gameAPINames + ScriptInterpreter.standardLibraryNames)
+            interpreter.onWatchedLine = { line, scope in watch.found(line, scope, builtins) }
+        }
         do {
             try interpreter.start()
         } catch {
@@ -786,10 +795,16 @@ public final class GameRuntime {
             } else {
                 timers.remove(at: index)
             }
+            let steps = interpreter?.totalSteps ?? 0
+            let started = measuresCosts ? DispatchTime.now().uptimeNanoseconds : 0
             do {
                 try interpreter?.invoke(timer.callback, [], line: timer.line)
             } catch {
                 report(error)
+            }
+            if measuresCosts {
+                recordCost(L("timer at {}:{}", fileNames[safe: ScriptLocation.file(timer.line) ?? -1] ?? "", ScriptLocation.line(timer.line)),
+                           steps: steps, started: started)
             }
         }
     }
@@ -903,12 +918,33 @@ public final class GameRuntime {
     @discardableResult
     func run(_ event: Event, _ arguments: [ScriptValue]) -> ScriptValue? {
         guard let interpreter, interpreter.hasHandler(event.rawValue) else { return nil }
+        let steps = interpreter.totalSteps
+        let started = measuresCosts ? DispatchTime.now().uptimeNanoseconds : 0
+        defer { if measuresCosts { recordCost("on " + event.rawValue, steps: steps, started: started) } }
         do {
             return try interpreter.run(event.rawValue, arguments)
         } catch {
             report(error)
             return nil
         }
+    }
+
+    /// Calls `found` when a statement on one of `lines` runs, with the
+    /// scope there and the names that are the game's and the library's.
+    func watchLines(_ lines: Set<Int>, _ found: @escaping (Int, ScriptScope, Set<String>) -> Void) {
+        guard !lines.isEmpty else { return }
+        // Kept, and handed to each interpreter as the script loads.
+        lineWatch = (lines, found)
+    }
+
+    /// Adds one call's cost to its handler's total.
+    func recordCost(_ name: String, steps: Int, started: UInt64) {
+        guard let interpreter else { return }
+        var cost = handlerCosts[name] ?? HandlerCost(name: name)
+        cost.calls += 1
+        cost.steps += interpreter.totalSteps - steps
+        cost.seconds += Double(DispatchTime.now().uptimeNanoseconds &- started) / 1_000_000_000
+        handlerCosts[name] = cost
     }
 
     func report(_ error: Error) {

@@ -31,11 +31,16 @@ The palette along the bottom of the viewport is where every part comes from.
 
 ## 3. Move, turn, resize
 
-Four tools in the toolbar. Pick one, then drag the part.
+The tools in the toolbar. Pick one, then drag the part.
 
 - Select picks parts. Tap a part to select it; tap with two fingers to add it to the selection instead of replacing it.
-  - *Nothing is selectable in Play mode — the editing gestures are switched off there entirely.*
+  - *You can keep building while a test game runs: the parts you move move in the game too.*
+- Box select: drag a box over the 3D view to select every part inside it.
 - Move, Rotate and Scale each drag the selected parts along the ground or around their centre.
+- Paint: tap or drag over parts to colour them. Pick colour takes the colour of the part you tap, and the colours you used last wait in the bar.
+  - *See-through parts stay see-through when painted.*
+- Ground: tap to raise, dig or flatten the land in 2 m columns, or make hills in one go.
+  - *Ground columns go on their own Terrain layer, so they are easy to hide or lock while you build on top.*
 - The grid button snaps position to 0.25, 0.5, 1 or 2 metres. The angle button snaps rotation to 15°, 45° or 90°. Both have an Off setting.
   - *Off is for fine adjustment only — platforms that do not line up on the grid leave gaps a player can fall through.*
 - Undo and Redo go back through everything, including deletes.
@@ -44,7 +49,23 @@ Four tools in the toolbar. Pick one, then drag the part.
 - In the Explorer, drag one row onto another to make it a child. Moving the parent then moves the child with it.
   - *Group the parts you will want to copy or move as a unit before you build the second one — that is what turns one staircase into a tower.*
 
-## 4. Make it look right
+## 4. Build faster
+
+The Inspector's Arrange group and the menu at the top left of the 3D view.
+
+- Copy and Paste work between worlds: copy a house here, open another world and paste it there.
+  - *Pictures on the copied parts come along too.*
+- The part library has ready-made houses, trees, cars, lamps and more. Save your own selection there to use it again.
+- Line up puts the selected parts' edges or middles in a row; Spread spaces them evenly. Repeat makes a row or a ring of copies, and Mirror flips them.
+  - *Each of these is one undo step, however many parts it makes.*
+- Layers: put parts on a layer from the Inspector, then hide or lock the whole layer in the Explorer. Locked parts cannot be picked by accident.
+- The distance line in the Inspector shows how far apart two selected parts are — handy for checking a jump.
+- The camera menu has a top-down view for laying out paths, plus front and side views.
+- Edit history lists every change; tap one to go back to just after it. Test from here starts a test game where the camera is looking.
+- Remake this area with AI: select some parts, describe what should go there, and only those parts are replaced by what the assistant builds.
+  - *The prompt tells the assistant about the parts just around the area so the new piece joins up with them.*
+
+## 5. Make it look right
 
 The Inspector on the right edits whatever is selected.
 
@@ -55,7 +76,7 @@ The Inspector on the right edits whatever is selected.
 - Solid is what players collide with. Turn it off to walk through a part.
   - *A part can be visible and not solid — that is how you make decoration players do not bump into.*
 
-## 5. Give parts a job
+## 6. Give parts a job
 
 Behaviour is the no-code half of Ablox: pick one and the part does something when a player touches it.
 
@@ -75,7 +96,7 @@ Behaviour is the no-code half of Ablox: pick one and the part does something whe
 - Vehicle — Touch it to get in and drive faster. Tap Get out to leave it.
 - Pushable — Players push it along by walking into it. It falls off edges.
 
-## 6. Tune the gimmicks
+## 7. Tune the gimmicks
 
 Bouncy, Disappearing and Teleporter each get their own settings under the behaviour picker.
 
@@ -87,7 +108,7 @@ Bouncy, Disappearing and Teleporter each get their own settings under the behavi
 - All three share a cooldown: the wait before the same part can fire again.
   - *The cooldown is per part and per player. It exists because a player standing on a bounce pad would otherwise be launched every single frame.*
 
-## 7. Add rules
+## 8. Add rules
 
 When behaviours are not enough, the Rules tab on the left builds "when this happens, do that".
 
@@ -97,7 +118,7 @@ When behaviours are not enough, the Rules tab on the left builds "when this happ
 - Give a part the Trigger behaviour when you want it to do nothing on its own and only feed a rule.
   - *The host decides what a rule does, not the player's iPad. That is why nobody can give themselves points by editing their own copy.*
 
-## 8. Play it
+## 9. Play it
 
 The Play button swaps the editor for the game, in the same world, without leaving Studio.
 
@@ -107,7 +128,7 @@ The Play button swaps the editor for the game, in the same world, without leavin
   - *The editing gestures are switched off in Play mode, so nothing you do as a player can move a part.*
 - Watch where you land after touching a hazard — that tells you which checkpoint was actually the last one.
 
-## 9. Build together
+## 10. Build together
 
 Two iPads on the same Wi-Fi can edit one world at the same time.
 
@@ -117,7 +138,7 @@ Two iPads on the same Wi-Fi can edit one world at the same time.
   - *Joining replaces the joiner's world with the host's, including their undo history — so join before you start building, not after.*
 - Everything stays on your network. Nothing is uploaded anywhere.
 
-## 10. Before you share it
+## 11. Before you share it
 
 A short list that catches most of what makes a map unplayable.
 

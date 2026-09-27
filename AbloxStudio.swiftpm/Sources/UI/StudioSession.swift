@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UIKit
 
 /// The observable wrapper the SwiftUI layer binds to.
 ///
@@ -36,12 +37,32 @@ public final class StudioSession: ObservableObject, Identifiable {
 
     private var autosaveTask: Task<Void, Never>?
 
+    // MARK: Building together
+
+    /// Lines said while co-editing, newest last.
+    @Published public private(set) var chat: [StudioChatLine] = []
+    /// Where each co-editor is looking or working.
+    @Published public private(set) var presence: [PeerID: Vec3] = [:]
+    /// Places pointed at in the chat, for a few seconds each.
+    @Published public private(set) var pins: [StudioPin] = []
+    private var lastFocusSent = Date.distantPast
+    /// What was last copied, for iPads whose pasteboard is shared with nothing.
+    private var lastClipboard: PartClipboard?
+
     public init(world: WorldDocument, store: ProjectStore, localPeerID: PeerID, profile: AvatarProfile) {
         self.document = EditorDocument(world: world)
         self.store = store
         self.localPeerID = localPeerID
         self.profile = profile
+        // The layers hidden or locked last time, per world.
+        let key = "ablox.studio.layers." + world.id.uuidString
+        if let saved = UserDefaults.standard.dictionary(forKey: key) as? [String: [String]] {
+            document.hiddenLayers = Set(saved["hidden"] ?? [])
+            document.lockedLayers = Set(saved["locked"] ?? [])
+        }
     }
+
+    public var localID: PeerID { localPeerID }
 
     deinit {
         autosaveTask?.cancel()
@@ -123,16 +144,111 @@ public final class StudioSession: ObservableObject, Identifiable {
         flash(L("Saved"))
     }
 
+    /// Settings → Autosave: seconds after the last change (0: only by hand).
+    nonisolated public static let autosaveKey = "ablox.studio.autosaveSeconds"
+
     /// Debounced autosave. A drag produces an edit every frame; writing the
     /// world to disk each time would thrash flash storage for no benefit.
     private func scheduleAutosave() {
         autosaveTask?.cancel()
+        let stored = UserDefaults.standard.object(forKey: Self.autosaveKey) as? Double ?? 3
+        guard stored > 0 else { return }
         autosaveTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            try? await Task.sleep(nanoseconds: UInt64(stored * 1_000_000_000))
             guard !Task.isCancelled, let self, self.document.hasUnsavedChanges else { return }
             _ = self.store.save(self.document.world)
             self.document.markSaved()
         }
+    }
+
+    // MARK: Copy, paste and the library
+
+    public func copySelection() {
+        guard let clip = document.copySelection(), let data = clip.encoded else { return }
+        lastClipboard = clip
+        UIPasteboard.general.setData(data, forPasteboardType: PartClipboard.pasteboardType)
+        flash(L("Copied {} parts", clip.blocks.count))
+    }
+
+    /// Parts copied here or in another world, at `point`.
+    public func paste(at point: Vec3) {
+        let fromPasteboard = UIPasteboard.general.data(forPasteboardType: PartClipboard.pasteboardType).flatMap(PartClipboard.init(data:))
+        guard let clip = fromPasteboard ?? lastClipboard else {
+            flash(L("Nothing copied yet"))
+            return
+        }
+        edit { $0.paste(clip, at: point) }
+    }
+
+    public func insert(_ prefab: Prefab, at point: Vec3) {
+        edit { $0.paste(PartClipboard(blocks: prefab.blocks), at: point) }
+    }
+
+    /// Hides or locks a layer in this editor (games show every layer).
+    public func setLayer(_ name: String, hidden: Bool? = nil, locked: Bool? = nil) {
+        if let hidden { if hidden { document.hiddenLayers.insert(name) } else { document.hiddenLayers.remove(name) } }
+        if let locked { if locked { document.lockedLayers.insert(name) } else { document.lockedLayers.remove(name) } }
+        document.selection = document.selection.filter { id in document.world.block(id: id).map(document.isPickable) ?? false }
+        UserDefaults.standard.set(["hidden": Array(document.hiddenLayers), "locked": Array(document.lockedLayers)],
+                                  forKey: "ablox.studio.layers." + document.world.id.uuidString)
+    }
+
+    /// The paint tool's colour, remembered with the recent ones.
+    public func setPaintColor(_ color: ColorRGBA) {
+        document.paintColor = color
+        var recent = document.recentColors.filter { $0 != color }
+        recent.insert(color, at: 0)
+        document.recentColors = Array(recent.prefix(10))
+    }
+
+    public func setTerrain(_ action: TerrainAction? = nil, brush: Int? = nil) {
+        if let action { document.terrainAction = action }
+        if let brush { document.terrainBrush = max(1, min(4, brush)) }
+    }
+
+    // MARK: Building together: chat, pins and who is where
+
+    public func sendChat(_ text: String) {
+        let trimmed = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))
+        guard !trimmed.isEmpty else { return }
+        if let host { host.sendChat(trimmed) } else if let client { client.sendChat(trimmed) } else {
+            chat.append(StudioChatLine(name: profile.displayName, text: trimmed, isMine: true))
+        }
+    }
+
+    /// Points everyone at a place: a pin that shows for a few seconds.
+    public func sendPin(at point: Vec3) {
+        sendChat(StudioPin.message(for: point))
+    }
+
+    private func received(_ payload: ChatPayload, from sender: PeerID) {
+        let isMine = sender == localPeerID
+        if let point = StudioPin.point(in: payload.text) {
+            let pin = StudioPin(point: point, name: isMine ? L("You") : payload.senderName)
+            pins.append(pin)
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                self?.pins.removeAll { $0.id == pin.id }
+            }
+        }
+        chat.append(StudioChatLine(name: payload.senderName, text: payload.text, isMine: isMine))
+        if chat.count > 100 { chat.removeFirst(chat.count - 100) }
+    }
+
+    /// Where this builder is working, for co-editors' screens. At most twice
+    /// a second.
+    public func noteFocus(_ point: Vec3) {
+        guard host != nil || client != nil, Date().timeIntervalSince(lastFocusSent) > 0.5 else { return }
+        lastFocusSent = Date()
+        let target = document.selectionBounds?.center ?? point
+        let snapshot = PlayerSnapshot(peerID: localPeerID, profile: profile, position: target)
+        host?.publishLocalTransform(snapshot)
+        client?.publishLocalTransform(snapshot)
+    }
+
+    private func moved(_ payload: PlayerTransformPayload) {
+        guard payload.peerID != localPeerID else { return }
+        presence[payload.peerID] = payload.position
     }
 
     private func flash(_ message: String) {
@@ -192,6 +308,14 @@ public final class StudioSession: ObservableObject, Identifiable {
             Task { @MainActor in self?.document.applyRemote(delta) }
         }
 
+        host.onChat = { [weak self] sender, payload in
+            Task { @MainActor in self?.received(payload, from: sender) }
+        }
+
+        host.onRemoteTransform = { [weak self] payload in
+            Task { @MainActor in self?.moved(payload) }
+        }
+
         self.host = host
         host.start()
     }
@@ -221,6 +345,14 @@ public final class StudioSession: ObservableObject, Identifiable {
             Task { @MainActor in self?.collaborators = roster }
         }
 
+        client.onChat = { [weak self] sender, payload in
+            Task { @MainActor in self?.received(payload, from: sender) }
+        }
+
+        client.onTransform = { [weak self] payload in
+            Task { @MainActor in self?.moved(payload) }
+        }
+
         client.onStateChange = { [weak self] state in
             Task { @MainActor in
                 guard case let .disconnected(reason) = state else { return }
@@ -246,6 +378,8 @@ public final class StudioSession: ObservableObject, Identifiable {
         isHosting = false
         roomCode = nil
         collaborators = []
+        presence = [:]
+        pins = []
     }
 
     // MARK: Play mode
@@ -269,5 +403,33 @@ public final class StudioSession: ObservableObject, Identifiable {
 
     public var issues: [WorldDocument.ValidationIssue] {
         document.issues
+    }
+}
+
+/// A line said while building together.
+public struct StudioChatLine: Identifiable, Hashable, Sendable {
+    public let id = UUID()
+    public var name: String
+    public var text: String
+    public var isMine: Bool
+}
+
+/// A place someone pointed at, sent as a chat line: "📍 x, y, z".
+public struct StudioPin: Identifiable, Hashable, Sendable {
+    public let id = UUID()
+    public var point: Vec3
+    public var name: String
+
+    static let prefix = "📍"
+
+    static func message(for point: Vec3) -> String {
+        prefix + " " + [point.x, point.y, point.z].map { String(format: "%.1f", $0) }.joined(separator: ", ")
+    }
+
+    static func point(in text: String) -> Vec3? {
+        guard text.hasPrefix(prefix) else { return nil }
+        let numbers = text.dropFirst(prefix.count).split(separator: ",").compactMap { Float($0.trimmingCharacters(in: .whitespaces)) }
+        guard numbers.count == 3, numbers.allSatisfy(\.isFinite) else { return nil }
+        return Vec3(numbers[0], numbers[1], numbers[2])
     }
 }

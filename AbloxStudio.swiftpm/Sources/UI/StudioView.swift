@@ -9,6 +9,7 @@ struct StudioView: View {
     @State private var leftTab: LeftTab = .explorer
     @StateObject private var viewportCommands = ViewportCommands()
     @State private var showPalette = true
+    @State private var sheet: StudioSheet?
 
     private enum LeftTab: String, CaseIterable, Identifiable {
         case explorer = "Explorer"
@@ -75,23 +76,52 @@ struct StudioView: View {
                     if session.mode == .play {
                         playModeHint
                     }
+
+                    VStack {
+                        HStack(alignment: .top) {
+                            StudioActionsMenu(session: session, commands: viewportCommands, sheet: $sheet)
+                                .padding(14)
+                            Spacer()
+                        }
+                        if [.paint, .eyedropper, .terrain, .boxSelect].contains(session.document.tool) {
+                            ToolOptionsBar(session: session)
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                        }
+                        Spacer()
+                    }
                 }
                 .frame(maxWidth: .infinity)
 
-                if session.mode == .edit {
-                    Divider().background(Color.white.opacity(0.08))
+                // Kept while testing too: a change shows straight away.
+                Divider().background(Color.white.opacity(0.08))
 
-                    InspectorPanel(session: session)
-                        .frame(width: 300)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
-                }
+                InspectorPanel(session: session)
+                    .frame(width: 300)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
         .background(Color(red: 0.05, green: 0.06, blue: 0.11))
         .preferredColorScheme(.dark)
         .tint(Ablox.Palette.accent)
         .animation(.easeInOut(duration: 0.22), value: session.mode)
+        .animation(.easeInOut(duration: 0.2), value: session.document.tool)
         .statusBarHidden()
+        .sheet(item: $sheet) { which in
+            switch which {
+            case .library:
+                PartLibrarySheet(session: session) { viewportCommands.insertionPoint() }
+            case .history:
+                HistorySheet(session: session)
+            case .weight:
+                WeightSheet(session: session)
+            case .chat:
+                BuildersChatSheet(session: session) { viewportCommands.focusPoint() }
+            case let .testHere(point):
+                TestHereSheet(world: session.document.world, start: point)
+            case .remakeArea:
+                MapAreaSheet(session: session)
+            }
+        }
     }
 
     // MARK: Panes
@@ -140,7 +170,7 @@ struct StudioView: View {
     private var playModeHint: some View {
         VStack {
             Spacer()
-            Text(L("Testing — tap Stop to keep building"))
+            Text(L("Testing — changes in the Inspector show straight away. Tap Stop to keep building."))
                 .font(.caption.weight(.semibold))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 9)

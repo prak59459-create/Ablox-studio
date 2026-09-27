@@ -37,9 +37,68 @@ struct ExplorerPanel: View {
             }
 
             Divider().background(Color.white.opacity(0.07))
+            layersSection
+            Divider().background(Color.white.opacity(0.07))
             issuesFooter
         }
         .background(.ultraThinMaterial)
+    }
+
+    // MARK: Layers
+
+    @State private var showingLayers = false
+
+    /// Each layer can be hidden or locked in the editor, or picked whole.
+    private var layersSection: some View {
+        DisclosureGroup(isExpanded: $showingLayers) {
+            VStack(spacing: 4) {
+                ForEach(session.document.layers, id: \.self) { layer in
+                    let hidden = session.document.hiddenLayers.contains(layer)
+                    let locked = session.document.lockedLayers.contains(layer)
+                    HStack(spacing: 8) {
+                        Button {
+                            session.edit { $0.selectLayer(layer) }
+                        } label: {
+                            Text(layer.isEmpty ? L("Main") : layer)
+                                .font(.caption)
+                                .foregroundStyle(hidden ? Ablox.Palette.inkFaint : Ablox.Palette.ink)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                        Text("\(session.document.world.blocks.filter { $0.layerName == layer }.count)")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(Ablox.Palette.inkFaint)
+                        Button {
+                            session.setLayer(layer, hidden: !hidden)
+                        } label: {
+                            Image(systemName: hidden ? "eye.slash" : "eye")
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(hidden ? L("Show layer") : L("Hide layer"))
+                        Button {
+                            session.setLayer(layer, locked: !locked)
+                        } label: {
+                            Image(systemName: locked ? "lock.fill" : "lock.open")
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(locked ? L("Unlock layer") : L("Lock layer"))
+                    }
+                    .font(.caption)
+                    .foregroundStyle(Ablox.Palette.inkMuted)
+                }
+                Text(L("Put parts on a layer from the Inspector (Arrange → Layer). Hidden and locked layers are only for building; the game shows everything."))
+                    .font(.system(size: 10))
+                    .foregroundStyle(Ablox.Palette.inkFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, 6)
+        } label: {
+            Label(L("Layers"), systemImage: "square.3.layers.3d")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Ablox.Palette.ink)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 
     // MARK: Header
@@ -153,6 +212,13 @@ struct ExplorerPanel: View {
                 .foregroundStyle(row.block.isVisible ? Ablox.Palette.ink : Ablox.Palette.inkFaint)
 
             Spacer(minLength: 4)
+
+            if row.block.isLocked {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Ablox.Palette.inkFaint)
+                    .accessibilityLabel(L("Locked"))
+            }
 
             if !row.block.isVisible {
                 Image(systemName: "eye.slash")

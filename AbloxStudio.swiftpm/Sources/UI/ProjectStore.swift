@@ -338,6 +338,10 @@ public final class ProjectStore: ObservableObject {
         switch template {
         case .starter: world = .starter(named: unique, author: author)
         case .blank: world = .blank(named: unique, author: author)
+        case .obby: world = WorldTemplates.obby(named: unique, author: author)
+        case .race: world = WorldTemplates.race(named: unique, author: author)
+        case .battle: world = WorldTemplates.battle(named: unique, author: author)
+        case .tycoon: world = WorldTemplates.tycoon(named: unique, author: author)
         }
         save(world)
         return world
@@ -346,6 +350,10 @@ public final class ProjectStore: ObservableObject {
     public enum Template: String, CaseIterable, Identifiable, Sendable {
         case starter
         case blank
+        case obby
+        case race
+        case battle
+        case tycoon
 
         public var id: String { rawValue }
 
@@ -353,6 +361,10 @@ public final class ProjectStore: ObservableObject {
             switch self {
             case .starter: return L("Obstacle Course")
             case .blank: return L("Blank")
+            case .obby: return L("Obby")
+            case .race: return L("Race")
+            case .battle: return L("Team battle")
+            case .tycoon: return L("Tycoon")
             }
         }
 
@@ -360,6 +372,10 @@ public final class ProjectStore: ObservableObject {
             switch self {
             case .starter: return L("A floor, a spawn pad, stairs, a coin and a finish line. Tap Play and it already works.")
             case .blank: return L("Just a floor and a spawn point. Build from nothing.")
+            case .obby: return L("Jumps over lava, numbered checkpoints, a moving platform, a timer and a best-times board.")
+            case .race: return L("A ring road, karts to drive, checkpoints, a countdown and a best-lap board.")
+            case .battle: return L("Red against blue with blasters, cover, team bases and a score to reach.")
+            case .tycoon: return L("Coins every second, pads that buy more, saved progress and a richest-player board.")
             }
         }
 
@@ -367,6 +383,10 @@ public final class ProjectStore: ObservableObject {
             switch self {
             case .starter: return "figure.run"
             case .blank: return "square.dashed"
+            case .obby: return "flame.fill"
+            case .race: return "flag.checkered"
+            case .battle: return "shield.lefthalf.filled"
+            case .tycoon: return "dollarsign.circle.fill"
             }
         }
     }

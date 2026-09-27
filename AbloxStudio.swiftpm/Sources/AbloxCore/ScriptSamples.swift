@@ -316,6 +316,12 @@ public struct ScriptTestReport: Sendable {
     /// Plain sentences about what the first player got and what changed in
     /// the world: a camera, a weapon, screen items, NPCs, new blocks.
     public var notes: [String] = []
+    /// What the variables were at each breakpoint reached.
+    public var hits: [BreakpointHit] = []
+    /// Each handler's calls and cost, heaviest first.
+    public var costs: [HandlerCost] = []
+    /// What the robots did, when they played.
+    public var robotNotes: [String] = []
 
     public var isClean: Bool { problems.isEmpty }
 }
@@ -325,13 +331,33 @@ public extension GameRuntime {
     /// Runs a world's scripts for `seconds` with two idle players, and
     /// reports what they did. No rendering and no network: the same runtime
     /// the host uses, just nobody pressing anything.
-    static func testRun(world: WorldDocument, seconds: Double = 5) -> ScriptTestReport {
+    /// With `robots`, the two players play instead: they walk onto the
+    /// blocks that do something when touched and press the buttons on their
+    /// screens, so the handlers that need a player run too.
+    /// With `start`, the players begin there instead of at a spawn point
+    /// (Studio's "Test from here").
+    static func testRun(world: WorldDocument, seconds: Double = 5, breakpoints: [ScriptBreakpoint] = [],
+                        robots: Bool = false, start: Vec3? = nil) -> ScriptTestReport {
         var report = ScriptTestReport()
         report.problems = check(world.scripts)
         // Files that do not parse cannot run; `check` has said why.
-        if case .failure = ScriptBundle.compile(world.scripts) { return report }
+        guard case let .success(bundle) = ScriptBundle.compile(world.scripts) else { return report }
 
         let game = GameRuntime(world: world, seed: 7)
+        game.measuresCosts = true
+        // Breakpoints, as the lines the syntax nodes carry.
+        var watched: [Int: ScriptBreakpoint] = [:]
+        for point in breakpoints {
+            guard let index = bundle.fileNames.firstIndex(of: point.file) else { continue }
+            watched[ScriptLocation.pack(line: point.line, file: index)] = point
+        }
+        var hits: [BreakpointHit] = []
+        var time = 0.0
+        game.watchLines(Set(watched.keys)) { line, scope, builtins in
+            guard hits.count < 30, let point = watched[line] else { return }
+            hits.append(BreakpointHit(file: point.file, line: point.line, time: time,
+                                      variables: BreakpointHit.variables(in: scope, hiding: builtins)))
+        }
         let you = PeerID()
         var yourProfile = AvatarProfile.default
         yourProfile.displayName = L("You")
@@ -342,11 +368,23 @@ public extension GameRuntime {
         effects += game.addPlayer(PlayerSnapshot(peerID: you, profile: yourProfile))
         effects += game.addPlayer(PlayerSnapshot(peerID: PeerID(), profile: otherProfile))
         effects += game.handle(.roundStarted)
-        var time = 0.0
+        if let start {
+            for (index, player) in game.roster.filter({ !$0.isNPC }).enumerated() {
+                game.updateTransform(PlayerTransformPayload(peerID: player.peerID, position: start + Vec3(Float(index) * 1.5, 0, 0),
+                                                            yawDegrees: 0))
+            }
+            report.notes.append(L("Started from {}, {}, {}.", ScriptValue.format(Double(start.x)), ScriptValue.format(Double(start.y)),
+                                  ScriptValue.format(Double(start.z))))
+        }
+        var robot = TestRobots(players: [you] + game.roster.filter { !$0.isNPC && $0.peerID != you }.map(\.peerID), world: world)
         while time < seconds, !game.isRoundOver {
             time += 0.1
             effects += game.advance(to: time)
+            if robots { effects += robot.play(game, effects: effects, at: time) }
         }
+        report.hits = hits
+        report.costs = game.handlerCosts.values.sorted { $0.seconds > $1.seconds }
+        if robots { report.robotNotes = robot.summary }
         let deltas = game.drainWorldDeltas()
 
         var state = ScriptedPlayerState()

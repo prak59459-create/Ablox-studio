@@ -53,6 +53,7 @@ public enum MapGuide {
             start,
             placing,
             arranging,
+            buildingTools,
             appearance,
             behaviours,
             gimmicks,
@@ -97,12 +98,19 @@ public enum MapGuide {
     private static var arranging: Section { Section(
         title: L("Move, turn, resize"),
         symbolName: "move.3d",
-        summary: L("Four tools in the toolbar. Pick one, then drag the part."),
+        summary: L("The tools in the toolbar. Pick one, then drag the part."),
         steps: [
             Step(L("Select picks parts. Tap a part to select it; tap with two fingers to add it to the selection instead of replacing it."),
-                aside: L("Nothing is selectable in Play mode — the editing gestures are switched off there entirely.")
+                aside: L("You can keep building while a test game runs: the parts you move move in the game too.")
             ),
+            Step(L("Box select: drag a box over the 3D view to select every part inside it.")),
             Step(L("Move, Rotate and Scale each drag the selected parts along the ground or around their centre.")),
+            Step(L("Paint: tap or drag over parts to colour them. Pick colour takes the colour of the part you tap, and the colours you used last wait in the bar."),
+                aside: L("See-through parts stay see-through when painted.")
+            ),
+            Step(L("Ground: tap to raise, dig or flatten the land in 2 m columns, or make hills in one go."),
+                aside: L("Ground columns go on their own Terrain layer, so they are easy to hide or lock while you build on top.")
+            ),
             Step(L("The grid button snaps position to 0.25, 0.5, 1 or 2 metres. The angle button snaps rotation to 15°, 45° or 90°. Both have an Off setting."),
                 aside: L("Off is for fine adjustment only — platforms that do not line up on the grid leave gaps a player can fall through.")
             ),
@@ -112,6 +120,28 @@ public enum MapGuide {
             ),
             Step(L("In the Explorer, drag one row onto another to make it a child. Moving the parent then moves the child with it."),
                 aside: L("Group the parts you will want to copy or move as a unit before you build the second one — that is what turns one staircase into a tower.")
+            )
+        ]
+    ) }
+
+    private static var buildingTools: Section { Section(
+        title: L("Build faster"),
+        symbolName: "square.stack.3d.forward.dottedline",
+        summary: L("The Inspector's Arrange group and the menu at the top left of the 3D view."),
+        steps: [
+            Step(L("Copy and Paste work between worlds: copy a house here, open another world and paste it there."),
+                aside: L("Pictures on the copied parts come along too.")
+            ),
+            Step(L("The part library has ready-made houses, trees, cars, lamps and more. Save your own selection there to use it again.")),
+            Step(L("Line up puts the selected parts' edges or middles in a row; Spread spaces them evenly. Repeat makes a row or a ring of copies, and Mirror flips them."),
+                aside: L("Each of these is one undo step, however many parts it makes.")
+            ),
+            Step(L("Layers: put parts on a layer from the Inspector, then hide or lock the whole layer in the Explorer. Locked parts cannot be picked by accident.")),
+            Step(L("The distance line in the Inspector shows how far apart two selected parts are — handy for checking a jump.")),
+            Step(L("The camera menu has a top-down view for laying out paths, plus front and side views.")),
+            Step(L("Edit history lists every change; tap one to go back to just after it. Test from here starts a test game where the camera is looking.")),
+            Step(L("Remake this area with AI: select some parts, describe what should go there, and only those parts are replaced by what the assistant builds."),
+                aside: L("The prompt tells the assistant about the parts just around the area so the new piece joins up with them.")
             )
         ]
     ) }

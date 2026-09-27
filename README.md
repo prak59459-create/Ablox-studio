@@ -52,7 +52,25 @@ not sixty.
 without leaving the editor.
 
 **Build together.** Tap Share and another iPad running Studio can join over the
-same encrypted local mesh the game uses, and edit with you live.
+same encrypted local mesh the game uses, and edit with you live. Each builder's
+name floats where they are working, and the builders' chat can pin a spot for
+everyone to look at.
+
+**Building tools.** Box select, paint with an eyedropper and recent colours,
+raise, dig and flatten the ground, copy and paste between worlds, a part
+library (with your own saved parts), line up and spread, repeat in a row or a
+ring, mirror, layers you can hide or lock, locked parts, a distance ruler, a
+top-down view, an edit history you can jump back through, a weight check, and
+"remake this area with AI" for just the selected parts. Starter worlds include
+an obby, a race, a team battle and a tycoon. Parts can give off light.
+
+**Code tools.** Coloured code in five themes, suggestions over the keyboard,
+problem lines underlined in red (tap the problem to go there), snippets, tidy
+indents, an outline, find and replace across every file, what changed since
+opening, breakpoints that note variables without freezing the game, robot
+players for test runs, which handlers are heavy, a searchable reference, a
+library of your own scripts for other worlds, pushing to GitHub with a token,
+and block programming ("when … do …" cards) for players not ready to type.
 
 ## Two Package.swift files, on purpose
 
