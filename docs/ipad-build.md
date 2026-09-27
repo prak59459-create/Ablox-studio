@@ -170,6 +170,22 @@ The second row is the point of the rules below: every compile job of a module
 loads whatever any of its files imports, and the app side waits for the core's
 interface before it can start.
 
+Most of a first build is not the app at all but the system's own modules
+(UIKit, SwiftUI, RealityKit) being prepared, which a device does once and
+keeps. Measured in one job, so the runner's speed is the same throughout:
+
+| Ablox, one after another on one runner | Build |
+|---|---|
+| first build, system modules not yet prepared | 77 s |
+| again from clean, modules already prepared | 34–40 s |
+| the same, without debug information | 28–31 s |
+
+`scripts/ios-build-compare.sh` makes that table for any build setting, and
+`PER_FILE=1 scripts/ios-build-times.sh` lists what each file costs, split
+into type checking, SILGen, IRGen and the rest. SwiftUI screens turn into
+about five times as much code per line as the core's logic, so the cost is
+spread over every view rather than a few slow functions.
+
 - **The core imports Foundation alone** (and `Compression`). Glue to Apple
   frameworks lives in `Engine/AppleBridging.swift`.
 - **Every file outside the core says `import AbloxCore`.**
@@ -180,12 +196,12 @@ interface before it can start.
   from the app is a compile error on device, not on Linux, so the macOS CI
   build (`.github/workflows/ios-build.yml`) is what catches it.
 - **The library target's name differs from the app product's.**
+- **No macros** (`#Preview`, `@Observable`, …). Each needs a plugin run
+  during the build, for nothing a player sees.
 
-**Not yet seen on device.** Whether Swift Playgrounds opens and builds the
-two-target project has to be confirmed on an iPad. If it refuses, its exact
-words go on this page; going back to one target is a manifest change, and the
-rest of the work (the Foundation-only core, the faster view bodies) holds
-either way.
+**Seen on device.** The two-target Ablox project opened in Swift Playgrounds
+on the iPad. (Studio has the same layout; its own round-trip is still to
+come.)
 
 The module boundary the tests need still comes from the **root**
 `Package.swift`, which points at the same folders and compiles them as
@@ -203,8 +219,8 @@ The shared core is mirrored between the two repositories as files, and
 `scripts/check-playgrounds-project.sh` runs in CI. It cannot type-check the
 manifest or the Apple layers — nothing here can. All it does is refuse the
 spellings this page records as rejected, plus assert the two-target shape, the
-`AppleProductTypes` import, `import AbloxCore` outside the core, and a core
-that imports Foundation alone.
+`AppleProductTypes` import, `import AbloxCore` outside the core, a core that
+imports Foundation alone, and no macros.
 
 It is a ratchet on known mistakes, not a substitute for opening the project on
 an iPad. **When a new error turns up on device, add its exact wording to this
