@@ -66,16 +66,22 @@ let package = Package(
         //
         // The library target's name must differ from the app product's;
         // Swift Playgrounds refuses a target and a product that share one.
+        //
+        // `-gnone`: no debug information. Nothing on an iPad reads it, and
+        // making it was about a fifth of the build (docs/ipad-build.md). It
+        // comes after the `-g` a debug build adds, and the last one wins.
         .target(
             name: "AbloxCore",
             path: "Sources",
-            sources: ["AbloxCore", "EditorCore"]
+            sources: ["AbloxCore", "EditorCore"],
+            swiftSettings: [.unsafeFlags(["-gnone"])]
         ),
         .executableTarget(
             name: "AbloxStudioApp",
             dependencies: ["AbloxCore"],
             path: "Sources",
-            exclude: ["AbloxCore", "EditorCore"]
+            exclude: ["AbloxCore", "EditorCore"],
+            swiftSettings: [.unsafeFlags(["-gnone"])]
         )
     ]
 )

@@ -198,6 +198,11 @@ spread over every view rather than a few slow functions.
 - **The library target's name differs from the app product's.**
 - **No macros** (`#Preview`, `@Observable`, …). Each needs a plugin run
   during the build, for nothing a player sees.
+- **No debug information**: both targets pass `-gnone` through
+  `unsafeFlags`, worth the difference between the last two rows above.
+  Nothing on an iPad reads debug information. **Not yet seen on device**:
+  if Swift Playgrounds refuses the manifest over `unsafeFlags`, its exact
+  words go on this page and the two `swiftSettings` lines come out.
 
 **Seen on device.** The two-target Ablox project opened in Swift Playgrounds
 on the iPad. (Studio has the same layout; its own round-trip is still to

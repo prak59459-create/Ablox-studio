@@ -39,6 +39,7 @@ fi
 
 stats="/tmp/ablox-stats"
 rm -rf "$stats"; mkdir -p "$stats"
+# Added to the package's own flags ($(inherited)), not in place of them.
 flags="-Xfrontend -debug-time-function-bodies -Xfrontend -warn-long-expression-type-checking=150 -Xfrontend -stats-output-dir -Xfrontend $stats"
 # Slower overall (every job reads every file), but the statistics then belong
 # to one file each, code generation included.
@@ -62,7 +63,7 @@ xcodebuild build \
   ARCHS=arm64 \
   CODE_SIGNING_ALLOWED=NO \
   SWIFT_ENABLE_BATCH_MODE="$batch" \
-  OTHER_SWIFT_FLAGS="$flags" > "$log" 2>&1
+  OTHER_SWIFT_FLAGS="\$(inherited) $flags" > "$log" 2>&1
 status=$?
 end=$(date +%s)
 
