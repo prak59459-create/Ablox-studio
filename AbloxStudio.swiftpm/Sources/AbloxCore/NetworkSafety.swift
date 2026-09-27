@@ -30,6 +30,8 @@ public struct PacketBudget: Sendable {
         .playerInput: (25, 40),
         .eventTrigger: (40, 80),
         .chat: (1.5, 6),
+        // Ready, votes and whispers: people tapping, not a stream.
+        .room: (3, 8),
         // Studio co-editing: a drag sends one edit a frame.
         .worldDelta: (400, 800),
         .handshake: (1, 3),

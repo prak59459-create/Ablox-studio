@@ -21,6 +21,10 @@ public final class AbloxClient {
     public var onTransform: ((PlayerTransformPayload) -> Void)?
     public var onEffects: ((EventEffectPayload) -> Void)?
     public var onChat: ((PeerID, ChatPayload) -> Void)?
+    /// The room: its state, whispers, waiting at the door.
+    public var onRoom: ((RoomMessage) -> Void)?
+    /// The host is leaving and the room is moving to another iPad.
+    public var onHostMove: ((HostMove) -> Void)?
 
     public private(set) var state: State = .idle {
         didSet {
@@ -193,8 +197,35 @@ public final class AbloxClient {
                 state = .disconnected(.hostClosed)
             }
 
+        case .room:
+            guard let message = try? codec.decodePayload(RoomMessage.self, from: packet) else { return }
+            switch message {
+            case .removed, .refused:
+                // The host's decision: coming back would only be sent away.
+                lastEndpoint = nil
+                lastRoomCode = nil
+                state = .disconnected(message == .removed ? .removedByHost : .refusedByHost)
+                stopPinging()
+                connection?.cancel()
+            case let .moving(move):
+                // Not a reconnect to this host: it is going.
+                lastEndpoint = nil
+                lastRoomCode = nil
+                onHostMove?(move)
+            default:
+                onRoom?(message)
+            }
+
         case .eventTrigger, .playerInput, .ping, .pong:
             break
+        }
+    }
+
+    /// Ready, a vote, a whisper.
+    public func send(room message: RoomMessage) {
+        queue.async { [weak self] in
+            guard let self, self.state == .playing else { return }
+            self.connection?.send(.room, message)
         }
     }
 

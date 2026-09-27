@@ -17,6 +17,12 @@ public struct DiscoveredPeer: Identifiable, Hashable {
     public let publicCode: String?
     /// Mixed into the key made from the room code; see `TLSPeerSecurity`.
     public let keySalt: String
+    /// The host's short id, to follow a room that moved to a new host.
+    public let hostShortID: String?
+    /// Who is in the room, as short ids: friends and blocked players.
+    public let people: RoomTag
+    /// The host asks before anyone joins.
+    public let needsApproval: Bool
 
     public var isPublic: Bool { publicCode != nil }
 
@@ -61,6 +67,9 @@ public struct DiscoveredPeer: Identifiable, Hashable {
         self.isStudioSession = (txt?[AbloxProtocol.TXTKey.mode] ?? "play") == "studio"
         self.protocolVersion = Int(txt?[AbloxProtocol.TXTKey.protocolVersion] ?? "") ?? AbloxProtocol.version
         self.keySalt = txt?[AbloxProtocol.TXTKey.salt] ?? ""
+        self.hostShortID = txt?[AbloxProtocol.TXTKey.hostID]
+        self.people = RoomTag(text: txt?[AbloxProtocol.TXTKey.people] ?? "")
+        self.needsApproval = txt?[AbloxProtocol.TXTKey.approval] == "1"
 
         // Public only when the host says so *and* sends a code that could be
         // one. A host from before the setting sends neither: private.

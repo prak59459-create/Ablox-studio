@@ -2,7 +2,7 @@
   "app": "Ablox Studio",
   "version": "1.1",
   "build": 2,
-  "protocol": 7,
+  "protocol": 8,
   "date": "2026-09-26",
   "package": "AbloxStudio.swiftpm",
   "notes": {

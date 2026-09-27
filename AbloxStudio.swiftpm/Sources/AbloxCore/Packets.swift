@@ -32,6 +32,9 @@ public enum PacketKind: UInt8, Codable, CaseIterable, Sendable {
     /// Client → host. A button press a script cares about: firing a weapon,
     /// tapping a button on the script's screen GUI.
     case playerInput = 12
+    /// Host ↔ client. The room rather than the game: ready, votes,
+    /// whispers, asking to join, and handing the room over — `RoomMessage`.
+    case room = 13
 
     public var isHighFrequency: Bool {
         self == .playerTransform
@@ -419,7 +422,9 @@ public enum AbloxProtocol {
     ///    to tell it why before it tries.
     /// 7: gestures — emotes and emoji stamps (`Input.gesture`,
     ///    `ScriptEffect.gesture`).
-    public static let version = 7
+    /// 8: the room (`PacketKind.room`: ready, votes, whispers, approval,
+    ///    handing over) and teams in the roster (`PlayerSnapshot.team`).
+    public static let version = 8
 
     /// Bonjour service type advertised by hosts.
     public static let bonjourServiceType = "_ablox._tcp"
@@ -442,6 +447,14 @@ public enum AbloxProtocol {
         /// Random per session, mixed into the key made from the room code so
         /// no table of precomputed keys works against it. Not a secret.
         public static let salt = "salt"
+        /// The host's short id (`RoomTag.short`), so players can follow a
+        /// room to its new host when the old one leaves.
+        public static let hostID = "hid"
+        /// Short ids of everyone in the room (`RoomTag`), for "your friend
+        /// is here" and "someone you blocked is here".
+        public static let people = "ids"
+        /// "1" when the host asks before anyone joins.
+        public static let approval = "ask"
     }
 
     /// Hard ceiling on a single framed message. A `worldSnapshot` for a big

@@ -34,6 +34,12 @@ public enum DisconnectReason: Hashable, Sendable {
     /// The peer stopped answering.
     case timedOut
 
+    /// The host took this player out of the room.
+    case removedByHost
+
+    /// The host asks before anyone joins, and said no (or did not answer).
+    case refusedByHost
+
     /// Anything unrecognised. Retried, but cautiously — see `isRetryable`.
     case unknown(String)
 
@@ -45,7 +51,7 @@ public enum DisconnectReason: Hashable, Sendable {
         switch self {
         case .networkLost, .timedOut, .unknown:
             return true
-        case .userLeft, .hostClosed, .authenticationFailed, .protocolMismatch, .sessionFull:
+        case .userLeft, .hostClosed, .authenticationFailed, .protocolMismatch, .sessionFull, .removedByHost, .refusedByHost:
             return false
         }
     }
@@ -68,6 +74,10 @@ public enum DisconnectReason: Hashable, Sendable {
             return L("Lost connection to the host.")
         case .timedOut:
             return L("The host stopped responding.")
+        case .removedByHost:
+            return L("The host took you out of this room.")
+        case .refusedByHost:
+            return L("The host didn't let you in this time.")
         case let .unknown(detail):
             return detail.isEmpty ? L("Disconnected.") : detail
         }

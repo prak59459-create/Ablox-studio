@@ -315,6 +315,8 @@ public struct PlayerSnapshot: Codable, Hashable, Identifiable, Sendable {
     public var isNPC: Bool
     /// Hidden by a script: still in the game, not drawn.
     public var isHidden: Bool
+    /// The team the host or the game put them on; empty for none.
+    public var team: String
 
     public var id: PeerID { peerID }
 
@@ -328,7 +330,8 @@ public struct PlayerSnapshot: Codable, Hashable, Identifiable, Sendable {
         score: Int = 0,
         isReady: Bool = false,
         isNPC: Bool = false,
-        isHidden: Bool = false
+        isHidden: Bool = false,
+        team: String = ""
     ) {
         self.peerID = peerID
         self.profile = profile
@@ -340,10 +343,11 @@ public struct PlayerSnapshot: Codable, Hashable, Identifiable, Sendable {
         self.isReady = isReady
         self.isNPC = isNPC
         self.isHidden = isHidden
+        self.team = team
     }
 
     private enum CodingKeys: String, CodingKey {
-        case peerID, profile, position, yawDegrees, velocity, isGrounded, score, isReady, isNPC, isHidden
+        case peerID, profile, position, yawDegrees, velocity, isGrounded, score, isReady, isNPC, isHidden, team
     }
 
     public init(from decoder: Decoder) throws {
@@ -358,6 +362,22 @@ public struct PlayerSnapshot: Codable, Hashable, Identifiable, Sendable {
         isReady = try c.decode(Bool.self, forKey: .isReady)
         isNPC = try c.decodeIfPresent(Bool.self, forKey: .isNPC) ?? false
         isHidden = try c.decodeIfPresent(Bool.self, forKey: .isHidden) ?? false
+        team = String((try c.decodeIfPresent(String.self, forKey: .team) ?? "").prefix(32))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(peerID, forKey: .peerID)
+        try c.encode(profile, forKey: .profile)
+        try c.encode(position, forKey: .position)
+        try c.encode(yawDegrees, forKey: .yawDegrees)
+        try c.encode(velocity, forKey: .velocity)
+        try c.encode(isGrounded, forKey: .isGrounded)
+        try c.encode(score, forKey: .score)
+        try c.encode(isReady, forKey: .isReady)
+        try c.encode(isNPC, forKey: .isNPC)
+        try c.encode(isHidden, forKey: .isHidden)
+        if !team.isEmpty { try c.encode(team, forKey: .team) }
     }
 }
 

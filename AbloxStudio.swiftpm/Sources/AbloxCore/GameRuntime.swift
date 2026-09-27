@@ -89,12 +89,14 @@ public final class GameRuntime {
         var list = machine.roster.map { snapshot -> PlayerSnapshot in
             var copy = snapshot
             copy.isHidden = states[snapshot.peerID]?.isHidden ?? false
+            copy.team = states[snapshot.peerID]?.team ?? ""
             return copy
         }
         for state in orderedStates where state.isNPC {
             guard var body = state.body else { continue }
             body.isNPC = true
             body.isHidden = state.isHidden
+            body.team = state.team
             list.append(body)
         }
         return list
@@ -320,6 +322,21 @@ public final class GameRuntime {
         return rosterChanged
     }
 
+    /// Teams chosen by the host (the room's team picker), kept across rounds.
+    var hostTeams: [PeerID: String] = [:]
+
+    /// Puts players on teams, or on none with an empty name. A script reads
+    /// it as `p.team`, and can still change it.
+    public func assignTeams(_ teams: [PeerID: String]) {
+        for (peer, team) in teams {
+            let name = String(team.prefix(32))
+            hostTeams[peer] = name.isEmpty ? nil : name
+            guard let state = states[peer], !state.isNPC else { continue }
+            state.team = name
+            rosterChanged = true
+        }
+    }
+
     // MARK: Diagnostics
 
     /// Errors not yet reported. Each distinct error is reported once: a
@@ -406,6 +423,12 @@ public final class GameRuntime {
                 rosterChanged = true
             }
             state.reset()
+            // Teams the host picked outlast the round; a script's own
+            // choices start again.
+            if let team = hostTeams[state.peer] {
+                state.team = team
+                rosterChanged = true
+            }
         }
 
         if isRestart {

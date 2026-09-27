@@ -836,7 +836,8 @@ public struct GameViewport: UIViewRepresentable {
                 // The log is in order, so everything before this is older.
                 if age > ChatBubbleOverlay.lifetime { break }
                 // The game's own lines have no head to sit over.
-                guard entry.senderID != SessionCoordinator.gamePeerID,
+                // Nor do whispers: they are not said out loud.
+                guard entry.senderID != SessionCoordinator.gamePeerID, !entry.isPrivate,
                       session.muteList.allows(entry.senderID, localPeerID: session.localPeerID) else { continue }
                 var list = lines[entry.senderID] ?? []
                 guard list.count < ChatBubbleOverlay.linesPerSpeaker else { continue }

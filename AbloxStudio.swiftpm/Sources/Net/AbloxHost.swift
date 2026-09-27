@@ -31,6 +31,8 @@ public final class AbloxHost {
         /// the list. A private one keeps it off the air: only someone the
         /// host tells can get in.
         public var isPublic: Bool
+        /// Ask the host before anyone joins.
+        public var needsApproval: Bool
         /// Mixed into the key made from the room code, new every session;
         /// advertised, not secret. See `TLSPeerSecurity`.
         public let keySalt: String
@@ -41,7 +43,8 @@ public final class AbloxHost {
             capacity: Int = AbloxProtocol.defaultCapacity,
             roomCode: String = RoomCode.generate(),
             isStudioSession: Bool = false,
-            isPublic: Bool = false
+            isPublic: Bool = false,
+            needsApproval: Bool = false
         ) {
             self.worldName = worldName
             self.hostName = hostName
@@ -49,6 +52,7 @@ public final class AbloxHost {
             self.roomCode = roomCode
             self.isStudioSession = isStudioSession
             self.isPublic = isPublic && !isStudioSession
+            self.needsApproval = needsApproval && !isStudioSession
             self.keySalt = TLSPeerSecurity.newSalt()
         }
     }
@@ -72,6 +76,14 @@ public final class AbloxHost {
     /// Problems in the world's script, and what it printed. Shown on the
     /// host's screen only: the host is the one who can fix the world.
     public var onScriptDiagnostics: (([ScriptError], [String]) -> Void)?
+    /// Someone is asking to join (the room asks first): their id and name.
+    public var onJoinRequest: ((PeerID, String) -> Void)?
+    /// A request was answered, timed out or gave up.
+    public var onJoinRequestEnded: ((PeerID) -> Void)?
+    /// The room changed: ready, the vote, who is quieted.
+    public var onRoomState: ((RoomState) -> Void)?
+    /// A whisper for the host's own player: from, name, text.
+    public var onWhisper: ((PeerID, String, String) -> Void)?
 
     public private(set) var state: State = .idle {
         didSet {
@@ -99,6 +111,17 @@ public final class AbloxHost {
     /// place forever.
     private static let maximumPending = 6
     private static let handshakeDeadline: Double = 10
+    /// How long someone waits at the door for the host to answer.
+    private static let approvalDeadline: Double = 60
+
+    /// Ready, the vote, who is quieted — see `RoomState`.
+    private var room = RoomState()
+    /// Taken out by the host: not back in until a new room.
+    private var removedPeers: Set<PeerID> = []
+    /// Let in once already: a reconnect does not ask again.
+    private var approvedPeers: Set<PeerID> = []
+    /// At the door, waiting for the host: their handshake, kept.
+    private var awaitingApproval: [ObjectIdentifier: HandshakePayload] = [:]
     private let game: GameRuntime
     private var localProfile: AvatarProfile
     private var tickTimer: DispatchSourceTimer?
@@ -106,7 +129,8 @@ public final class AbloxHost {
 
     // MARK: Init
 
-    public init(world: WorldDocument, configuration: Configuration, localPeerID: PeerID, localProfile: AvatarProfile) {
+    public init(world: WorldDocument, configuration: Configuration, localPeerID: PeerID, localProfile: AvatarProfile,
+                alreadyApproved: [PeerID] = []) {
         self.configuration = configuration
         self.localPeerID = localPeerID
         self.localProfile = localProfile
@@ -115,6 +139,8 @@ public final class AbloxHost {
 
         // The host is a player too.
         game.addPlayer(PlayerSnapshot(peerID: localPeerID, profile: localProfile))
+        approvedPeers = Set(alreadyApproved)
+        room.needsApproval = configuration.needsApproval
     }
 
     // MARK: Lifecycle
@@ -165,21 +191,23 @@ public final class AbloxHost {
     }
 
     public func stop() {
-        queue.async { [weak self] in
-            guard let self else { return }
-            self.tickTimer?.cancel()
-            self.tickTimer = nil
-            for connection in self.connections.values {
-                connection.sendEmpty(.leave)
-                connection.cancel()
-            }
-            self.connections.removeAll()
-            self.joined.removeAll()
-            self.budgets.removeAll()
-            self.listener?.cancel()
-            self.listener = nil
-            self.state = .idle
+        queue.async { [weak self] in self?.stopOnQueue() }
+    }
+
+    private func stopOnQueue() {
+        tickTimer?.cancel()
+        tickTimer = nil
+        for connection in connections.values {
+            connection.sendEmpty(.leave)
+            connection.cancel()
         }
+        connections.removeAll()
+        joined.removeAll()
+        budgets.removeAll()
+        awaitingApproval.removeAll()
+        listener?.cancel()
+        listener = nil
+        state = .idle
     }
 
     /// Bonjour TXT record, so the lobby can show world name and player count
@@ -199,6 +227,10 @@ public final class AbloxHost {
             // "public" means. Anyone who can see the room can open it.
             txt[AbloxProtocol.TXTKey.code] = configuration.roomCode
         }
+        txt[AbloxProtocol.TXTKey.hostID] = RoomTag.short(localPeerID)
+        let people = game.roster.filter { !$0.isNPC }.map(\.peerID)
+        txt[AbloxProtocol.TXTKey.people] = RoomTag(players: people).text
+        if configuration.needsApproval { txt[AbloxProtocol.TXTKey.approval] = "1" }
         return txt
     }
 
@@ -247,7 +279,8 @@ public final class AbloxHost {
         // them this address waits a while before it may try again.
         queue.asyncAfter(deadline: .now() + Self.handshakeDeadline) { [weak self, weak peer] in
             guard let self, let peer, self.connections[ObjectIdentifier(peer)] != nil,
-                  !self.joined.contains(ObjectIdentifier(peer)) else { return }
+                  !self.joined.contains(ObjectIdentifier(peer)),
+                  self.awaitingApproval[ObjectIdentifier(peer)] == nil else { return }
             peer.cancel()
             self.dropConnection(peer)
         }
@@ -270,9 +303,13 @@ public final class AbloxHost {
         let key = ObjectIdentifier(peer)
         guard connections.removeValue(forKey: key) != nil else { return }
         budgets[key] = nil
+        if let request = awaitingApproval.removeValue(forKey: key) {
+            onJoinRequestEnded?(request.peerID)
+        }
         let wasJoined = joined.remove(key) != nil
         if !wasJoined { attempts.recordFailure(peer.remoteAddress, at: elapsed) }
         guard wasJoined, let peerID = peer.remotePeerID else { return }
+        if room.ready.remove(peerID) != nil { broadcastRoom() }
         let farewell = game.removePlayer(peerID)
         broadcast(.leave, LeavePayload(peerID: peerID))
         publishRoster()
@@ -344,6 +381,8 @@ public final class AbloxHost {
             // Who said it is the connection's peer, under the name the host
             // knows them by — never the sender's own claim, which could put
             // words over someone else's head.
+            // Quieted by the host: said to no one.
+            guard !room.quieted.contains(sender) else { return }
             let name = game.players[sender]?.profile.displayName ?? payload.senderName
             let verified = ChatPayload(senderName: name, text: payload.text, senderID: sender)
             if let stamped = try? codec.encode(.chat, verified) { relay(stamped, excluding: peer) }
@@ -351,6 +390,11 @@ public final class AbloxHost {
             if !configuration.isStudioSession {
                 dispatch(game.handleChat(from: sender, text: payload.text))
             }
+
+        case .room:
+            guard let message = try? codec.decodePayload(RoomMessage.self, from: packet),
+                  let sender = peer.remotePeerID else { return }
+            handleRoom(message, from: sender)
 
         case .leave:
             dropConnection(peer)
@@ -396,10 +440,41 @@ public final class AbloxHost {
             publishRoster()
             return
         }
+        // At the door already: the answer is still coming.
+        guard awaitingApproval[key] == nil else { return }
+
+        // Taken out of this room by the host.
+        if removedPeers.contains(payload.peerID) {
+            peer.send(.room, RoomMessage.removed)
+            closeSoon(peer)
+            return
+        }
+
+        // The host asks first — except for someone already let in, coming
+        // back after a drop.
+        if configuration.needsApproval, !approvedPeers.contains(payload.peerID) {
+            var request = payload
+            request.profile = profile
+            awaitingApproval[key] = request
+            peer.send(.room, RoomMessage.waitingForHost)
+            onJoinRequest?(payload.peerID, profile.displayName)
+            queue.asyncAfter(deadline: .now() + Self.approvalDeadline) { [weak self, weak peer] in
+                guard let self, let peer, self.awaitingApproval[ObjectIdentifier(peer)] != nil else { return }
+                self.refuse(peer)
+            }
+            return
+        }
+        admit(peer, peerID: payload.peerID, profile: profile)
+    }
+
+    /// Into the game: the host's details, the world, everyone, the room.
+    private func admit(_ peer: PeerConnection, peerID: PeerID, profile: AvatarProfile) {
+        let key = ObjectIdentifier(peer)
         joined.insert(key)
+        approvedPeers.insert(peerID)
         attempts.recordSuccess(peer.remoteAddress)
 
-        let welcome = game.addPlayer(PlayerSnapshot(peerID: payload.peerID, profile: profile))
+        let welcome = game.addPlayer(PlayerSnapshot(peerID: peerID, profile: profile))
 
         // Reply with our own details, then the world, then the roster —
         // in that order, so the client can render the world before it has to
@@ -415,9 +490,204 @@ public final class AbloxHost {
         ))
         peer.send(.worldSnapshot, game.world)
         publishRoster()
+        room.clock = elapsed
+        peer.send(.room, RoomMessage.state(room))
         refreshAdvertisement()
         dispatch(welcome)
     }
+
+    private func refuse(_ peer: PeerConnection) {
+        if let request = awaitingApproval.removeValue(forKey: ObjectIdentifier(peer)) {
+            onJoinRequestEnded?(request.peerID)
+        }
+        peer.send(.room, RoomMessage.refused)
+        closeSoon(peer)
+    }
+
+    /// A moment for the last message to go before the line is cut.
+    private func closeSoon(_ peer: PeerConnection) {
+        queue.asyncAfter(deadline: .now() + 0.3) { [weak self, weak peer] in
+            guard let self, let peer else { return }
+            peer.cancel()
+            self.dropConnection(peer)
+        }
+    }
+
+    // MARK: The room
+
+    private func handleRoom(_ message: RoomMessage, from sender: PeerID) {
+        switch message {
+        case let .ready(flag):
+            let changed = flag ? room.ready.insert(sender).inserted : room.ready.remove(sender) != nil
+            if changed { broadcastRoom() }
+        case let .vote(pollID, choice):
+            guard room.poll?.id == pollID, room.poll?.vote(sender, choice: choice) == true else { return }
+            broadcastRoom()
+        case let .whisper(target, text):
+            deliverWhisper(from: sender, to: target, text: text)
+        case .state, .whispered, .waitingForHost, .refused, .removed, .moving:
+            // The host's to send, not a guest's.
+            break
+        }
+    }
+
+    private func deliverWhisper(from sender: PeerID, to target: PeerID, text: String) {
+        let clean = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(AbloxProtocol.maxChatLength))
+        guard !clean.isEmpty, sender != target, !room.quieted.contains(sender) else { return }
+        let name = sender == localPeerID ? localProfile.displayName : (game.players[sender]?.profile.displayName ?? "")
+        if target == localPeerID {
+            onWhisper?(sender, name, clean)
+        } else if let connection = connections.values.first(where: { $0.remotePeerID == target }),
+                  joined.contains(ObjectIdentifier(connection)) {
+            connection.send(.room, RoomMessage.whispered(from: sender, name: name, text: clean))
+        }
+    }
+
+    private func broadcastRoom() {
+        room.clock = elapsed
+        broadcast(.room, RoomMessage.state(room))
+        onRoomState?(room)
+    }
+
+    /// Lets someone at the door in, or not.
+    public func answerJoinRequest(from peerID: PeerID, allow: Bool) {
+        queue.async { [weak self] in
+            guard let self,
+                  let entry = self.awaitingApproval.first(where: { $0.value.peerID == peerID }),
+                  let peer = self.connections[entry.key] else { return }
+            if allow {
+                self.awaitingApproval[entry.key] = nil
+                self.onJoinRequestEnded?(peerID)
+                self.admit(peer, peerID: entry.value.peerID, profile: entry.value.profile)
+            } else {
+                self.refuse(peer)
+            }
+        }
+    }
+
+    /// Takes a player out of the room. They cannot come back into it.
+    public func remove(_ peerID: PeerID) {
+        queue.async { [weak self] in
+            guard let self, peerID != self.localPeerID else { return }
+            self.removedPeers.insert(peerID)
+            self.approvedPeers.remove(peerID)
+            guard let peer = self.connections.values.first(where: { $0.remotePeerID == peerID }) else { return }
+            peer.send(.room, RoomMessage.removed)
+            self.closeSoon(peer)
+        }
+    }
+
+    /// Quiets a player for everyone: their chat and whispers go nowhere.
+    public func setQuieted(_ peerID: PeerID, _ quiet: Bool) {
+        queue.async { [weak self] in
+            guard let self, peerID != self.localPeerID else { return }
+            let changed = quiet ? self.room.quieted.insert(peerID).inserted : self.room.quieted.remove(peerID) != nil
+            if changed { self.broadcastRoom() }
+        }
+    }
+
+    public func setNeedsApproval(_ ask: Bool) {
+        queue.async { [weak self] in
+            guard let self, !self.configuration.isStudioSession else { return }
+            self.configuration.needsApproval = ask
+            self.room.needsApproval = ask
+            // Everyone already inside counts as let in.
+            for connection in self.connections.values where self.joined.contains(ObjectIdentifier(connection)) {
+                if let id = connection.remotePeerID { self.approvedPeers.insert(id) }
+            }
+            self.refreshAdvertisement()
+            self.broadcastRoom()
+        }
+    }
+
+    public func setAllowsWarp(_ allow: Bool) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.room.allowsWarp = allow
+            self.broadcastRoom()
+        }
+    }
+
+    /// The host's own "ready".
+    public func setReady(_ ready: Bool) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.handleRoom(.ready(ready), from: self.localPeerID)
+        }
+    }
+
+    /// Everyone back to not ready, for the next round.
+    public func clearReady() {
+        queue.async { [weak self] in
+            guard let self, !self.room.ready.isEmpty else { return }
+            self.room.ready.removeAll()
+            self.broadcastRoom()
+        }
+    }
+
+    /// Asks everyone a question; the answers close after `seconds`.
+    public func startPoll(question: String, options: [String], seconds: Double = Poll.defaultSeconds) {
+        queue.async { [weak self] in
+            guard let self, let poll = Poll(question: question, options: options, closesAt: self.elapsed + seconds) else { return }
+            self.room.poll = poll
+            self.broadcastRoom()
+        }
+    }
+
+    public func endPoll() {
+        queue.async { [weak self] in
+            guard let self, self.room.poll != nil else { return }
+            self.room.poll?.close()
+            self.broadcastRoom()
+        }
+    }
+
+    public func clearPoll() {
+        queue.async { [weak self] in
+            guard let self, self.room.poll != nil else { return }
+            self.room.poll = nil
+            self.broadcastRoom()
+        }
+    }
+
+    /// The host's own vote.
+    public func vote(poll: UUID, choice: Int) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.handleRoom(.vote(poll: poll, choice: choice), from: self.localPeerID)
+        }
+    }
+
+    public func whisper(to target: PeerID, text: String) {
+        queue.async { [weak self] in
+            guard let self else { return }
+            self.deliverWhisper(from: self.localPeerID, to: target, text: text)
+        }
+    }
+
+    /// Puts players on teams (the host's team picker).
+    public func assignTeams(_ teams: [PeerID: String]) {
+        queue.async { [weak self] in
+            guard let self, !self.configuration.isStudioSession else { return }
+            self.game.assignTeams(teams)
+            self.dispatch([])
+        }
+    }
+
+    /// Tells everyone the room is moving to `move.newHost`, then closes.
+    /// The new host opens the same room code; everyone else follows.
+    ///
+    /// Holds on to itself until then: the app lets go of its host at once.
+    public func handOver(_ move: HostMove) {
+        queue.async {
+            self.broadcast(.room, RoomMessage.moving(move))
+            self.queue.asyncAfter(deadline: .now() + 0.5) { self.stopOnQueue() }
+        }
+    }
+
+    /// For the QR code and invitation: this room's port and salt.
+    public var listeningPort: UInt16? { listener?.port?.rawValue }
+    public var keySalt: String { configuration.keySalt }
 
     // MARK: Broadcasting
 
@@ -555,6 +825,10 @@ public final class AbloxHost {
         timer.setEventHandler { [weak self] in
             guard let self else { return }
             self.dispatch(self.game.advance(to: self.elapsed))
+            if var poll = self.room.poll, poll.closeIfDue(at: self.elapsed) {
+                self.room.poll = poll
+                self.broadcastRoom()
+            }
         }
         timer.resume()
         tickTimer = timer
