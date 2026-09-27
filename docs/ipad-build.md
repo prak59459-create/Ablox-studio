@@ -223,6 +223,32 @@ The shared core is mirrored between the two repositories as files, and
 
 ---
 
+## Updates without a full build
+
+A new version handed to Swift Playgrounds as a new project is built from
+nothing: every file, however little changed. Settings → Updates can instead
+put a version straight into the project already on the iPad
+(`ProjectSync`, `AppUpdater.installInPlace` / `pullLatest`):
+
+- The project is chosen once in Files (the `.swiftpm` in the Playgrounds
+  folder, or that folder itself), and remembered as a bookmark.
+- Only files that differ are written, under file coordination, so Swift
+  Playgrounds sees them the way it sees a change arriving from iCloud;
+  source files the new version no longer has are deleted, since a file
+  left behind would still be compiled.
+- Only `Package.swift` and `Sources/` are touched. The app icon Swift
+  Playgrounds wrote into the manifest is carried over, and a project whose
+  bundle identifier differs (the other app) is refused.
+- A branch can be followed instead of the released versions, and its
+  latest taken in one tap whatever its version number, which is how a
+  version under test reaches the iPad.
+
+**Not yet seen on device**: that Swift Playgrounds lets the app write into
+the project, and then rebuilds only the changed files. Whatever it says
+goes on this page.
+
+---
+
 ## Guard
 
 `scripts/check-playgrounds-project.sh` runs in CI. It cannot type-check the
