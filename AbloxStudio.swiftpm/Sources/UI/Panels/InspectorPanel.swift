@@ -632,203 +632,187 @@ struct InspectorPanel: View {
 
     // MARK: World
 
+    // A group per function, and every setting through one key-path binding:
+    // written out field by field, with a pair of closures each, this was the
+    // largest file in the editor to compile.
     private var environmentSection: some View {
-        let environment = session.document.world.environment
-
-        return VStack(alignment: .leading, spacing: 18) {
-            InspectorGroup(L("World name")) {
-                AbloxTextField(L("World"), text: Binding(
-                    get: { session.document.world.name },
-                    set: { newName in
-                        session.edit { document in document.renameWorld(newName) }
-                    }
-                ))
-                .textFieldStyle(.plain)
-                .font(.caption)
-                .padding(8)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-            }
-
-            InspectorGroup(L("Lighting")) {
-                VStack(alignment: .leading, spacing: 9) {
-                    labelledSlider(L("Brightness"), value: environment.ambientIntensity, range: 0.1...1.5) { newValue in
-                        var updated = environment
-                        updated.ambientIntensity = newValue
-                        session.edit { $0.setEnvironment(updated) }
-                    }
-                    labelledSlider(L("Sun height"), value: environment.sunPitchDegrees, range: -89...(-5), unit: "°") { newValue in
-                        var updated = environment
-                        updated.sunPitchDegrees = newValue
-                        session.edit { $0.setEnvironment(updated) }
-                    }
-                    labelledSlider(L("Sun direction"), value: environment.sunYawDegrees, range: -180...180, unit: "°") { newValue in
-                        var updated = environment
-                        updated.sunYawDegrees = newValue
-                        session.edit { $0.setEnvironment(updated) }
-                    }
-                }
-            }
-
+        VStack(alignment: .leading, spacing: 18) {
+            worldNameGroup
+            lightingGroup
             InspectorGroup(L("How heavy")) {
                 WeightView(weight: WorldWeight.assess(session.document.world))
             }
+            skyGroup
+            picturesGroup
+            physicsGroup
+            groundGroup
+        }
+    }
 
-            InspectorGroup(L("Sky and weather")) {
-                VStack(alignment: .leading, spacing: 9) {
-                    labelledPicker(L("Weather"), selection: Binding(
-                        get: { environment.weather },
-                        set: { newValue in
-                            var updated = environment
-                            updated.weather = newValue
-                            session.edit { $0.setEnvironment(updated) }
-                        }
-                    ), options: Weather.allCases) { $0.displayName }
-                    labelledPicker(L("Sky"), selection: Binding(
-                        get: { environment.skyStyle },
-                        set: { newValue in
-                            var updated = environment
-                            updated.skyStyle = newValue
-                            session.edit { $0.setEnvironment(updated) }
-                        }
-                    ), options: SkyStyle.allCases) { $0.displayName }
-                    labelledPicker(L("Screen look"), selection: Binding(
-                        get: { environment.screenEffect },
-                        set: { newValue in
-                            var updated = environment
-                            updated.screenEffect = newValue
-                            session.edit { $0.setEnvironment(updated) }
-                        }
-                    ), options: ScreenEffect.allCases) { $0.displayName }
-                    labelledPicker(L("Music"), selection: Binding(
-                        get: { environment.music },
-                        set: { newValue in
-                            var updated = environment
-                            updated.music = newValue
-                            session.edit { $0.setEnvironment(updated) }
-                        }
-                    ), options: [nil] + MusicTrack.allCases.map(Optional.some)) { $0?.displayName ?? L("None") }
-                    Toggle(L("Shadows"), isOn: Binding(
-                        get: { environment.shadows },
-                        set: { newValue in
-                            var updated = environment
-                            updated.shadows = newValue
-                            session.edit { $0.setEnvironment(updated) }
-                        }
-                    ))
-                    .font(.caption)
-                    .tint(Ablox.Palette.accent)
-                    Toggle(L("Time of day"), isOn: Binding(
-                        get: { environment.timeOfDay != nil },
-                        set: { newValue in
-                            var updated = environment
-                            updated.timeOfDay = newValue ? 12 : nil
-                            if !newValue { updated.dayLengthMinutes = 0 }
-                            session.edit { $0.setEnvironment(updated) }
-                        }
-                    ))
-                    .font(.caption)
-                    .tint(Ablox.Palette.accent)
-                    if let hour = environment.timeOfDay {
-                        labelledSlider(L("Starts at"), value: hour, range: 0...24, unit: ":00") { newValue in
-                            var updated = environment
-                            updated.timeOfDay = newValue
-                            session.edit { $0.setEnvironment(updated) }
-                        }
-                        labelledSlider(L("A day lasts"), value: environment.dayLengthMinutes, range: 0...60, unit: " min") { newValue in
-                            var updated = environment
-                            updated.dayLengthMinutes = newValue.rounded()
-                            session.edit { $0.setEnvironment(updated) }
-                        }
-                        Text(L("0 minutes keeps the sun still. Otherwise the day goes round while people play."))
-                            .font(.system(size: 10))
-                            .foregroundStyle(Ablox.Palette.inkFaint)
-                            .fixedSize(horizontal: false, vertical: true)
+    /// One field of the world's settings; each change is one undoable edit,
+    /// made to the settings as they are at that moment.
+    private func environmentBinding<Value>(_ field: WritableKeyPath<EnvironmentSettings, Value>) -> Binding<Value> {
+        Binding(
+            get: { session.document.world.environment[keyPath: field] },
+            set: { newValue in
+                var updated = session.document.world.environment
+                updated[keyPath: field] = newValue
+                session.edit { $0.setEnvironment(updated) }
+            }
+        )
+    }
+
+    private func environmentSlider(_ title: String, _ field: WritableKeyPath<EnvironmentSettings, Float>,
+                                   range: ClosedRange<Float>, unit: String = "") -> some View {
+        let binding = environmentBinding(field)
+        return labelledSlider(title, value: binding.wrappedValue, range: range, unit: unit) { binding.wrappedValue = $0 }
+    }
+
+    private func environmentToggle(_ title: String, _ isOn: Binding<Bool>) -> some View {
+        Toggle(title, isOn: isOn)
+            .font(.caption)
+            .tint(Ablox.Palette.accent)
+    }
+
+    private var worldNameGroup: some View {
+        InspectorGroup(L("World name")) {
+            AbloxTextField(L("World"), text: Binding(
+                get: { session.document.world.name },
+                set: { newName in
+                    session.edit { document in document.renameWorld(newName) }
+                }
+            ))
+            .textFieldStyle(.plain)
+            .font(.caption)
+            .padding(8)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+    }
+
+    private var lightingGroup: some View {
+        InspectorGroup(L("Lighting")) {
+            VStack(alignment: .leading, spacing: 9) {
+                environmentSlider(L("Brightness"), \.ambientIntensity, range: 0.1...1.5)
+                environmentSlider(L("Sun height"), \.sunPitchDegrees, range: -89...(-5), unit: "°")
+                environmentSlider(L("Sun direction"), \.sunYawDegrees, range: -180...180, unit: "°")
+            }
+        }
+    }
+
+    private var skyGroup: some View {
+        InspectorGroup(L("Sky and weather")) {
+            VStack(alignment: .leading, spacing: 9) {
+                labelledPicker(L("Weather"), selection: environmentBinding(\.weather), options: Weather.allCases) { $0.displayName }
+                labelledPicker(L("Sky"), selection: environmentBinding(\.skyStyle), options: SkyStyle.allCases) { $0.displayName }
+                labelledPicker(L("Screen look"), selection: environmentBinding(\.screenEffect), options: ScreenEffect.allCases) { $0.displayName }
+                labelledPicker(L("Music"), selection: environmentBinding(\.music), options: musicOptions) { $0?.displayName ?? L("None") }
+                environmentToggle(L("Shadows"), environmentBinding(\.shadows))
+                environmentToggle(L("Time of day"), timeOfDayBinding)
+                timeOfDayFields
+            }
+        }
+    }
+
+    private var musicOptions: [MusicTrack?] {
+        [nil] + MusicTrack.allCases.map(Optional.some)
+    }
+
+    /// On at noon; off also stops the day going round.
+    private var timeOfDayBinding: Binding<Bool> {
+        Binding(
+            get: { session.document.world.environment.timeOfDay != nil },
+            set: { newValue in
+                var updated = session.document.world.environment
+                updated.timeOfDay = newValue ? 12 : nil
+                if !newValue { updated.dayLengthMinutes = 0 }
+                session.edit { $0.setEnvironment(updated) }
+            }
+        )
+    }
+
+    @ViewBuilder private var timeOfDayFields: some View {
+        let environment = session.document.world.environment
+        if let hour = environment.timeOfDay {
+            labelledSlider(L("Starts at"), value: hour, range: 0...24, unit: ":00") { newValue in
+                environmentBinding(\.timeOfDay).wrappedValue = newValue
+            }
+            labelledSlider(L("A day lasts"), value: environment.dayLengthMinutes, range: 0...60, unit: " min") { newValue in
+                environmentBinding(\.dayLengthMinutes).wrappedValue = newValue.rounded()
+            }
+            Text(L("0 minutes keeps the sun still. Otherwise the day goes round while people play."))
+                .font(.system(size: 10))
+                .foregroundStyle(Ablox.Palette.inkFaint)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var picturesGroup: some View {
+    InspectorGroup(L("Pictures")) {
+        VStack(alignment: .leading, spacing: 7) {
+            if world.images.isEmpty {
+                Text(L("Pictures from Files can be shown on blocks. Pick a part, then Picture."))
+                    .font(.system(size: 10))
+                    .foregroundStyle(Ablox.Palette.inkFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(world.images) { picture in
+                HStack(spacing: 8) {
+                    if let image = UIImage(data: picture.data) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 30, height: 30)
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
+                    Text(picture.name).font(.caption).lineLimit(1)
+                    Spacer()
+                    Button {
+                        session.edit { document in
+                            document.setImages(document.world.images.filter { $0.id != picture.id })
+                        }
+                    } label: {
+                        Image(systemName: "trash").font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Ablox.Palette.danger)
+                    .accessibilityLabel(L("Remove {}", picture.name))
                 }
             }
-
-            InspectorGroup(L("Pictures")) {
-                VStack(alignment: .leading, spacing: 7) {
-                    if world.images.isEmpty {
-                        Text(L("Pictures from Files can be shown on blocks. Pick a part, then Picture."))
-                            .font(.system(size: 10))
-                            .foregroundStyle(Ablox.Palette.inkFaint)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    ForEach(world.images) { picture in
-                        HStack(spacing: 8) {
-                            if let image = UIImage(data: picture.data) {
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 30, height: 30)
-                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                            }
-                            Text(picture.name).font(.caption).lineLimit(1)
-                            Spacer()
-                            Button {
-                                session.edit { document in
-                                    document.setImages(document.world.images.filter { $0.id != picture.id })
-                                }
-                            } label: {
-                                Image(systemName: "trash").font(.caption)
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(Ablox.Palette.danger)
-                            .accessibilityLabel(L("Remove {}", picture.name))
-                        }
-                    }
-                    if world.images.count < WorldImage.maximumCount {
-                        Button {
-                            pictureFor = nil
-                            importingPicture = true
-                        } label: {
-                            Label(L("Add a picture"), systemImage: "photo.badge.plus").frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(NeonButtonStyle(.secondary, fullWidth: true))
-                    }
+            if world.images.count < WorldImage.maximumCount {
+                Button {
+                    pictureFor = nil
+                    importingPicture = true
+                } label: {
+                    Label(L("Add a picture"), systemImage: "photo.badge.plus").frame(maxWidth: .infinity)
                 }
+                .buttonStyle(NeonButtonStyle(.secondary, fullWidth: true))
             }
+        }
+    }
+    }
 
-            InspectorGroup(L("Physics")) {
-                VStack(alignment: .leading, spacing: 9) {
-                    labelledSlider(L("Gravity"), value: environment.gravity, range: -30...(-1), unit: "m/s²") { newValue in
-                        var updated = environment
-                        updated.gravity = newValue
-                        session.edit { $0.setEnvironment(updated) }
-                    }
-                    labelledSlider(L("Fall limit"), value: environment.killPlaneHeight, range: -200...(-5), unit: "m") { newValue in
-                        var updated = environment
-                        updated.killPlaneHeight = newValue
-                        session.edit { $0.setEnvironment(updated) }
-                    }
-                    Text(L("A player who falls below the fall limit respawns."))
-                        .font(.system(size: 10))
-                        .foregroundStyle(Ablox.Palette.inkFaint)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+    private var physicsGroup: some View {
+        InspectorGroup(L("Physics")) {
+            VStack(alignment: .leading, spacing: 9) {
+                environmentSlider(L("Gravity"), \.gravity, range: -30...(-1), unit: "m/s²")
+                environmentSlider(L("Fall limit"), \.killPlaneHeight, range: -200...(-5), unit: "m")
+                Text(L("A player who falls below the fall limit respawns."))
+                    .font(.system(size: 10))
+                    .foregroundStyle(Ablox.Palette.inkFaint)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
 
-            InspectorGroup(L("Ground")) {
-                VStack(alignment: .leading, spacing: 9) {
-                    Toggle(L("Show backdrop"), isOn: Binding(
-                        get: { environment.showGroundPlane },
-                        set: { newValue in
-                            var updated = environment
-                            updated.showGroundPlane = newValue
-                            session.edit { $0.setEnvironment(updated) }
-                        }
-                    ))
-                    .font(.caption)
-                    .tint(Ablox.Palette.accent)
-
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 30), spacing: 7)], spacing: 7) {
-                        ForEach(ColorRGBA.palette, id: \.hexString) { color in
-                            ColorSwatch(color: color, isSelected: environment.groundColor == color, size: 28) {
-                                var updated = environment
-                                updated.groundColor = color
-                                session.edit { $0.setEnvironment(updated) }
-                            }
+    private var groundGroup: some View {
+        let ground = session.document.world.environment.groundColor
+        return InspectorGroup(L("Ground")) {
+            VStack(alignment: .leading, spacing: 9) {
+                environmentToggle(L("Show backdrop"), environmentBinding(\.showGroundPlane))
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 30), spacing: 7)], spacing: 7) {
+                    ForEach(ColorRGBA.palette, id: \.hexString) { color in
+                        ColorSwatch(color: color, isSelected: ground == color, size: 28) {
+                            environmentBinding(\.groundColor).wrappedValue = color
                         }
                     }
                 }
