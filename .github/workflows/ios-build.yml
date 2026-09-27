@@ -1,0 +1,25 @@
+name: iOS build times
+
+# The app built with the real iOS SDK, and where the compiler's time goes.
+# Swift Playgrounds on an older iPad takes minutes over the same work, so
+# the slowest functions listed here are the ones to make simpler.
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "AbloxStudio.swiftpm/**"
+      - "scripts/ios-build-times.sh"
+      - ".github/workflows/ios-build.yml"
+  workflow_dispatch:
+
+jobs:
+  ios:
+    name: Build for iPad and time it
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and report
+        run: scripts/ios-build-times.sh
+        env:
+          SCHEME: "Ablox Studio"
