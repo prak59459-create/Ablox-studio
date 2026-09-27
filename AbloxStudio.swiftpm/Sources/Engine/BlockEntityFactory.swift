@@ -79,15 +79,22 @@ public enum BlockEntityFactory {
     private struct MaterialKey: Hashable {
         var r: UInt8, g: UInt8, b: UInt8, a: UInt8
         var kind: MaterialKind
+        /// How many times a pattern repeats across the block.
+        var tiles: UInt8
+        var picture: UUID?
     }
 
     private static var materialCache: [MaterialKey: RealityKit.Material] = [:]
 
-    public static func material(for block: BlockData) -> RealityKit.Material {
+    public static func material(for block: BlockData, picture: WorldImage? = nil) -> RealityKit.Material {
         let alpha = block.color.a * block.material.alphaScale
         func byte(_ value: Float) -> UInt8 { value.isFinite ? UInt8(max(0, min(255, (value * 255).rounded()))) : 0 }
+        // A pattern repeats about every two metres, so a long wall has many
+        // bricks rather than a few stretched ones.
+        let span = max(block.scale.x, block.scale.z, block.scale.y * 0.5)
+        let tiles = block.material.pattern == .none ? 1 : UInt8(max(1, min(24, (span.isFinite ? span : 1) / 2)).rounded())
         let key = MaterialKey(r: byte(block.color.r), g: byte(block.color.g), b: byte(block.color.b), a: byte(alpha),
-                              kind: block.material)
+                              kind: block.material, tiles: tiles, picture: picture?.id)
 
         cacheLock.lock()
         defer { cacheLock.unlock() }
@@ -101,7 +108,25 @@ public enum BlockEntityFactory {
         )
 
         let made: RealityKit.Material
-        if block.material.isUnlit {
+        if let picture, let texture = SurfaceTextures.texture(for: picture) {
+            // The picture as it is, on every side.
+            var material = PhysicallyBasedMaterial()
+            material.baseColor = .init(tint: .white, texture: .init(texture))
+            material.roughness = .init(floatLiteral: 0.7)
+            material.metallic = .init(floatLiteral: 0)
+            if alpha < 0.999 { material.blending = .transparent(opacity: .init(floatLiteral: alpha)) }
+            made = material
+        } else if !block.material.isUnlit, block.material.pattern != .none,
+                  let texture = SurfaceTextures.texture(for: block.material.pattern) {
+            var material = PhysicallyBasedMaterial()
+            material.baseColor = .init(tint: tint.withAlphaComponent(1),
+                                       texture: .init(texture, sampler: SurfaceTextures.repeatingSampler))
+            material.roughness = .init(floatLiteral: block.material.roughness)
+            material.metallic = .init(floatLiteral: 0)
+            material.textureCoordinateTransform = .init(offset: .zero, scale: SIMD2<Float>(repeating: Float(tiles)), rotation: 0)
+            if alpha < 0.999 { material.blending = .transparent(opacity: .init(floatLiteral: alpha)) }
+            made = material
+        } else if block.material.isUnlit {
             // Neon reads as emissive without needing a light probe, which
             // keeps it bright in the Studio's flat editor lighting too.
             var unlit = UnlitMaterial(color: tint)
@@ -125,10 +150,10 @@ public enum BlockEntityFactory {
 
     /// Builds the entity for a block, without attaching it to a parent.
     public static func makeEntity(for block: BlockData, profile: GraphicsProfile = .profile(for: .high),
-                                  collisionShapes: Bool = true) -> ModelEntity {
-        let entity = ModelEntity(mesh: mesh(for: block.shape, profile: profile), materials: [material(for: block)])
+                                  collisionShapes: Bool = true, picture: WorldImage? = nil) -> ModelEntity {
+        let entity = ModelEntity(mesh: mesh(for: block.shape, profile: profile), materials: [material(for: block, picture: picture)])
         entity.name = block.name
-        apply(block, to: entity, physicsEnabled: false, collisionShapes: collisionShapes)
+        apply(block, to: entity, physicsEnabled: false, collisionShapes: collisionShapes, picture: picture)
         return entity
     }
 
@@ -141,12 +166,13 @@ public enum BlockEntityFactory {
     /// `collisionShapes` is false in a game: movement, shots and taps are all
     /// worked out from the world document (`WorldIndex`), so RealityKit
     /// keeping a collider per part is work nothing reads.
-    public static func apply(_ block: BlockData, to entity: ModelEntity, physicsEnabled: Bool, collisionShapes: Bool = true) {
+    public static func apply(_ block: BlockData, to entity: ModelEntity, physicsEnabled: Bool, collisionShapes: Bool = true,
+                             picture: WorldImage? = nil) {
         entity.name = block.name
         entity.transform = block.transform.realityKit
         entity.isEnabled = block.isVisible
 
-        entity.model?.materials = [material(for: block)]
+        entity.model?.materials = [material(for: block, picture: picture)]
         entity.components.set(BlockComponent(blockID: block.id, behavior: block.behavior))
 
         if collisionShapes || physicsEnabled {

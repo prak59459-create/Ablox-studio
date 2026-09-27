@@ -17,6 +17,23 @@ public struct EnvironmentSettings: Codable, Hashable, Sendable {
     public var showGroundPlane: Bool
     public var groundColor: ColorRGBA
 
+    // Schema 2: weather, the time of day, the sky, the screen, music.
+    public var weather: Weather
+    /// The hour (0 to 24) the world starts at; nil keeps the sun as set above.
+    public var timeOfDay: Float?
+    /// Minutes for a whole day to pass; 0 stands still.
+    public var dayLengthMinutes: Float
+    /// When (seconds since 1970, on every iPad's own clock) the day stood
+    /// at `timeOfDay`. Set by the host as a round starts, so everyone in the
+    /// room sees the same hour without the time being sent again.
+    public var dayEpoch: Double?
+    public var skyStyle: SkyStyle
+    public var screenEffect: ScreenEffect
+    /// Shadows from the sun (the graphics setting can still turn them off).
+    public var shadows: Bool
+    /// The music that plays when nothing else has been asked for.
+    public var music: MusicTrack?
+
     public init(
         skyTop: ColorRGBA = ColorRGBA(hex: "#0B1026")!,
         skyBottom: ColorRGBA = ColorRGBA(hex: "#1B2A4A")!,
@@ -26,7 +43,15 @@ public struct EnvironmentSettings: Codable, Hashable, Sendable {
         gravity: Float = -9.81,
         killPlaneHeight: Float = -50,
         showGroundPlane: Bool = true,
-        groundColor: ColorRGBA = .defaultGround
+        groundColor: ColorRGBA = .defaultGround,
+        weather: Weather = .clear,
+        timeOfDay: Float? = nil,
+        dayLengthMinutes: Float = 0,
+        skyStyle: SkyStyle = .gradient,
+        screenEffect: ScreenEffect = .none,
+        shadows: Bool = true,
+        music: MusicTrack? = nil,
+        dayEpoch: Double? = nil
     ) {
         self.skyTop = skyTop
         self.skyBottom = skyBottom
@@ -37,9 +62,87 @@ public struct EnvironmentSettings: Codable, Hashable, Sendable {
         self.killPlaneHeight = killPlaneHeight
         self.showGroundPlane = showGroundPlane
         self.groundColor = groundColor
+        self.weather = weather
+        self.timeOfDay = timeOfDay
+        self.dayLengthMinutes = dayLengthMinutes
+        self.skyStyle = skyStyle
+        self.screenEffect = screenEffect
+        self.shadows = shadows
+        self.music = music
+        self.dayEpoch = dayEpoch
     }
 
     public static let `default` = EnvironmentSettings()
+
+    private enum CodingKeys: String, CodingKey {
+        case skyTop, skyBottom, ambientIntensity, sunPitchDegrees, sunYawDegrees, gravity, killPlaneHeight
+        case showGroundPlane, groundColor
+        case weather, timeOfDay, dayLengthMinutes, skyStyle, screenEffect, shadows, music, dayEpoch
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        skyTop = try c.decode(ColorRGBA.self, forKey: .skyTop)
+        skyBottom = try c.decode(ColorRGBA.self, forKey: .skyBottom)
+        ambientIntensity = try c.decode(Float.self, forKey: .ambientIntensity)
+        sunPitchDegrees = try c.decode(Float.self, forKey: .sunPitchDegrees)
+        sunYawDegrees = try c.decode(Float.self, forKey: .sunYawDegrees)
+        gravity = try c.decode(Float.self, forKey: .gravity)
+        killPlaneHeight = try c.decode(Float.self, forKey: .killPlaneHeight)
+        showGroundPlane = try c.decode(Bool.self, forKey: .showGroundPlane)
+        groundColor = try c.decode(ColorRGBA.self, forKey: .groundColor)
+        // Newer settings: missing (an older world) or unknown (a newer one)
+        // falls back rather than failing the world.
+        weather = (try? c.decodeIfPresent(Weather.self, forKey: .weather)) ?? .clear
+        timeOfDay = try? c.decodeIfPresent(Float.self, forKey: .timeOfDay)
+        dayLengthMinutes = (try? c.decodeIfPresent(Float.self, forKey: .dayLengthMinutes)) ?? 0
+        skyStyle = (try? c.decodeIfPresent(SkyStyle.self, forKey: .skyStyle)) ?? .gradient
+        screenEffect = (try? c.decodeIfPresent(ScreenEffect.self, forKey: .screenEffect)) ?? .none
+        shadows = (try? c.decodeIfPresent(Bool.self, forKey: .shadows)) ?? true
+        music = try? c.decodeIfPresent(MusicTrack.self, forKey: .music)
+        dayEpoch = try? c.decodeIfPresent(Double.self, forKey: .dayEpoch)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(skyTop, forKey: .skyTop)
+        try c.encode(skyBottom, forKey: .skyBottom)
+        try c.encode(ambientIntensity, forKey: .ambientIntensity)
+        try c.encode(sunPitchDegrees, forKey: .sunPitchDegrees)
+        try c.encode(sunYawDegrees, forKey: .sunYawDegrees)
+        try c.encode(gravity, forKey: .gravity)
+        try c.encode(killPlaneHeight, forKey: .killPlaneHeight)
+        try c.encode(showGroundPlane, forKey: .showGroundPlane)
+        try c.encode(groundColor, forKey: .groundColor)
+        // Only what is set, so a world using none of it reads exactly as
+        // before on an older iPad.
+        if weather != .clear { try c.encode(weather, forKey: .weather) }
+        try c.encodeIfPresent(timeOfDay, forKey: .timeOfDay)
+        if dayLengthMinutes != 0 { try c.encode(dayLengthMinutes, forKey: .dayLengthMinutes) }
+        if skyStyle != .gradient { try c.encode(skyStyle, forKey: .skyStyle) }
+        if screenEffect != .none { try c.encode(screenEffect, forKey: .screenEffect) }
+        if !shadows { try c.encode(shadows, forKey: .shadows) }
+        try c.encodeIfPresent(music, forKey: .music)
+        try c.encodeIfPresent(dayEpoch, forKey: .dayEpoch)
+    }
+
+    /// Uses something the first world format did not have.
+    public var needsSchema2: Bool {
+        weather != .clear || timeOfDay != nil || dayLengthMinutes != 0 || skyStyle != .gradient
+            || screenEffect != .none || !shadows || music != nil
+    }
+
+    /// The hour now, when the world keeps time.
+    public func hour(elapsed: Double) -> Float? {
+        guard let timeOfDay else { return nil }
+        return DayCycle.hour(start: timeOfDay, dayLengthMinutes: dayLengthMinutes, elapsed: elapsed)
+    }
+
+    /// The hour at `wallClock` (seconds since 1970), counted from when the
+    /// day started. A world whose day has not started yet shows its start.
+    public func hour(atWallClock wallClock: Double) -> Float? {
+        hour(elapsed: dayEpoch.map { Swift.max(0, wallClock - $0) } ?? 0)
+    }
 
     /// Unit vector pointing *from* the sun, for the directional light.
     public var sunDirection: Vec3 {
@@ -58,7 +161,13 @@ public struct EnvironmentSettings: Codable, Hashable, Sendable {
 /// subtree move.
 public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
     /// Bumped whenever the on-disk shape changes incompatibly.
-    public static let currentSchemaVersion = 1
+    ///
+    /// 2: natural materials, the no-script parts (ladders, doors, moving
+    ///    platforms, vehicles, pushable blocks), particles, pictures on blocks,
+    ///    weather, time of day, sky styles, screen looks and music. A world is
+    ///    written as 2 only when it uses one of them (`neededSchemaVersion`),
+    ///    so everything else still opens on an iPad that has not updated.
+    public static let currentSchemaVersion = 2
 
     public var id: UUID
     public var schemaVersion: Int
@@ -73,6 +182,8 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
     public var scripts: [ScriptFile]
     /// Where on GitHub those files come from, if they are pulled from there.
     public var scriptSource: ScriptSource?
+    /// Pictures shown on blocks (`BlockData.imageID`).
+    public var images: [WorldImage]
 
     public init(
         id: UUID = UUID(),
@@ -85,7 +196,8 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
         blocks: [BlockData] = [],
         rules: [EventRule] = [],
         scripts: [ScriptFile] = [],
-        scriptSource: ScriptSource? = nil
+        scriptSource: ScriptSource? = nil,
+        images: [WorldImage] = []
     ) {
         self.id = id
         self.schemaVersion = schemaVersion
@@ -98,6 +210,17 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
         self.rules = rules
         self.scripts = scripts
         self.scriptSource = scriptSource
+        self.images = images
+    }
+
+    /// The oldest format that holds everything this world uses.
+    public var neededSchemaVersion: Int {
+        if !images.isEmpty || environment.needsSchema2 || blocks.contains(where: \.needsSchema2) { return 2 }
+        return 1
+    }
+
+    public func image(id: UUID) -> WorldImage? {
+        images.first { $0.id == id }
     }
 
     // MARK: Coding
@@ -108,13 +231,17 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, schemaVersion, name, authorName, createdAt, modifiedAt, environment, blocks, rules, scripts, scriptSource
+        case images
         case legacyScript = "script"
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
-        schemaVersion = try c.decode(Int.self, forKey: .schemaVersion)
+        // Read into today's shape: an older file is now a current world.
+        // A newer one keeps its number, so `decoded(from:)` can refuse it.
+        let stored = try c.decode(Int.self, forKey: .schemaVersion)
+        schemaVersion = Swift.max(stored, Self.currentSchemaVersion)
         name = try c.decode(String.self, forKey: .name)
         authorName = try c.decode(String.self, forKey: .authorName)
         createdAt = try c.decode(Date.self, forKey: .createdAt)
@@ -130,12 +257,18 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
             scripts = []
         }
         scriptSource = try c.decodeIfPresent(ScriptSource.self, forKey: .scriptSource)
+        // Only pictures that could have been added here: a hand-made file
+        // must not smuggle in forty megabytes.
+        let pictures = (try? c.decodeIfPresent([WorldImage].self, forKey: .images)) ?? []
+        images = Array(pictures.filter(\.isAcceptable).prefix(WorldImage.maximumCount))
     }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
-        try c.encode(schemaVersion, forKey: .schemaVersion)
+        // What this world needs, not the newest there is: a world with
+        // nothing new in it stays readable by an iPad that has not updated.
+        try c.encode(schemaVersion > Self.currentSchemaVersion ? schemaVersion : neededSchemaVersion, forKey: .schemaVersion)
         try c.encode(name, forKey: .name)
         try c.encode(authorName, forKey: .authorName)
         try c.encode(createdAt, forKey: .createdAt)
@@ -148,6 +281,7 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
             try c.encode(scripts, forKey: .scripts)
         }
         try c.encodeIfPresent(scriptSource, forKey: .scriptSource)
+        if !images.isEmpty { try c.encode(images, forKey: .images) }
     }
 }
 
@@ -464,11 +598,21 @@ public extension WorldDocument {
     }
 
     static func decoded(from data: Data) throws -> WorldDocument {
+        // The version first, on its own: a world from a newer app may use
+        // things this one cannot read, and "made with a newer version" is a
+        // better thing to be told than a decoding error.
+        if let peek = try? makeDecoder().decode(SchemaPeek.self, from: data), peek.schemaVersion > currentSchemaVersion {
+            throw WorldDocumentError.unsupportedSchema(found: peek.schemaVersion, supported: currentSchemaVersion)
+        }
         let world = try makeDecoder().decode(WorldDocument.self, from: data)
         guard world.schemaVersion <= currentSchemaVersion else {
             throw WorldDocumentError.unsupportedSchema(found: world.schemaVersion, supported: currentSchemaVersion)
         }
         return world
+    }
+
+    private struct SchemaPeek: Decodable {
+        let schemaVersion: Int
     }
 }
 

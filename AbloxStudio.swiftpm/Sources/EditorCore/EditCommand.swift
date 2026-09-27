@@ -24,6 +24,8 @@ public enum EditCommand: Hashable, Sendable {
     case setScripts(before: [ScriptFile], after: [ScriptFile])
     /// Where the world's `.absc` files are pulled from on GitHub, if anywhere.
     case setScriptSource(before: ScriptSource?, after: ScriptSource?)
+    /// The world's pictures, all at once: adding and removing one.
+    case setImages(before: [WorldImage], after: [WorldImage])
     /// Several edits that undo as one — a multi-selection drag, say.
     indirect case group(label: String, commands: [EditCommand])
 
@@ -66,6 +68,11 @@ public enum EditCommand: Hashable, Sendable {
             world.modifiedAt = Date()
             return true
 
+        case let .setImages(_, after):
+            world.images = after
+            world.modifiedAt = Date()
+            return true
+
         case let .group(_, commands):
             var anyApplied = false
             for command in commands where command.apply(to: &world) {
@@ -94,6 +101,8 @@ public enum EditCommand: Hashable, Sendable {
             return .setScripts(before: after, after: before)
         case let .setScriptSource(before, after):
             return .setScriptSource(before: after, after: before)
+        case let .setImages(before, after):
+            return .setImages(before: after, after: before)
         case let .group(label, commands):
             // Reversed: undoing a group must unwind it in the opposite order,
             // or a delete-then-insert pair would resurrect in the wrong place.
@@ -112,6 +121,7 @@ public enum EditCommand: Hashable, Sendable {
         case .setRules: return "Edit rules"
         case .setScripts: return "Edit scripts"
         case .setScriptSource: return "Change script source"
+        case .setImages: return "Change pictures"
         case let .group(label, _): return label
         }
     }
@@ -129,6 +139,7 @@ public enum EditCommand: Hashable, Sendable {
         case let .setRules(_, after): return [.rulesReplaced(after)]
         case let .setScripts(_, after): return [.scriptsReplaced(after)]
         case let .setScriptSource(_, after): return [.scriptSourceChanged(after)]
+        case let .setImages(_, after): return [.imagesReplaced(after)]
         case let .group(_, commands): return commands.flatMap(\.deltas)
         }
     }

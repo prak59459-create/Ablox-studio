@@ -103,6 +103,8 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
     public var showMap = true
     /// How long this visit has lasted, in the top bar.
     public var showClock = false
+    /// Characters' lines in a game read aloud by the iPad.
+    public var readLinesAloud = false
 
     public struct PointOffset: Codable, Hashable, Sendable {
         public var x: Double = 0
@@ -139,6 +141,7 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
         showNetworkStatus = try c.decodeIfPresent(Bool.self, forKey: .showNetworkStatus) ?? d.showNetworkStatus
         showMap = try c.decodeIfPresent(Bool.self, forKey: .showMap) ?? d.showMap
         showClock = try c.decodeIfPresent(Bool.self, forKey: .showClock) ?? d.showClock
+        readLinesAloud = try c.decodeIfPresent(Bool.self, forKey: .readLinesAloud) ?? d.readLinesAloud
         clamp()
     }
 

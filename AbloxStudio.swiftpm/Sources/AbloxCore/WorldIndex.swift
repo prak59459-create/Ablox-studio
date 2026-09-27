@@ -25,6 +25,8 @@ public struct WorldIndex: Sendable {
         public let isVisible: Bool
         public let hasCollision: Bool
         public let behavior: BlockBehavior
+        /// Water: swum in, never stood on.
+        public let isLiquid: Bool
     }
 
     /// Every block, in document order.
@@ -75,7 +77,7 @@ public struct WorldIndex: Sendable {
             if let parent = block.parentID { parents.insert(parent) }
             let entry = makeEntry(block, order: order, in: blocks)
             entries.append(entry)
-            if block.isVisible, block.hasCollision {
+            if block.isSolidForPlayers {
                 solidSlot.append(solidBlocks.count)
                 solidBlocks.append((block.id, entry.bounds))
             } else {
@@ -95,7 +97,7 @@ public struct WorldIndex: Sendable {
         for order in changed {
             let block = blocks[order]
             guard block.id == before[order].id, block.parentID == before[order].parentID, !parents.contains(block.id),
-                  (block.isVisible && block.hasCollision) == (solidSlot[order] >= 0) else { return false }
+                  block.isSolidForPlayers == (solidSlot[order] >= 0) else { return false }
         }
         for order in changed {
             let block = blocks[order], old = entries[order]
@@ -113,8 +115,10 @@ public struct WorldIndex: Sendable {
     private func makeEntry(_ block: BlockData, order: Int, in blocks: [BlockData]) -> Entry {
         let transform = Self.worldTransform(of: block) { id in orderByID[id].map { blocks[$0] } }
         let bounds = WorldDocument.bounds(of: block, at: transform)
+        // Water is never solid, whatever its collision says.
         return Entry(id: block.id, order: order, bounds: bounds, position: transform.position,
-                     isVisible: block.isVisible, hasCollision: block.hasCollision, behavior: block.behavior)
+                     isVisible: block.isVisible, hasCollision: block.hasCollision && !block.material.isLiquid,
+                     behavior: block.behavior, isLiquid: block.material.isLiquid)
     }
 
     private mutating func place(_ order: Int, bounds: BoundingBox) {

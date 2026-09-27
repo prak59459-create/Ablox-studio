@@ -127,7 +127,7 @@ public struct CoverArtwork: Equatable, Sendable {
         switch behavior {
         case .spawn, .goal, .checkpoint, .hazard, .collectible:
             return true
-        case .none, .trigger, .bounce, .disappear, .teleport:
+        case .none, .trigger, .bounce, .disappear, .teleport, .ladder, .door, .elevator, .vehicle, .pushable:
             return false
         }
     }

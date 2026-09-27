@@ -84,6 +84,8 @@ public final class AbloxHost {
     public var onRoomState: ((RoomState) -> Void)?
     /// A whisper for the host's own player: from, name, text.
     public var onWhisper: ((PeerID, String, String) -> Void)?
+    /// The world's leaderboards changed: the host's iPad keeps them.
+    public var onLeaderboards: (([String: Leaderboard]) -> Void)?
 
     public private(set) var state: State = .idle {
         didSet {
@@ -867,6 +869,12 @@ public final class AbloxHost {
             onRemoteDelta?(delta)
         }
         if game.takeRosterChange() { publishRoster() }
+        if let boards = game.takeLeaderboardsIfChanged() { onLeaderboards?(boards) }
+    }
+
+    /// The leaderboards kept from earlier games, before the round starts.
+    public func loadLeaderboards(_ boards: [String: Leaderboard]) {
+        queue.async { [weak self] in self?.game.loadLeaderboards(boards) }
     }
 
     /// NPCs are moved by the host, so their movement goes out like any

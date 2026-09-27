@@ -69,6 +69,11 @@ Behaviour is the no-code half of Ablox: pick one and the part does something whe
 - Bouncy — Launches anyone who lands on it. A trampoline.
 - Disappearing — Vanishes shortly after it is stepped on, then comes back.
 - Teleporter — Moves the player to another block. Players walk through it.
+- Ladder — Walk into it and push forward to climb. Jump to let go.
+- Door — Opens when a player walks into it, then closes again after a few seconds.
+- Moving platform — Moves to a spot and back again, over and over, carrying anyone standing on it.
+- Vehicle — Touch it to get in and drive faster. Tap Get out to leave it.
+- Pushable — Players push it along by walking into it. It falls off edges.
 
 ## 6. Tune the gimmicks
 

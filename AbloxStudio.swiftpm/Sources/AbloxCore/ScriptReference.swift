@@ -27,7 +27,7 @@ public enum ScriptReference {
     }
 
     public static var sections: [Section] {
-        [basics, events, everyone, players, npcs, screen, blocks, extras]
+        [basics, events, everyone, players, npcs, screen, parts, blocks, extras]
     }
 
     public static var basics: Section {
@@ -61,7 +61,11 @@ public enum ScriptReference {
             Entry("on input(p, id, text)", L("A player sends text from a text box.")),
             Entry("on chat(p, text)", L("A player says something in the chat — commands, passwords, quizzes.")),
             Entry("on loaded(p)", L("A player's saved data has arrived. Read p.saved here.")),
-            Entry("on emote(p, name)", L("Someone waved, danced or sent an emoji stamp: \"wave\", \"dance\", \"stamp:🎉\"…"))
+            Entry("on emote(p, name)", L("Someone waved, danced or sent an emoji stamp: \"wave\", \"dance\", \"stamp:🎉\"…")),
+            Entry("on use(p, item)", L("A player taps something they carry.")),
+            Entry("on choice(p, answer, number)", L("A player picks an answer in a conversation.")),
+            Entry("on buy(p, item, price)", L("A player buys something in a shop. The price has already been paid.")),
+            Entry("on countdown(label, p)", L("A countdown reached zero. p is nil for everyone's countdown."))
         ])
     }
 
@@ -139,6 +143,30 @@ public enum ScriptReference {
         ])
     }
 
+    public static var parts: Section {
+        Section(title: L("Ready-made parts"), symbolName: "shippingbox.fill", entries: [
+            Entry("p.give_item(\"Key\", 1, \"🔑\")  p.take_item(\"Key\")  p.has_item(\"Key\")  p.items  p.clear_items()",
+                  L("Things a player carries, shown in a bar at the bottom. Tapping one runs “on use”.")),
+            Entry("p.dialog(\"Baker\", \"Want some bread?\", [\"Yes\", \"No\"])  p.close_dialog()",
+                  L("A character talking, with answers to pick. The answer runs “on choice”.")),
+            Entry("p.shop(\"Weapons\", [{name: \"Sword\", price: 50, icon: \"⚔️\"}], {currency: \"coins\"})  p.close_shop()",
+                  L("A shop window. It spends p.coins (or whatever currency says; \"score\" spends the score) and runs “on buy”.")),
+            Entry("p.waypoint(block(\"Exit\"), \"The exit\", \"gold\")  p.waypoint(nil)",
+                  L("An arrow on this player's screen pointing the way, with how far it is.")),
+            Entry("countdown(60, \"Time left\")  p.countdown(10)  countdown(nil)",
+                  L("A big timer on the screen. At zero it runs “on countdown”.")),
+            Entry("leaderboard(\"fastest\", p, 42.5, {lower: true})  show_leaderboard(\"fastest\")  p.show_leaderboard(\"fastest\")  leaderboard_top(\"fastest\", 3)",
+                  L("A world's best scores, kept on the host's iPad between games. leaderboard returns the player's place.")),
+            Entry("particles(\"confetti\", p, {amount: 60})  particles(\"fire\", b, {seconds: 5})  p.particles(\"hearts\")",
+                  L("Bits that fly: fire, smoke, sparkles, confetti, rain, snow, bubbles, hearts, stars, leaves, magic, dust.")),
+            Entry("sound(\"coin\", {volume: 0.5, pitch: 1.5})  music(\"adventure\")  p.music(\"shop\")  music(\"off\")  music(nil)",
+                  L("Sounds and music made on the iPad. Music: calm, adventure, spooky, race, boss, shop, party, space. nil goes back to the world's own.")),
+            Entry("speak(\"Welcome!\")  p.speak(\"Your turn\")",
+                  L("Read aloud, for players who switched on “Read characters' lines aloud”.")),
+            Entry("p.vehicle", L("The vehicle block they are riding in, or nil. A Vehicle block puts them in; “Get out” takes them out."))
+        ])
+    }
+
     public static var blocks: Section {
         Section(title: L("Blocks and the world"), symbolName: "cube.fill", entries: [
             Entry("block(\"Door\")  blocks(\"coin\")  blocks()", L("One block by name, every block with a tag, or every block.")),
@@ -153,7 +181,13 @@ public enum ScriptReference {
             Entry("world.sky = \"#87CEEB\"  world.sky_top  world.sky_bottom  world.light",
                   L("The sky and the light.")),
             Entry("world.gravity = -3  world.sun  world.sun_yaw  world.ground  world.ground_color  world.fall_height",
-                  L("Gravity (-9.81 is normal), the sun, the ground plane and the height you fall out of the world."))
+                  L("Gravity (-9.81 is normal), the sun, the ground plane and the height you fall out of the world.")),
+            Entry("world.weather = \"rain\"  world.time = 18  world.day_length = 10  world.sky_style = \"stars\"",
+                  L("Weather (clear, rain, snow, fog, storm), the hour, minutes for a whole day, and the sky: gradient, clouds, sunset, stars, aurora, space.")),
+            Entry("world.effect = \"retro\"  world.shadows = false  world.music = \"calm\"",
+                  L("A look for the whole screen (none, bloom, vivid, warm, cool, noir, retro, dream), shadows, and the world's music.")),
+            Entry("b.particles = \"fire\"  b.image = \"Poster\"",
+                  L("A block that keeps giving off particles, or shows one of the world's pictures."))
         ])
     }
 

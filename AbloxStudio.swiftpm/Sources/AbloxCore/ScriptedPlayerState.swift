@@ -55,6 +55,19 @@ public struct ScriptedPlayerState: Equatable, Sendable {
     public private(set) var lastHitWasKnockout = false
     public private(set) var damageFlashCount = 0
 
+    public private(set) var waypoint: Waypoint?
+    public private(set) var inventory: [InventoryItem] = []
+    public private(set) var dialog: DialogBox?
+    public private(set) var shop: ShopPanel?
+    /// The timer, and when it was received (so the screen can count down).
+    public private(set) var countdown: CountdownDisplay?
+    public private(set) var countdownSerial = 0
+    public private(set) var leaderboard: LeaderboardPanel?
+    /// The music asked for; nil plays the world's own.
+    public private(set) var music: MusicPlay?
+    /// In a vehicle a block gave them: "Get out" shows.
+    public private(set) var inVehicle = false
+
     public init() {}
 
     public var isKnockedOut: Bool {
@@ -128,7 +141,24 @@ public struct ScriptedPlayerState: Equatable, Sendable {
             lastHitWasKnockout = killed
         case .damageFlash:
             damageFlashCount &+= 1
-        case .launch, .face, .tracer, .chat, .say, .store, .gesture:
+        case let .waypoint(value):
+            waypoint = value
+        case let .inventory(items):
+            inventory = Array(items.prefix(InventoryItem.maximumItems))
+        case let .dialog(box):
+            dialog = box
+        case let .shop(panel):
+            shop = panel
+        case let .countdown(value):
+            countdown = value
+            countdownSerial &+= 1
+        case let .leaderboard(panel):
+            leaderboard = panel
+        case let .music(play):
+            music = play
+        case let .vehicle(riding):
+            inVehicle = riding
+        case .launch, .face, .tracer, .chat, .say, .store, .gesture, .particles, .sound, .speak:
             // Acted on by the viewport, the chat log or the save store;
             // nothing to remember.
             break

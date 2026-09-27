@@ -16,7 +16,7 @@ extension GameRuntime: ScriptObjectResolver {
         "distance", "raycast", "time", "after", "every", "cancel",
         "announce", "sound", "chat", "fade", "shake", "end_round", "restart_round", "weapon",
         "ui_text", "ui_button", "ui_panel", "ui_image", "ui_bar", "ui_input", "ui_set", "ui_remove", "ui_clear"
-    ]
+    ] + partsAPINames
 
     /// Members every character has, player or NPC.
     public static let characterMemberNames: [String] = [
@@ -32,7 +32,7 @@ extension GameRuntime: ScriptObjectResolver {
         "camera", "camera_distance", "fov", "controls", "default_ui", "saved", "save",
         "camera_look", "camera_reset", "message", "sound", "chat", "fade", "shake",
         "ui_text", "ui_button", "ui_panel", "ui_image", "ui_bar", "ui_input", "ui_set", "ui_remove", "ui_clear"
-    ]
+    ] + partsMemberNames
 
     /// Members only an NPC has: being told where to go.
     public static let npcOnlyMemberNames: [String] = [
@@ -41,12 +41,13 @@ extension GameRuntime: ScriptObjectResolver {
 
     public static let blockMemberNames: [String] = [
         "name", "id", "position", "x", "y", "z", "size", "rotation", "color", "material", "shape",
-        "visible", "solid", "tags", "opacity", "behavior", "move", "move_to", "rotate", "destroy", "clone"
+        "visible", "solid", "tags", "opacity", "behavior", "move", "move_to", "rotate", "destroy", "clone",
+        "particles", "image"
     ]
 
     public static let worldMemberNames: [String] = [
         "gravity", "sky", "sky_top", "sky_bottom", "light", "sun", "sun_yaw", "ground", "ground_color", "fall_height"
-    ]
+    ] + partsWorldMemberNames
 
     public static let uiOptionNames: [String] = [
         "at", "x", "y", "pivot", "dx", "dy", "w", "h", "color", "bg", "size", "bold", "radius",
@@ -128,8 +129,7 @@ extension GameRuntime: ScriptObjectResolver {
             return .null
         }
         interpreter.define("sound") { [unowned self] arguments, line in
-            let cue = try self.soundCue(arguments.first ?? .null, line: line)
-            self.pending.append(self.broadcast(.playSound(name: cue.rawValue)))
+            self.pending.append(self.broadcast(try self.soundEffect(arguments, line: line)))
             return .null
         }
         interpreter.define("chat") { [unowned self] arguments, _ in
@@ -181,6 +181,8 @@ extension GameRuntime: ScriptObjectResolver {
             self.clearUI(owner: nil)
             return .null
         }
+
+        installPartsAPI(on: interpreter)
     }
 
     // MARK: Members
@@ -351,7 +353,7 @@ extension GameRuntime: ScriptObjectResolver {
             }
         case "sound":
             return method(name) { [unowned self] arguments, line in
-                self.send(state, .playSound(name: try self.soundCue(arguments.first ?? .null, line: line).rawValue))
+                self.send(state, try self.soundEffect(arguments, line: line))
                 return .null
             }
         case "chat":
@@ -447,6 +449,7 @@ extension GameRuntime: ScriptObjectResolver {
             }
 
         default:
+            if let part = partsMember(state, name) { return part }
             return state.custom[name] ?? .null
         }
     }
@@ -717,6 +720,7 @@ extension GameRuntime: ScriptObjectResolver {
                 return self.blockObject(copy.id)
             }
         default:
+            if let part = partsBlockMember(block, name) { return part }
             throw ScriptError(line: line, kind: .runtime, message: L("A block has no “{}”.", name))
         }
     }
@@ -792,18 +796,20 @@ extension GameRuntime: ScriptObjectResolver {
             }
             block.tags = list.items.prefix(32).map { String($0.displayText.prefix(40)) }
         default:
-            throw ScriptError(line: line, kind: .runtime, message: L("A block’s “{}” cannot be set.", name))
+            guard try setPartsBlockMember(name, value, to: &block, line: line) else {
+                throw ScriptError(line: line, kind: .runtime, message: L("A block’s “{}” cannot be set.", name))
+            }
         }
     }
 
-    private func changeBlock(_ id: UUID, _ change: (inout BlockData) throws -> Void) throws {
+    func changeBlock(_ id: UUID, _ change: (inout BlockData) throws -> Void) throws {
         guard var block = world.block(id: id) else { return }
         try change(&block)
         guard block != world.block(id: id) else { return }
         queue(.update(block))
     }
 
-    private func moveBlock(_ id: UUID, by offset: Vec3, over seconds: Double) {
+    func moveBlock(_ id: UUID, by offset: Vec3, over seconds: Double) {
         guard var block = world.block(id: id) else { return }
         block.position += offset
         guard seconds > 0 else {
@@ -851,7 +857,9 @@ extension GameRuntime: ScriptObjectResolver {
         case "ground": return .bool(environment.showGroundPlane)
         case "ground_color": return .string(environment.groundColor.hexString)
         case "fall_height": return .number(Double(environment.killPlaneHeight))
-        default: throw ScriptError(line: line, kind: .runtime, message: L("“world” has no “{}”.", name))
+        default:
+            if let part = partsWorldMember(name) { return part }
+            throw ScriptError(line: line, kind: .runtime, message: L("“world” has no “{}”.", name))
         }
     }
 
@@ -871,7 +879,10 @@ extension GameRuntime: ScriptObjectResolver {
         case "ground": environment.showGroundPlane = value.isTruthy
         case "ground_color": environment.groundColor = try color(value, line: line)
         case "fall_height": environment.killPlaneHeight = Float(Swift.min(Swift.max(try number(value, name, line), -10_000), 10_000))
-        default: throw ScriptError(line: line, kind: .runtime, message: L("“world.{}” cannot be set.", name))
+        default:
+            guard try setPartsWorldMember(name, value, into: &environment, line: line) else {
+                throw ScriptError(line: line, kind: .runtime, message: L("“world.{}” cannot be set.", name))
+            }
         }
         guard environment != world.environment else { return }
         queue(.environment(environment))
@@ -1315,7 +1326,7 @@ extension GameRuntime: ScriptObjectResolver {
         String(value.displayText.prefix(UIElement.Limits.maximumTextLength))
     }
 
-    private func optionsMap(_ value: ScriptValue, line: Int) throws -> ScriptMap {
+    func optionsMap(_ value: ScriptValue, line: Int) throws -> ScriptMap {
         switch value {
         case let .map(map): return map
         case .null: return ScriptMap()
@@ -1324,7 +1335,7 @@ extension GameRuntime: ScriptObjectResolver {
         }
     }
 
-    private func soundCue(_ value: ScriptValue, line: Int) throws -> SoundCue {
+    func soundCue(_ value: ScriptValue, line: Int) throws -> SoundCue {
         guard let cue = SoundCue.named(value.displayText) else {
             throw ScriptError(line: line, kind: .runtime, message: L("There is no sound called “{}”. The sounds are: {}.",
                                                                      value.displayText,
@@ -1401,7 +1412,7 @@ extension GameRuntime: ScriptObjectResolver {
                     Float(try optionalNumber([options["z"] ?? .null], 0, default: 0, line: line)))
     }
 
-    private func characterArgument(_ arguments: [ScriptValue], _ index: Int) -> PlayerState? {
+    func characterArgument(_ arguments: [ScriptValue], _ index: Int) -> PlayerState? {
         guard index < arguments.count, case let .object(object) = arguments[index] else { return nil }
         return character(object)
     }

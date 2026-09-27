@@ -28,6 +28,9 @@ public enum SoundCue: String, CaseIterable, Sendable {
     case reload
     /// You were knocked out.
     case defeat
+    // More for scripts (made from numbers — see `tones`).
+    case coin, jump, powerUp = "powerup", explosion, splash, door, click, whoosh
+    case win, lose, magic, pop, bell, laser, alarm, drum
 
     /// How strongly the cue should be felt, independent of sound.
     ///
@@ -59,6 +62,11 @@ public enum SoundCue: String, CaseIterable, Sendable {
         case .hit: return .medium
         case .reload: return .none
         case .defeat: return .heavy
+        case .coin, .pop, .click, .jump: return .light
+        case .powerUp, .win, .magic, .bell: return .success
+        case .explosion, .drum: return .heavy
+        case .splash, .door, .whoosh, .laser: return .medium
+        case .lose, .alarm: return .warning
         }
     }
 
@@ -68,7 +76,7 @@ public enum SoundCue: String, CaseIterable, Sendable {
     /// coin turns into a buzz rather than a series of taps.
     public var minimumInterval: Double {
         switch self {
-        case .collect, .tick, .shoot, .hit: return 0.08
+        case .collect, .tick, .shoot, .hit, .coin, .click, .laser, .pop, .drum, .jump: return 0.08
         case .bounce: return 0.15
         default: return 0.0
         }
@@ -105,6 +113,22 @@ public enum SoundCue: String, CaseIterable, Sendable {
         case .hit: return L("Hit")
         case .reload: return L("Reload")
         case .defeat: return L("Defeated")
+        case .coin: return L("Coin")
+        case .jump: return L("Jump")
+        case .powerUp: return L("Power-up")
+        case .explosion: return L("Explosion")
+        case .splash: return L("Splash")
+        case .door: return L("Door")
+        case .click: return L("Click")
+        case .whoosh: return L("Whoosh")
+        case .win: return L("Win")
+        case .lose: return L("Lose")
+        case .magic: return L("Magic")
+        case .pop: return L("Pop")
+        case .bell: return L("Bell")
+        case .laser: return L("Laser")
+        case .alarm: return L("Alarm")
+        case .drum: return L("Drum")
         }
     }
 }

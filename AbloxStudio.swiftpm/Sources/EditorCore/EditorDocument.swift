@@ -296,6 +296,14 @@ public struct EditorDocument: Sendable {
         perform(.setEnvironment(before: world.environment, after: environment))
     }
 
+    /// The world's pictures. A picture no block shows any more stays until
+    /// it is removed here, so taking it off one block never loses it.
+    public mutating func setImages(_ images: [WorldImage]) {
+        let kept = Array(images.filter(\.isAcceptable).prefix(WorldImage.maximumCount))
+        guard kept != world.images else { return }
+        perform(.setImages(before: world.images, after: kept))
+    }
+
     public mutating func setRules(_ rules: [EventRule]) {
         guard rules != world.rules else { return }
         perform(.setRules(before: world.rules, after: rules))

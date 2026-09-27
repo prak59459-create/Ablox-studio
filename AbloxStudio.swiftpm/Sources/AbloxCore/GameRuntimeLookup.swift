@@ -59,7 +59,7 @@ struct BlockLookup {
         case let .update(block):
             guard let label = labels[block.id] else { return true }
             return label.name != block.name || label.tags != block.tags
-        case .environment, .rulesReplaced, .scriptsReplaced, .scriptSourceChanged:
+        case .environment, .rulesReplaced, .scriptsReplaced, .scriptSourceChanged, .imagesReplaced:
             return false
         }
     }

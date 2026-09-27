@@ -1,8 +1,15 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Properties of whatever is selected.
 struct InspectorPanel: View {
     @ObservedObject var session: StudioSession
+
+    /// Choosing a picture from Files, and the block it is for (nil: just
+    /// add it to the world).
+    @State private var importingPicture = false
+    @State private var pictureFor: UUID?
+    @State private var pictureProblem: String?
 
     private var selected: [BlockData] { session.document.selectedBlocks }
 
@@ -19,6 +26,41 @@ struct InspectorPanel: View {
             }
         }
         .background(.ultraThinMaterial)
+        .fileImporter(isPresented: $importingPicture, allowedContentTypes: [.image]) { result in
+            addPicture(result)
+        }
+        .alert(L("That picture can't be used"), isPresented: Binding(
+            get: { pictureProblem != nil },
+            set: { if !$0 { pictureProblem = nil } }
+        )) {
+            Button(L("OK"), role: .cancel) {}
+        } message: {
+            Text(pictureProblem ?? "")
+        }
+    }
+
+    // MARK: Pictures
+
+    private func addPicture(_ result: Result<URL, Error>) {
+        guard case let .success(url) = result else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard world.images.count < WorldImage.maximumCount else {
+            pictureProblem = L("A world can have up to {} pictures. Remove one in the World panel first.", WorldImage.maximumCount)
+            return
+        }
+        guard let data = try? Data(contentsOf: url), let small = PictureShrinker.shrink(data) else {
+            pictureProblem = L("It isn't a picture Ablox can read. Try a PNG or JPEG.")
+            return
+        }
+        let picture = WorldImage(name: url.deletingPathExtension().lastPathComponent, data: small)
+        let target = pictureFor
+        session.edit { document in
+            document.setImages(document.world.images + [picture])
+            if let target, document.world.block(id: target) != nil {
+                document.mutateSelection(label: "Show picture") { $0.imageID = picture.id }
+            }
+        }
     }
 
     private var header: some View {
@@ -121,6 +163,33 @@ struct InspectorPanel: View {
                         session.edit { $0.mutateSelection(label: "Change material") { $0.material = newValue } }
                     }
                 ), options: MaterialKind.allCases) { $0.displayName }
+
+                labelledPicker(L("Particles"), selection: Binding(
+                    get: { block.particles },
+                    set: { newValue in
+                        session.edit { $0.mutateSelection(label: "Change particles") { $0.particles = newValue } }
+                    }
+                ), options: [nil] + ParticleKind.allCases.map(Optional.some)) { $0?.displayName ?? L("None") }
+
+                HStack {
+                    labelledPicker(L("Picture"), selection: Binding(
+                        get: { block.imageID },
+                        set: { newValue in
+                            session.edit { $0.mutateSelection(label: "Change picture") { $0.imageID = newValue } }
+                        }
+                    ), options: [nil] + world.images.map { Optional.some($0.id) }) { id in
+                        id.flatMap { world.image(id: $0)?.name } ?? L("None")
+                    }
+                    Button {
+                        pictureFor = block.id
+                        importingPicture = true
+                    } label: {
+                        Image(systemName: "photo.badge.plus")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Ablox.Palette.accent)
+                    .accessibilityLabel(L("Add a picture"))
+                }
             }
         }
     }
@@ -158,7 +227,29 @@ struct InspectorPanel: View {
                     }
                 }
 
-                if block.behavior.isGimmick {
+                if block.behavior == .checkpoint {
+                    HStack {
+                        Text(L("Stage")).font(.caption2).foregroundStyle(Ablox.Palette.inkMuted)
+                        Spacer()
+                        Stepper(value: Binding(
+                            get: { block.gimmick.stage },
+                            set: { newValue in
+                                session.edit { $0.mutateSelection(label: "Change stage") { $0.gimmick.stage = newValue } }
+                            }
+                        ), in: 0...999) {
+                            Text(block.gimmick.stage == 0 ? L("Any order") : "\(block.gimmick.stage)")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(Ablox.Palette.accent)
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                }
+
+                if block.behavior == .elevator || block.behavior == .ladder {
+                    // Worked out on each iPad: no cooldown to tune.
+                    gimmickFields(block)
+                } else if block.behavior.isGimmick {
                     gimmickFields(block)
                 }
 
@@ -215,12 +306,41 @@ struct InspectorPanel: View {
                     .tint(Ablox.Palette.accent)
                 }
 
+            case .door:
+                gimmickSlider(L("Stays open for"), value: Float(block.gimmick.doorSeconds), range: 0.5...15, unit: " s") { newValue in
+                    session.edit { $0.mutateSelection(label: "Change door time") { $0.gimmick.doorSeconds = Double(newValue) } }
+                }
+
+            case .elevator:
+                vectorField(L("Moves by"), value: block.gimmick.moveOffset, step: 1, unit: "m") { newValue in
+                    session.edit { $0.mutateSelection(label: "Change movement") { $0.gimmick.moveOffset = newValue } }
+                }
+                gimmickSlider(L("Time to get there"), value: Float(block.gimmick.moveSeconds), range: 0.5...20, unit: " s") { newValue in
+                    session.edit { $0.mutateSelection(label: "Change speed") { $0.gimmick.moveSeconds = Double(newValue) } }
+                }
+                gimmickSlider(L("Wait at each end"), value: Float(block.gimmick.movePause), range: 0...10, unit: " s") { newValue in
+                    session.edit { $0.mutateSelection(label: "Change wait") { $0.gimmick.movePause = Double(newValue) } }
+                }
+
+            case .vehicle:
+                labelledPicker(L("Vehicle"), selection: Binding(
+                    get: { AvatarProfile.Ride(rawValue: block.gimmick.vehicle) ?? .car },
+                    set: { newValue in
+                        session.edit { $0.mutateSelection(label: "Change vehicle") { $0.gimmick.vehicle = newValue.rawValue } }
+                    }
+                ), options: AvatarProfile.Ride.allCases.filter { $0 != .none }) { $0.rawValue.capitalized }
+                gimmickSlider(L("Speed"), value: block.gimmick.vehicleSpeed, range: 1...4, unit: "×") { newValue in
+                    session.edit { $0.mutateSelection(label: "Change speed") { $0.gimmick.vehicleSpeed = newValue } }
+                }
+
             default:
                 EmptyView()
             }
 
-            gimmickSlider(L("Wait between uses"), value: Float(block.gimmick.cooldown), range: 0...5, unit: " s") { newValue in
-                session.edit { $0.mutateSelection(label: "Change cooldown") { $0.gimmick.cooldown = Double(newValue) } }
+            if block.behavior != .elevator && block.behavior != .ladder {
+                gimmickSlider(L("Wait between uses"), value: Float(block.gimmick.cooldown), range: 0...5, unit: " s") { newValue in
+                    session.edit { $0.mutateSelection(label: "Change cooldown") { $0.gimmick.cooldown = Double(newValue) } }
+                }
             }
         }
     }
@@ -396,6 +516,123 @@ struct InspectorPanel: View {
                         var updated = environment
                         updated.sunYawDegrees = newValue
                         session.edit { $0.setEnvironment(updated) }
+                    }
+                }
+            }
+
+            InspectorGroup(L("Sky and weather")) {
+                VStack(alignment: .leading, spacing: 9) {
+                    labelledPicker(L("Weather"), selection: Binding(
+                        get: { environment.weather },
+                        set: { newValue in
+                            var updated = environment
+                            updated.weather = newValue
+                            session.edit { $0.setEnvironment(updated) }
+                        }
+                    ), options: Weather.allCases) { $0.displayName }
+                    labelledPicker(L("Sky"), selection: Binding(
+                        get: { environment.skyStyle },
+                        set: { newValue in
+                            var updated = environment
+                            updated.skyStyle = newValue
+                            session.edit { $0.setEnvironment(updated) }
+                        }
+                    ), options: SkyStyle.allCases) { $0.displayName }
+                    labelledPicker(L("Screen look"), selection: Binding(
+                        get: { environment.screenEffect },
+                        set: { newValue in
+                            var updated = environment
+                            updated.screenEffect = newValue
+                            session.edit { $0.setEnvironment(updated) }
+                        }
+                    ), options: ScreenEffect.allCases) { $0.displayName }
+                    labelledPicker(L("Music"), selection: Binding(
+                        get: { environment.music },
+                        set: { newValue in
+                            var updated = environment
+                            updated.music = newValue
+                            session.edit { $0.setEnvironment(updated) }
+                        }
+                    ), options: [nil] + MusicTrack.allCases.map(Optional.some)) { $0?.displayName ?? L("None") }
+                    Toggle(L("Shadows"), isOn: Binding(
+                        get: { environment.shadows },
+                        set: { newValue in
+                            var updated = environment
+                            updated.shadows = newValue
+                            session.edit { $0.setEnvironment(updated) }
+                        }
+                    ))
+                    .font(.caption)
+                    .tint(Ablox.Palette.accent)
+                    Toggle(L("Time of day"), isOn: Binding(
+                        get: { environment.timeOfDay != nil },
+                        set: { newValue in
+                            var updated = environment
+                            updated.timeOfDay = newValue ? 12 : nil
+                            if !newValue { updated.dayLengthMinutes = 0 }
+                            session.edit { $0.setEnvironment(updated) }
+                        }
+                    ))
+                    .font(.caption)
+                    .tint(Ablox.Palette.accent)
+                    if let hour = environment.timeOfDay {
+                        labelledSlider(L("Starts at"), value: hour, range: 0...24, unit: ":00") { newValue in
+                            var updated = environment
+                            updated.timeOfDay = newValue
+                            session.edit { $0.setEnvironment(updated) }
+                        }
+                        labelledSlider(L("A day lasts"), value: environment.dayLengthMinutes, range: 0...60, unit: " min") { newValue in
+                            var updated = environment
+                            updated.dayLengthMinutes = newValue.rounded()
+                            session.edit { $0.setEnvironment(updated) }
+                        }
+                        Text(L("0 minutes keeps the sun still. Otherwise the day goes round while people play."))
+                            .font(.system(size: 10))
+                            .foregroundStyle(Ablox.Palette.inkFaint)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
+            InspectorGroup(L("Pictures")) {
+                VStack(alignment: .leading, spacing: 7) {
+                    if world.images.isEmpty {
+                        Text(L("Pictures from Files can be shown on blocks. Pick a part, then Picture."))
+                            .font(.system(size: 10))
+                            .foregroundStyle(Ablox.Palette.inkFaint)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    ForEach(world.images) { picture in
+                        HStack(spacing: 8) {
+                            if let image = UIImage(data: picture.data) {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 30, height: 30)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            }
+                            Text(picture.name).font(.caption).lineLimit(1)
+                            Spacer()
+                            Button {
+                                session.edit { document in
+                                    document.setImages(document.world.images.filter { $0.id != picture.id })
+                                }
+                            } label: {
+                                Image(systemName: "trash").font(.caption)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Ablox.Palette.danger)
+                            .accessibilityLabel(L("Remove {}", picture.name))
+                        }
+                    }
+                    if world.images.count < WorldImage.maximumCount {
+                        Button {
+                            pictureFor = nil
+                            importingPicture = true
+                        } label: {
+                            Label(L("Add a picture"), systemImage: "photo.badge.plus").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(NeonButtonStyle(.secondary, fullWidth: true))
                     }
                 }
             }
@@ -589,5 +826,28 @@ struct StepButtonStyle: ButtonStyle {
             .background(configuration.isPressed ? Ablox.Palette.accent.opacity(0.3) : Color.white.opacity(0.07))
             .foregroundStyle(Ablox.Palette.ink)
             .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+    }
+}
+
+/// Makes a picture small enough to live in a world file: at most 512 points
+/// across, as a JPEG, stepping the quality down until it fits.
+enum PictureShrinker {
+    static func shrink(_ data: Data) -> Data? {
+        guard let image = UIImage(data: data) else { return nil }
+        let longest = max(image.size.width, image.size.height)
+        guard longest > 0 else { return nil }
+        let scale = min(1, 512 / longest)
+        let size = CGSize(width: max(1, (image.size.width * scale).rounded()), height: max(1, (image.size.height * scale).rounded()))
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let resized = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+        for quality in stride(from: 0.85, through: 0.3, by: -0.1) {
+            if let jpeg = resized.jpegData(compressionQuality: quality), jpeg.count <= WorldImage.maximumBytes {
+                return jpeg
+            }
+        }
+        return nil
     }
 }

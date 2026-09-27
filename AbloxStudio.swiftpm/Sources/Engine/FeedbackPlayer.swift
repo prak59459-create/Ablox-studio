@@ -6,19 +6,13 @@ import UIKit
 
 /// Plays the sound and haptic for a `SoundCue`.
 ///
-/// ## Why system sounds rather than audio files
+/// ## Why no audio files
 ///
 /// A Swift Playground should be readable Swift, not a bundle of binaries, and
-/// ten `.caf` files would be ten things you cannot inspect or diff on an iPad.
-/// `AudioServicesPlaySystemSoundID` plays iOS's built-in sounds with no assets
-/// at all. They are not bespoke game sounds — a coin sounds like a system
-/// "tink" — but they are immediate, they never fail to load, and they cost
-/// nothing to ship.
-///
-/// Synthesising tones with `AVAudioEngine` would sound better and still need
-/// no assets. It is the obvious next step if the feel matters more than the
-/// footprint; it is not done here because it is a great deal more code to get
-/// wrong in a layer that cannot be unit-tested.
+/// thirty `.caf` files would be thirty things you cannot inspect or diff on an
+/// iPad. Each cue is made of a few tones (`SoundCue.tones`) that `SoundSynth`
+/// plays as they are needed. If the audio engine cannot start, iOS's built-in
+/// sounds (`AudioServicesPlaySystemSoundID`) stand in, as they always did.
 ///
 /// ## Why haptics carry equal weight
 ///
@@ -33,6 +27,10 @@ public final class FeedbackPlayer {
     public var isHapticsEnabled: Bool = true
     /// Settings → Comfort → Vibration strength, 0 to 1.
     public var hapticIntensity: Double = 1
+    /// Settings → Sound, 0 to 1.
+    public var effectsVolume: Float = 1 {
+        didSet { SoundSynth.shared.effectsGain = effectsVolume }
+    }
 
     private var throttle = SoundThrottle()
     private let startedAt = Date()
@@ -70,16 +68,22 @@ public final class FeedbackPlayer {
         play(cue)
     }
 
-    public func play(_ cue: SoundCue) {
+    public func play(_ cue: SoundCue, volume: Float = 1, pitch: Float = 1) {
         let now = Date().timeIntervalSince(startedAt)
         guard throttle.shouldPlay(cue, at: now) else { return }
 
-        if isSoundEnabled {
+        if isSoundEnabled, !SoundSynth.shared.play(cue, volume: volume, pitch: pitch) {
             AudioServicesPlaySystemSound(systemSoundID(for: cue))
         }
         if isHapticsEnabled {
             playHaptic(cue.feedback)
         }
+    }
+
+    /// A sound a script asked for, louder or softer, higher or lower.
+    public func play(_ request: SoundPlay) {
+        guard let cue = SoundCue.named(request.name) else { return }
+        play(cue, volume: request.volume, pitch: request.pitch)
     }
 
     /// iOS's built-in sound IDs. Chosen for character rather than meaning —
@@ -100,7 +104,16 @@ public final class FeedbackPlayer {
         case .shoot: return 1306        // Keyboard click
         case .hit: return 1104          // End recording
         case .reload: return 1105       // Tock
-        case .defeat: return 1053       // Low tri-tone
+        case .defeat, .lose: return 1053 // Low tri-tone
+        case .coin: return 1057
+        case .jump, .whoosh, .pop: return 1104
+        case .powerUp, .magic, .win: return 1025
+        case .explosion, .drum: return 1073
+        case .splash: return 1105
+        case .door, .click: return 1306
+        case .bell: return 1103
+        case .laser: return 1306
+        case .alarm: return 1005
         }
     }
 

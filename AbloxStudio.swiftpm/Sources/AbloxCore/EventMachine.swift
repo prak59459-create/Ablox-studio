@@ -57,6 +57,8 @@ public struct EventMachine: Sendable {
 
     /// Where each player respawns — updated by checkpoints.
     private var respawnPoints: [PeerID: Vec3] = [:]
+    /// The furthest numbered checkpoint each player has reached.
+    private var stages: [PeerID: Int] = [:]
 
     /// Last firing time per gimmick block, for `GimmickSettings.cooldown`.
     private var blockCooldowns: [UUID: Double] = [:]
@@ -109,6 +111,7 @@ public struct EventMachine: Sendable {
         players.removeValue(forKey: peer)
         consumedBlocks.removeValue(forKey: peer)
         respawnPoints.removeValue(forKey: peer)
+        stages.removeValue(forKey: peer)
         proximityInside = proximityInside.filter { $0.peer != peer }
     }
 
@@ -275,6 +278,13 @@ public struct EventMachine: Sendable {
             let top = topSurfacePosition(of: block)
             // Re-touching the checkpoint you already hold is not an event.
             guard respawnPoints[peer] != top else { return [] }
+            // A numbered one earlier than the furthest reached does not send
+            // the player back.
+            let stage = block.gimmick.stage
+            if stage > 0 {
+                guard stage >= (stages[peer] ?? 0) else { return [] }
+                stages[peer] = stage
+            }
             respawnPoints[peer] = top
             return [
                 Effect(ruleID: nil, targetPeerID: peer, action: .announce(message: "Checkpoint reached", duration: 1.5)),
@@ -352,6 +362,23 @@ public struct EventMachine: Sendable {
                 Effect(ruleID: nil, targetPeerID: peer, action: .teleportPlayer(to: topSurfacePosition(of: target))),
                 Effect(ruleID: nil, targetPeerID: nil, action: .playSound(name: "teleport"))
             ]
+
+        case .door:
+            // Fades, lets people through for a while, and comes back — for
+            // everyone, since everyone walks through the same door.
+            guard block.isVisible, beginGimmick(on: block) else { return [] }
+            let open = Swift.max(0.5, Swift.min(60, block.gimmick.doorSeconds))
+            schedule(.hideBlock(block.id), at: now + 0.2)
+            schedule(.showBlock(block.id), at: now + 0.2 + open)
+            return [
+                Effect(ruleID: nil, targetPeerID: nil, action: .tint(blockID: block.id, color: block.color.withAlpha(0.2), duration: 0.2)),
+                Effect(ruleID: nil, targetPeerID: nil, action: .playSound(name: "door"))
+            ]
+
+        case .ladder, .elevator, .vehicle, .pushable:
+            // Climbing and riding are worked out on each iPad; vehicles and
+            // pushing need the player, so `GameRuntime` handles them.
+            return []
         }
     }
 

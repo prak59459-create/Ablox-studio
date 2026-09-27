@@ -55,6 +55,22 @@ public struct MeshGeometry: Equatable, Sendable {
     public var vertexCount: Int { positions.count }
     public var triangleCount: Int { indices.count / 3 }
 
+    /// The same shape seen from inside: every triangle wound the other way
+    /// and the normals pointing in. For the sky, which the camera sits in.
+    public var insideOut: MeshGeometry {
+        var flipped: [UInt32] = []
+        flipped.reserveCapacity(indices.count)
+        var index = 0
+        while index + 2 < indices.count {
+            flipped.append(indices[index])
+            flipped.append(indices[index + 2])
+            flipped.append(indices[index + 1])
+            index += 3
+        }
+        return MeshGeometry(positions: positions, normals: normals.map { $0 * -1 },
+                            textureCoordinates: textureCoordinates, indices: flipped)
+    }
+
     /// The axis-aligned box the vertices occupy.
     public var bounds: BoundingBox {
         guard let first = positions.first else {

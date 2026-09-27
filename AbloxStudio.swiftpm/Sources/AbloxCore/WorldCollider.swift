@@ -184,6 +184,14 @@ public enum WorldCollider {
             return false
         case .teleport:
             return true
+
+        // A ladder is climbed from inside, and a vehicle is got into by
+        // walking into it. A door is solid until it opens (it hides), a
+        // lift is stood on, and a box is pushed by walking against it.
+        case .ladder, .vehicle:
+            return true
+        case .door, .elevator, .pushable:
+            return false
         }
     }
 

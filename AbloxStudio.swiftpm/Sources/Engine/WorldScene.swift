@@ -35,6 +35,8 @@ public final class WorldScene {
     /// Blocks with children. Never hidden for distance: hiding an entity
     /// hides everything under it, and a child can be much nearer.
     private var parentIDs: Set<UUID> = []
+    /// The world picture each block shows, for putting its look back.
+    private var pictures: [UUID: WorldImage] = [:]
 
     public init(collisionShapes: Bool = true) {
         self.collisionShapes = collisionShapes
@@ -98,6 +100,7 @@ public final class WorldScene {
             lastAppliedBlocks.removeValue(forKey: id)
             effectHidden.remove(id)
             culled.remove(id)
+            pictures.removeValue(forKey: id)
         }
     }
 
@@ -112,15 +115,18 @@ public final class WorldScene {
                 return
             }
         } else {
-            entity = BlockEntityFactory.makeEntity(for: block, profile: profile, collisionShapes: collisionShapes)
+            entity = BlockEntityFactory.makeEntity(for: block, profile: profile, collisionShapes: collisionShapes,
+                                                   picture: block.imageID.flatMap { world.image(id: $0) })
             entities[block.id] = entity
         }
 
         if let previous = lastAppliedBlocks[block.id], previous.shape != block.shape {
             entity.model?.mesh = BlockEntityFactory.mesh(for: block.shape, profile: profile)
         }
+        let picture = block.imageID.flatMap { world.image(id: $0) }
+        pictures[block.id] = picture
         BlockEntityFactory.apply(block, to: entity, physicsEnabled: physicsEnabled && block.hasCollision,
-                                 collisionShapes: collisionShapes)
+                                 collisionShapes: collisionShapes, picture: picture)
         if culled.contains(block.id) || effectHidden.contains(block.id) { entity.isEnabled = false }
         lastAppliedBlocks[block.id] = block
         reparentIfNeeded(entity, block: block, forceTopLevel: forceTopLevel)
@@ -157,8 +163,9 @@ public final class WorldScene {
             sunLight = light
         }
 
-        light.light.intensity = 2000 * max(0.1, environment.ambientIntensity)
+        light.light.intensity = 2000 * max(0.1, environment.ambientIntensity) * (1 - environment.weather.gloom)
         light.orientation = Quat.euler(degrees: Vec3(environment.sunPitchDegrees, environment.sunYawDegrees, 0)).simd
+        applyShadow(to: light)
 
         syncGround(environment)
     }
@@ -220,7 +227,25 @@ public final class WorldScene {
     }
 
     private func applyShadow(to light: DirectionalLight) {
-        light.shadow = profile.shadowDistance.map { DirectionalLightComponent.Shadow(maximumDistance: $0, depthBias: 1.5) }
+        // The world can turn its shadows off; the graphics setting can too.
+        let wanted = lastEnvironment?.shadows ?? true
+        light.shadow = wanted ? profile.shadowDistance.map { DirectionalLightComponent.Shadow(maximumDistance: $0, depthBias: 1.5) } : nil
+    }
+
+    /// The sun where the time of day puts it, and as bright as the day is.
+    /// The game calls this as the day passes; the Studio never does, so the
+    /// editor keeps the light the world was built with.
+    public func setDaylight(pitch: Float, yaw: Float, brightness: Float) {
+        guard let light = sunLight else { return }
+        let intensity = 2000 * max(0.05, brightness)
+        if abs(light.light.intensity - intensity) > 1 { light.light.intensity = intensity }
+        light.orientation = Quat.euler(degrees: Vec3(pitch, yaw, 0)).simd
+    }
+
+    /// Moves a block's drawing without changing the document — a moving
+    /// platform, placed by the clock every frame.
+    public func place(_ blockID: UUID, at position: Vec3) {
+        entities[blockID]?.position = position.simd
     }
 
     /// Hides parts further than the view distance from `eye`, and shows the
@@ -313,6 +338,11 @@ public final class WorldScene {
         case let .setVisible(blockID, visible):
             if visible { effectHidden.remove(blockID) } else { effectHidden.insert(blockID) }
             entities[blockID]?.isEnabled = visible && !culled.contains(blockID)
+            // A door or a vanishing platform faded before it went; it comes
+            // back looking as it was built, texture and all.
+            if visible, let entity = entities[blockID], let block = lastAppliedBlocks[blockID] {
+                entity.model?.materials = [BlockEntityFactory.material(for: block, picture: pictures[blockID])]
+            }
 
         case let .setCollision(blockID, enabled):
             // Only the removal has to happen now — a floor that vanishes must

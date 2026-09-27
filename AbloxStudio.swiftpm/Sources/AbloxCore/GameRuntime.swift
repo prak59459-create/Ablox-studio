@@ -28,6 +28,14 @@ public final class GameRuntime {
         case loaded
         /// Someone waved, danced or sent an emoji stamp.
         case emote
+        /// A player tapped something they carry: `on use(p, item)`.
+        case use
+        /// A player picked an answer: `on choice(p, answer, number)`.
+        case choice
+        /// A player bought something in a shop: `on buy(p, item, price)`.
+        case buy
+        /// A countdown reached zero: `on countdown(label, p)`.
+        case countdown
     }
 
     /// What `game.respawn_time = 5` and friends change.
@@ -108,6 +116,9 @@ public final class GameRuntime {
     var joinCounter = 0
     var clock: Double
     var roundStartedAt: Double = 0
+    /// Seconds since 1970. The day and moving platforms are counted on it,
+    /// because every iPad in the room has (nearly) the same one.
+    public var wallClock: @Sendable () -> Double = { Date().timeIntervalSince1970 }
     var lastTick: Double?
     var lastNPCStep: Double?
     var timers: [ScriptTimer] = []
@@ -132,6 +143,13 @@ public final class GameRuntime {
     var npcTransforms: [PeerID: PlayerTransformPayload] = [:]
     var rosterChanged = false
     var newErrors: [ScriptError] = []
+    /// A world's best scores, kept by the host between games.
+    var leaderboards: [String: Leaderboard] = [:]
+    var leaderboardsChanged = false
+    /// Countdowns on screen, and when each reaches zero.
+    var countdowns: [(label: String, due: Double, peer: PeerID?)] = []
+    /// When each pushable block last moved, so one push is one step.
+    var lastPush: [UUID: Double] = [:]
     var reportedErrors: Set<String> = []
     var output: [String] = []
 
@@ -234,6 +252,7 @@ public final class GameRuntime {
 
             stepNPCs()
             runDueTimers()
+            advanceCountdowns()
             guard !isRoundOver else { return }
 
             let delta = clock - (lastTick ?? clock)
@@ -269,6 +288,13 @@ public final class GameRuntime {
             case let .fire(origin, direction):
                 fire(state, origin: origin, direction: direction)
             case let .button(id):
+                // The runtime's own buttons — using a thing, answering,
+                // buying, getting out — each checked against what that
+                // player actually has open.
+                if let reserved = ReservedButton(id: id) {
+                    handleReserved(reserved, from: state)
+                    return
+                }
                 // Only a button that player can actually see. Otherwise any
                 // client could press any button, including one the script
                 // only shows to the winner.
@@ -434,12 +460,17 @@ public final class GameRuntime {
         if isRestart {
             restoreOriginalWorld()
             // Whatever the last round put on screens and in hands goes.
+            countdowns.removeAll()
+            lastPush.removeAll()
             for effect in [ScriptEffect.clearUI, .camera(.standard), .equip(nil), .movement(.normal),
-                           .interface(controls: true, defaultUI: true), .fade(color: nil, seconds: 0)] {
+                           .interface(controls: true, defaultUI: true), .fade(color: nil, seconds: 0),
+                           .inventory([]), .dialog(nil), .shop(nil), .countdown(nil), .leaderboard(nil), .waypoint(nil),
+                           .music(nil), .vehicle(false)] {
                 pending.append(broadcast(.script(effect)))
             }
         }
 
+        startTheDay()
         loadScript()
         run(.start, [])
         for state in orderedStates where !isRoundOver && !state.isNPC {
@@ -448,6 +479,14 @@ public final class GameRuntime {
             // so the new round can read it the same way the first one did.
             if state.saved != nil, !isRoundOver { run(.loaded, [object(for: state)]) }
         }
+    }
+
+    /// A world that keeps time starts its day now, on everyone's clock.
+    private func startTheDay() {
+        var environment = world.environment
+        guard environment.timeOfDay != nil, environment.dayLengthMinutes > 0 else { return }
+        environment.dayEpoch = wallClock()
+        queue(.environment(environment))
     }
 
     /// Puts back every block and setting a script changed, as deltas.
@@ -517,6 +556,8 @@ public final class GameRuntime {
     }
 
     func touched(_ state: PlayerState, blockID: UUID) {
+        // The no-script parts that need the player: vehicles and pushing.
+        partsTouched(state, blockID: blockID)
         guard hasHandler(.touch), state.isAlive, world.block(id: blockID) != nil else { return }
         let key = TouchKey(peer: state.peer, block: blockID)
         if let last = lastTouch[key], clock - last < Limits.touchInterval { return }
@@ -951,6 +992,15 @@ extension GameRuntime {
         var saveChanged = false
         var lastSaveSent = -Double.infinity
 
+        // The parts: what they carry, who they are talking to, the shop open
+        // on their screen, the vehicle they are in.
+        var items: [InventoryItem] = []
+        var dialog: DialogBox?
+        var shop: ShopPanel?
+        var shopCurrency = "coins"
+        var vehicle: AvatarProfile.Ride?
+        var movementBeforeVehicle: MovementScale?
+
         // NPCs only.
         var body: PlayerSnapshot?
         var home: Vec3?
@@ -989,6 +1039,11 @@ extension GameRuntime {
             name = originalProfile.displayName
             ui.removeAll()
             custom.removeAll()
+            items.removeAll()
+            dialog = nil
+            shop = nil
+            vehicle = nil
+            movementBeforeVehicle = nil
         }
     }
 

@@ -57,6 +57,15 @@ public enum MaterialKind: String, Codable, CaseIterable, Sendable {
     case glass
     case neon
     case matte
+    // Natural surfaces, drawn with a pattern made on the iPad (schema 2).
+    case wood
+    case stone
+    case brick
+    case grass
+    case sand
+    case ice
+    /// Players swim in it rather than stand on it.
+    case water
 
     public var displayName: String {
         switch self {
@@ -65,6 +74,13 @@ public enum MaterialKind: String, Codable, CaseIterable, Sendable {
         case .glass: return L("Glass")
         case .neon: return L("Neon")
         case .matte: return L("Matte")
+        case .wood: return L("Wood")
+        case .stone: return L("Stone")
+        case .brick: return L("Brick")
+        case .grass: return L("Grass")
+        case .sand: return L("Sand")
+        case .ice: return L("Ice")
+        case .water: return L("Water")
         }
     }
 
@@ -74,7 +90,10 @@ public enum MaterialKind: String, Codable, CaseIterable, Sendable {
         case .metal: return 0.15
         case .glass: return 0.05
         case .neon: return 1.0
-        case .matte: return 0.95
+        case .matte, .stone, .brick, .sand: return 0.95
+        case .wood, .grass: return 0.85
+        case .ice: return 0.1
+        case .water: return 0.05
         }
     }
 
@@ -85,7 +104,45 @@ public enum MaterialKind: String, Codable, CaseIterable, Sendable {
     public var isUnlit: Bool { self == .neon }
 
     /// Multiplier applied to the block's own alpha.
-    public var alphaScale: Float { self == .glass ? 0.35 : 1.0 }
+    public var alphaScale: Float {
+        switch self {
+        case .glass: return 0.35
+        case .water: return 0.6
+        case .ice: return 0.8
+        default: return 1.0
+        }
+    }
+
+    /// Players swim in it; it holds nobody up.
+    public var isLiquid: Bool { self == .water }
+
+    /// Newer than the first world format: a world using one needs schema 2.
+    public var needsSchema2: Bool {
+        switch self {
+        case .plastic, .metal, .glass, .neon, .matte: return false
+        case .wood, .stone, .brick, .grass, .sand, .ice, .water: return true
+        }
+    }
+
+    /// The pattern drawn on the surface.
+    public var pattern: SurfacePattern {
+        switch self {
+        case .plastic, .metal, .glass, .neon, .matte: return .none
+        case .wood: return .grain
+        case .stone: return .speckle
+        case .brick: return .bricks
+        case .grass: return .blades
+        case .sand: return .speckle
+        case .ice: return .cracks
+        case .water: return .ripples
+        }
+    }
+}
+
+/// Patterns made on the iPad for the natural materials, so a world carries
+/// no image files.
+public enum SurfacePattern: String, Sendable {
+    case none, grain, speckle, bricks, blades, cracks, ripples
 }
 
 // MARK: - Behavior
@@ -123,6 +180,20 @@ public enum BlockBehavior: String, Codable, CaseIterable, Sendable {
     /// Moves the player to `gimmick.teleportTargetID`. A warp pad.
     case teleport
 
+    // Parts that work with no script (schema 2).
+
+    /// Players climb it instead of bumping into it.
+    case ladder
+    /// Opens when a player walks into it, and closes again.
+    case door
+    /// Moves by `gimmick.moveOffset` and back, for ever. Carries whoever
+    /// stands on it.
+    case elevator
+    /// Touch it to ride: a car, a bike, a boat.
+    case vehicle
+    /// Players push it along by walking into it.
+    case pushable
+
     public var displayName: String {
         switch self {
         case .none: return L("None")
@@ -135,6 +206,19 @@ public enum BlockBehavior: String, Codable, CaseIterable, Sendable {
         case .bounce: return L("Bouncy")
         case .disappear: return L("Disappearing")
         case .teleport: return L("Teleporter")
+        case .ladder: return L("Ladder")
+        case .door: return L("Door")
+        case .elevator: return L("Moving platform")
+        case .vehicle: return L("Vehicle")
+        case .pushable: return L("Pushable")
+        }
+    }
+
+    /// Newer than the first world format.
+    public var needsSchema2: Bool {
+        switch self {
+        case .none, .spawn, .checkpoint, .hazard, .collectible, .goal, .trigger, .bounce, .disappear, .teleport: return false
+        case .ladder, .door, .elevator, .vehicle, .pushable: return true
         }
     }
 
@@ -150,6 +234,11 @@ public enum BlockBehavior: String, Codable, CaseIterable, Sendable {
         case .bounce: return "arrow.up.circle.fill"
         case .disappear: return "square.dashed"
         case .teleport: return "sparkles"
+        case .ladder: return "ladder"
+        case .door: return "door.left.hand.open"
+        case .elevator: return "arrow.up.and.down.square.fill"
+        case .vehicle: return "car.fill"
+        case .pushable: return "shippingbox.fill"
         }
     }
 
@@ -171,6 +260,11 @@ public enum BlockBehavior: String, Codable, CaseIterable, Sendable {
         case .bounce: return L("Launches anyone who lands on it. A trampoline.")
         case .disappear: return L("Vanishes shortly after it is stepped on, then comes back.")
         case .teleport: return L("Moves the player to another block. Players walk through it.")
+        case .ladder: return L("Walk into it and push forward to climb. Jump to let go.")
+        case .door: return L("Opens when a player walks into it, then closes again after a few seconds.")
+        case .elevator: return L("Moves to a spot and back again, over and over, carrying anyone standing on it.")
+        case .vehicle: return L("Touch it to get in and drive faster. Tap Get out to leave it.")
+        case .pushable: return L("Players push it along by walking into it. It falls off edges.")
         }
     }
 
@@ -181,6 +275,9 @@ public enum BlockBehavior: String, Codable, CaseIterable, Sendable {
         case .checkpoint, .hazard, .collectible, .goal, .trigger: return true
         // Every gimmick fires on contact, so the runtime has to be told.
         case .bounce, .disappear, .teleport: return true
+        case .door, .vehicle, .pushable: return true
+        // Worked out on each iPad as the player moves.
+        case .ladder, .elevator: return false
         }
     }
 
@@ -188,8 +285,8 @@ public enum BlockBehavior: String, Codable, CaseIterable, Sendable {
     /// `BlockData.gimmick` tuning and a per-block cooldown.
     public var isGimmick: Bool {
         switch self {
-        case .bounce, .disappear, .teleport: return true
-        case .none, .spawn, .checkpoint, .hazard, .collectible, .goal, .trigger: return false
+        case .bounce, .disappear, .teleport, .door, .vehicle, .pushable: return true
+        case .none, .spawn, .checkpoint, .hazard, .collectible, .goal, .trigger, .ladder, .elevator: return false
         }
     }
 }
@@ -230,21 +327,90 @@ public struct GimmickSettings: Codable, Hashable, Sendable {
     /// and fling the player into orbit.
     public var cooldown: Double
 
+    /// How long a `.door` stays open.
+    public var doorSeconds: Double
+    /// Where a `.elevator` goes, from where it was built.
+    public var moveOffset: Vec3
+    /// Seconds a `.elevator` takes each way, and waits at each end.
+    public var moveSeconds: Double
+    public var movePause: Double
+    /// What a `.vehicle` is (`AvatarProfile.Ride`), and how much faster it goes.
+    public var vehicle: String
+    public var vehicleSpeed: Float
+    /// A `.checkpoint`'s place in the course: touching an earlier one after a
+    /// later one does not move the player back. 0 counts in any order.
+    public var stage: Int
+
     public init(
         bounceSpeed: Float = 14,
         disappearDelay: Double = 0.3,
         respawnDelay: Double = 3.0,
         teleportTargetID: UUID? = nil,
-        cooldown: Double = 1.5
+        cooldown: Double = 1.5,
+        doorSeconds: Double = 3,
+        moveOffset: Vec3 = Vec3(0, 6, 0),
+        moveSeconds: Double = 3,
+        movePause: Double = 1.5,
+        vehicle: String = "car",
+        vehicleSpeed: Float = 2,
+        stage: Int = 0
     ) {
         self.bounceSpeed = bounceSpeed
         self.disappearDelay = disappearDelay
         self.respawnDelay = respawnDelay
         self.teleportTargetID = teleportTargetID
         self.cooldown = cooldown
+        self.doorSeconds = doorSeconds
+        self.moveOffset = moveOffset
+        self.moveSeconds = moveSeconds
+        self.movePause = movePause
+        self.vehicle = vehicle
+        self.vehicleSpeed = vehicleSpeed
+        self.stage = stage
     }
 
     public static let `default` = GimmickSettings()
+
+    private enum CodingKeys: String, CodingKey {
+        case bounceSpeed, disappearDelay, respawnDelay, teleportTargetID, cooldown
+        case doorSeconds, moveOffset, moveSeconds, movePause, vehicle, vehicleSpeed, stage
+    }
+
+    // Written by hand so settings saved before a field existed still load,
+    // and the newer fields are only written when they are set.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = GimmickSettings()
+        bounceSpeed = try c.decodeIfPresent(Float.self, forKey: .bounceSpeed) ?? d.bounceSpeed
+        disappearDelay = try c.decodeIfPresent(Double.self, forKey: .disappearDelay) ?? d.disappearDelay
+        respawnDelay = try c.decodeIfPresent(Double.self, forKey: .respawnDelay) ?? d.respawnDelay
+        teleportTargetID = try c.decodeIfPresent(UUID.self, forKey: .teleportTargetID)
+        cooldown = try c.decodeIfPresent(Double.self, forKey: .cooldown) ?? d.cooldown
+        doorSeconds = (try? c.decodeIfPresent(Double.self, forKey: .doorSeconds)) ?? d.doorSeconds
+        moveOffset = (try? c.decodeIfPresent(Vec3.self, forKey: .moveOffset)) ?? d.moveOffset
+        moveSeconds = (try? c.decodeIfPresent(Double.self, forKey: .moveSeconds)) ?? d.moveSeconds
+        movePause = (try? c.decodeIfPresent(Double.self, forKey: .movePause)) ?? d.movePause
+        vehicle = (try? c.decodeIfPresent(String.self, forKey: .vehicle)) ?? d.vehicle
+        vehicleSpeed = (try? c.decodeIfPresent(Float.self, forKey: .vehicleSpeed)) ?? d.vehicleSpeed
+        stage = (try? c.decodeIfPresent(Int.self, forKey: .stage)) ?? d.stage
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        let d = GimmickSettings()
+        try c.encode(bounceSpeed, forKey: .bounceSpeed)
+        try c.encode(disappearDelay, forKey: .disappearDelay)
+        try c.encode(respawnDelay, forKey: .respawnDelay)
+        try c.encodeIfPresent(teleportTargetID, forKey: .teleportTargetID)
+        try c.encode(cooldown, forKey: .cooldown)
+        if doorSeconds != d.doorSeconds { try c.encode(doorSeconds, forKey: .doorSeconds) }
+        if moveOffset != d.moveOffset { try c.encode(moveOffset, forKey: .moveOffset) }
+        if moveSeconds != d.moveSeconds { try c.encode(moveSeconds, forKey: .moveSeconds) }
+        if movePause != d.movePause { try c.encode(movePause, forKey: .movePause) }
+        if vehicle != d.vehicle { try c.encode(vehicle, forKey: .vehicle) }
+        if vehicleSpeed != d.vehicleSpeed { try c.encode(vehicleSpeed, forKey: .vehicleSpeed) }
+        if stage != d.stage { try c.encode(stage, forKey: .stage) }
+    }
 }
 
 // MARK: - BlockData
@@ -291,6 +457,11 @@ public struct BlockData: Codable, Hashable, Identifiable, Sendable {
     /// other behaviour.
     public var gimmick: GimmickSettings
 
+    /// Bits it keeps giving off: fire, smoke, sparkles… (schema 2).
+    public var particles: ParticleKind?
+    /// A picture on it, from `WorldDocument.images` (schema 2).
+    public var imageID: UUID?
+
     public init(
         id: UUID = UUID(),
         name: String = "Part",
@@ -305,7 +476,9 @@ public struct BlockData: Codable, Hashable, Identifiable, Sendable {
         scoreValue: Int = 0,
         parentID: UUID? = nil,
         tags: [String] = [],
-        gimmick: GimmickSettings = .default
+        gimmick: GimmickSettings = .default,
+        particles: ParticleKind? = nil,
+        imageID: UUID? = nil
     ) {
         self.id = id
         self.name = name
@@ -321,6 +494,18 @@ public struct BlockData: Codable, Hashable, Identifiable, Sendable {
         self.parentID = parentID
         self.tags = tags
         self.gimmick = gimmick
+        self.particles = particles
+        self.imageID = imageID
+    }
+
+    /// Holds players up and stops them: visible, colliding, and not water.
+    public var isSolidForPlayers: Bool {
+        isVisible && hasCollision && !material.isLiquid
+    }
+
+    /// Uses something the first world format did not have.
+    public var needsSchema2: Bool {
+        material.needsSchema2 || behavior.needsSchema2 || particles != nil || imageID != nil
     }
 
     // Convenience accessors so call sites read as `block.position` rather than
@@ -380,6 +565,8 @@ public extension BlockData {
         parentID = try c.decodeIfPresent(UUID.self, forKey: .parentID)
         tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
         gimmick = try c.decodeIfPresent(GimmickSettings.self, forKey: .gimmick) ?? .default
+        particles = try? c.decodeIfPresent(ParticleKind.self, forKey: .particles)
+        imageID = try? c.decodeIfPresent(UUID.self, forKey: .imageID)
     }
 }
 

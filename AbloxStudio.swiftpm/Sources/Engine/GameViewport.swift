@@ -199,13 +199,29 @@ public struct GameViewport: UIViewRepresentable {
         private var recoil: Float = 0
         /// Shot lines, which fade in a tenth of a second.
         private var tracers: [(entity: ModelEntity, age: Float)] = []
-        private var lastSky: ColorRGBA?
         private var shakeSerial = 0
         private var shakeRemaining: Float = 0
         private var shakeStrength: Float = 0
 
         /// Settings → Comfort and friends.
         private var preferences = PlayPreferences()
+
+        // MARK: The world's parts
+
+        /// The sky, the weather, the day and the screen look.
+        private var atmosphere: Atmosphere?
+        private var particles: ParticleField?
+        private var waypointOverlay: WaypointOverlay?
+        /// Blocks giving off particles near the camera, looked for twice a second.
+        private var emitters: [(id: UUID, kind: ParticleKind, position: Vec3)] = []
+        private var emitterClock: Float = 1
+        /// Where each moving platform was last frame, to carry whoever stands on it.
+        private var platformOffsets: [UUID: Vec3] = [:]
+        private var standingOn: UUID?
+        /// The world as drawn this frame: moving platforms where the clock puts them.
+        private var placedWorld: WorldDocument?
+        private var surroundings: Surroundings = .normal
+        private var musicPlaying: (track: MusicTrack?, volume: Float)?
         /// The best graphics level the battery and the iPad's heat allow.
         private var powerCap: GraphicsProfile.Level?
         private var powerClock: Float = 5
@@ -248,6 +264,15 @@ public struct GameViewport: UIViewRepresentable {
             view.addSubview(bubbles)
             chatBubbles = bubbles
 
+            let sky = Atmosphere(parent: worldScene.anchor)
+            sky.attach(to: view)
+            atmosphere = sky
+            particles = ParticleField(parent: worldScene.anchor)
+            let waypoint = WaypointOverlay(frame: view.bounds)
+            waypoint.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            view.addSubview(waypoint)
+            waypointOverlay = waypoint
+
             updateSubscription = view.scene.subscribe(to: SceneEvents.Update.self) { [weak self] event in
                 // Scene updates are delivered on the main thread, but the
                 // closure itself is non-isolated, so the hop has to be stated
@@ -261,6 +286,7 @@ public struct GameViewport: UIViewRepresentable {
         func setFeedbackEnabled(sound: Bool, haptics: Bool) {
             feedback.isSoundEnabled = sound
             feedback.isHapticsEnabled = haptics
+            SoundSynth.shared.musicGain = parent.soundEnabled ? Float(preferences.musicVolume) : 0
         }
 
         func setPreferences(_ preferences: PlayPreferences) {
@@ -268,6 +294,9 @@ public struct GameViewport: UIViewRepresentable {
             let batteryChanged = preferences.batterySaver != self.preferences.batterySaver
                 || preferences.coolDownWhenHot != self.preferences.coolDownWhenHot
             self.preferences = preferences
+            feedback.effectsVolume = Float(preferences.effectsVolume)
+            SoundSynth.shared.musicGain = parent.soundEnabled ? Float(preferences.musicVolume) : 0
+            if !preferences.readLinesAloud { LineReader.shared.stop() }
             switch preferences.hapticStrength {
             case .light: feedback.hapticIntensity = 0.45
             case .medium: feedback.hapticIntensity = 0.8
@@ -287,6 +316,14 @@ public struct GameViewport: UIViewRepresentable {
             nameTags?.removeAll()
             nameTags?.removeFromSuperview()
             nameTags = nil
+            particles?.removeAll()
+            particles = nil
+            atmosphere?.detach()
+            atmosphere = nil
+            waypointOverlay?.removeFromSuperview()
+            waypointOverlay = nil
+            SoundSynth.shared.setMusic(nil)
+            LineReader.shared.stop()
         }
 
         // MARK: Screenshots and the start
@@ -325,15 +362,11 @@ public struct GameViewport: UIViewRepresentable {
             // players' own movement never used it, and a static body per part
             // was simulated every frame for nothing.
             worldScene.sync(to: world, physicsEnabled: world.blocks.contains { !$0.isAnchored })
-
-            // A script can repaint the sky mid-game.
-            let sky = world.environment.skyBottom
-            if sky != lastSky {
-                lastSky = sky
-                view?.environment.background = .color(UIColor(
-                    red: CGFloat(sky.r), green: CGFloat(sky.g), blue: CGFloat(sky.b), alpha: 1
-                ))
-            }
+            // The sky (and a script repainting it) is the atmosphere's job,
+            // every frame; moving platforms are put back where the clock
+            // says on the next one.
+            platformOffsets.removeAll()
+            emitterClock = 1
         }
 
         func syncRoster(_ roster: [PlayerSnapshot], localPeerID: PeerID) {
@@ -401,6 +434,14 @@ public struct GameViewport: UIViewRepresentable {
                     publisher.reset()
                 case let .playSound(name):
                     feedback.play(named: name)
+                case let .script(.sound(request)):
+                    feedback.play(request)
+                case let .script(.particles(burst)):
+                    particles?.burst(burst)
+                case let .script(.speak(text)):
+                    if preferences.readLinesAloud, parent.soundEnabled {
+                        LineReader.shared.speak(text, volume: Float(preferences.effectsVolume))
+                    }
                 case let .script(scriptEffect):
                     // Most of what a script sends is state the session has
                     // already folded into `scripted`. These act on the body.
@@ -442,9 +483,9 @@ public struct GameViewport: UIViewRepresentable {
         // MARK: Render loop
 
         private func tick(deltaTime: Float) {
-            let world = parent.session.world
-            let index = indexCache.index(for: world)
             let dt = min(deltaTime, 1.0 / 20)
+            let world = placeMovingParts(in: parent.session.world)
+            let index = indexCache.index(for: world)
             elapsed += Double(dt)
             watchFrameRate(deltaTime)
 
@@ -468,7 +509,16 @@ public struct GameViewport: UIViewRepresentable {
             if preferences.autoJump, !scale.frozen, localSnapshot.isGrounded, shouldAutoJump(index: index) {
                 input.isJumping = true
             }
-            let motion = CharacterSolver.step(snapshot: localSnapshot, input: input, config: movement, deltaTime: dt)
+            // Swimming and climbing are worked out here, from the world.
+            let size = parent.session.localAppearance.height
+            let body = CharacterBody(radius: 0.4 * size, height: 1.8 * size)
+            let around = Surroundings.find(at: localSnapshot.position, body: body, in: index)
+            if case .water = around, surroundings == .normal || surroundings == .ladder {
+                if localSnapshot.velocity.y < -4 { feedback.play(.splash, volume: 0.6) }
+            }
+            surroundings = around
+            let motion = CharacterSolver.step(snapshot: localSnapshot, input: input, config: movement, surroundings: around,
+                                              floats: parent.session.localAppearance.ride == .hoverboard, deltaTime: dt)
             localSnapshot.velocity = motion.velocity
             localSnapshot.yawDegrees = motion.yawDegrees
             if scripted.camera.mode == .firstPerson || scripted.weapon != nil {
@@ -480,17 +530,17 @@ public struct GameViewport: UIViewRepresentable {
 
             // 2. Velocity → position, resolved against the world.
             //    Deterministic and shared with the host — see WorldCollider.
-            let size = parent.session.localAppearance.height
             let collision = WorldCollider.resolve(
                 position: localSnapshot.position,
                 velocity: localSnapshot.velocity,
-                body: CharacterBody(radius: 0.4 * size, height: 1.8 * size),
+                body: body,
                 index: index,
                 deltaTime: dt
             )
             localSnapshot.position = collision.position
             localSnapshot.velocity = collision.velocity
             localSnapshot.isGrounded = collision.isGrounded
+            standingOn = collision.isGrounded ? platform(under: localSnapshot.position, index: index) : nil
 
             // 3. Report newly touched blocks once each, on entry.
             let touchedNow = Set(collision.touchedBlockIDs)
@@ -517,6 +567,9 @@ public struct GameViewport: UIViewRepresentable {
             if !effects.isEmpty { apply(effects: effects) }
 
             updateCamera(dt: dt, index: index)
+            updateAtmosphere(world: world, index: index, dt: dt)
+            updateWaypoint()
+            updateMusic(world: world)
             updateChatBubbles()
             updateNameTags()
             updateWeapons(dt: dt)
@@ -605,6 +658,11 @@ public struct GameViewport: UIViewRepresentable {
             guard profile != appliedProfile else { return }
             appliedProfile = profile
             worldScene.setGraphics(profile)
+            switch profile.level {
+            case .high: particles?.budget = 600
+            case .medium: particles?.budget = 300
+            case .low: particles?.budget = 140
+            }
             guard let view else { return }
 
             // Fewer pixels: the biggest single saving on an iPad's screen.
@@ -785,6 +843,132 @@ public struct GameViewport: UIViewRepresentable {
             camera.look(at: focus.simd, from: cameraAnchor.position, relativeTo: nil)
             let looking = focus - Vec3(cameraAnchor.position)
             if looking.lengthSquared > 1e-4 { viewDirection = looking.normalized }
+        }
+
+        // MARK: Moving platforms
+
+        /// The world with its moving platforms where the clock puts them —
+        /// drawn there, walked on there — and whoever stands on one carried
+        /// along with it. Every iPad counts on its own clock (they agree to
+        /// a few hundredths of a second), so nothing is sent while they move.
+        private func placeMovingParts(in world: WorldDocument) -> WorldDocument {
+            guard world.blocks.contains(where: { $0.behavior == .elevator }) else {
+                placedWorld = nil
+                platformOffsets.removeAll()
+                return world
+            }
+            let now = Date().timeIntervalSince1970
+            var placed = world
+            var offsets: [UUID: Vec3] = [:]
+            for index in placed.blocks.indices where placed.blocks[index].behavior == .elevator {
+                let offset = MovingParts.offset(for: placed.blocks[index].gimmick, at: now)
+                placed.blocks[index].position += offset
+                offsets[placed.blocks[index].id] = offset
+                worldScene.place(placed.blocks[index].id, at: placed.blocks[index].position)
+            }
+            if let standingOn, let before = platformOffsets[standingOn], let after = offsets[standingOn] {
+                let carried = after - before
+                if carried.lengthSquared > 0, carried.lengthSquared < 4 {
+                    localSnapshot.position += carried
+                }
+            }
+            platformOffsets = offsets
+            placedWorld = placed
+            return placed
+        }
+
+        /// The moving platform under the feet, if any.
+        private func platform(under feet: Vec3, index: WorldIndex) -> UUID? {
+            guard !platformOffsets.isEmpty else { return nil }
+            let probe = BoundingBox(min: feet - Vec3(0.3, 0.2, 0.3), max: feet + Vec3(0.3, 0.05, 0.3))
+            return index.entries(near: probe).first { $0.behavior == .elevator && $0.bounds.intersects(probe) }?.id
+        }
+
+        // MARK: Sky, weather, particles, music
+
+        private func updateAtmosphere(world: WorldDocument, index: WorldIndex, dt: Float) {
+            let eye = Vec3(camera.position(relativeTo: nil))
+            let environment = world.environment
+            if let atmosphere {
+                let light = atmosphere.update(environment: environment, camera: eye, dt: dt,
+                                              reduceFlashing: preferences.reduceFlashing) { [weak self] in
+                    guard let self, self.parent.soundEnabled else { return }
+                    // Thunder comes a moment after the flash.
+                    Task { @MainActor [weak self] in
+                        try? await Task.sleep(nanoseconds: 700_000_000)
+                        self?.feedback.play(.explosion, volume: 0.35, pitch: 0.5)
+                    }
+                }
+                worldScene.setDaylight(pitch: light.pitch, yaw: light.yaw, brightness: light.brightness)
+            }
+
+            guard let particles else { return }
+            let share = Float(particles.budget) / 600
+            if let falling = environment.weather.falling {
+                let above: Float = falling == .rain ? 12 : 5
+                particles.stream(falling, key: "weather", at: eye + Vec3(0, above, 0),
+                                 rate: falling.spec.rate * share, spread: Vec3(16, 2, 16), dt: dt)
+            }
+
+            emitterClock += dt
+            if emitterClock >= 0.5 {
+                emitterClock = 0
+                var found: [(id: UUID, kind: ParticleKind, position: Vec3, distance: Float)] = []
+                for block in world.blocks where block.isVisible {
+                    guard let kind = block.particles, let bounds = index.bounds(of: block.id) else { continue }
+                    let rises = kind == .fire || kind == .smoke || kind == .bubbles
+                    let position = rises ? Vec3(bounds.center.x, bounds.max.y, bounds.center.z) : bounds.center
+                    let distance = position.distance(to: eye)
+                    if distance < 45 { found.append((block.id, kind, position, distance)) }
+                }
+                emitters = found.sorted { $0.distance < $1.distance }.prefix(16).map { (id: $0.id, kind: $0.kind, position: $0.position) }
+            }
+            for emitter in emitters {
+                particles.stream(emitter.kind, key: emitter.id.uuidString, at: emitter.position,
+                                 rate: emitter.kind.spec.rate * 0.5 * share, spread: Vec3(0.2, 0, 0.2), dt: dt)
+            }
+            particles.update(dt: dt)
+        }
+
+        /// The script's music, or the world's, as loud as Settings says.
+        private func updateMusic(world: WorldDocument) {
+            let wanted: MusicTrack?
+            let volume: Float
+            if let play = parent.session.scripted.music {
+                wanted = MusicTrack(rawValue: play.track)
+                volume = play.volume
+            } else {
+                wanted = world.environment.music
+                volume = 1
+            }
+            let track = parent.soundEnabled && preferences.musicVolume > 0.01 ? wanted : nil
+            if let playing = musicPlaying, playing.track == track, playing.volume == volume { return }
+            musicPlaying = (track, volume)
+            SoundSynth.shared.setMusic(track, volume: volume)
+        }
+
+        /// The script's arrow: a pin on the place, or an arrow round the edge.
+        private func updateWaypoint() {
+            guard let view, let overlay = waypointOverlay else { return }
+            guard let waypoint = parent.session.scripted.waypoint, !parent.photoMode else {
+                overlay.hide()
+                return
+            }
+            let target = waypoint.position + Vec3(0, 1, 0)
+            let eye = Vec3(camera.position(relativeTo: nil))
+            let toTarget = target - eye
+            let distance = localSnapshot.position.distance(to: waypoint.position)
+            let bounds = view.bounds.insetBy(dx: 40, dy: 60)
+            if toTarget.dot(viewDirection) > 0.15 * toTarget.length, let point = view.project(target.simd), bounds.contains(point) {
+                overlay.show(waypoint, distance: distance, onScreen: point, angle: 0)
+                return
+            }
+            // Which way round the screen: right is along the camera's right,
+            // up along its up.
+            let right = viewDirection.cross(Vec3(0, 1, 0)).normalized
+            let up = right.cross(viewDirection).normalized
+            let angle = atan2(CGFloat(toTarget.dot(right)), CGFloat(toTarget.dot(up) + (toTarget.dot(viewDirection) < 0 ? -0.001 : 0)))
+            overlay.show(waypoint, distance: distance, onScreen: nil, angle: angle)
         }
 
         // MARK: Name tags
@@ -988,7 +1172,7 @@ public struct GameViewport: UIViewRepresentable {
             // solid part under the finger that is being drawn.
             guard let through = view.ray(through: location) else { return }
             let ray = Ray(origin: Vec3(through.origin), direction: Vec3(through.direction))
-            let index = indexCache.index(for: parent.session.world)
+            let index = indexCache.index(for: placedWorld ?? parent.session.world)
             let reach = appliedProfile?.viewDistance ?? 400
             var nearest: (id: UUID, distance: Float)?
             for entry in index.solidBlocks {

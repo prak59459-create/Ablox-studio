@@ -171,13 +171,15 @@ public enum WorldDelta: Codable, Hashable, Sendable {
     case rulesReplaced([EventRule])
     case scriptsReplaced([ScriptFile])
     case scriptSourceChanged(ScriptSource?)
+    /// The world's pictures, all at once.
+    case imagesReplaced([WorldImage])
 
     private enum CodingKeys: String, CodingKey {
-        case type, block, blockID, newParent, environment, rules, scripts, scriptSource
+        case type, block, blockID, newParent, environment, rules, scripts, scriptSource, images
     }
 
     private enum Kind: String, Codable {
-        case insert, update, remove, reparent, environment, rulesReplaced, scriptsReplaced, scriptSourceChanged
+        case insert, update, remove, reparent, environment, rulesReplaced, scriptsReplaced, scriptSourceChanged, imagesReplaced
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -208,6 +210,9 @@ public enum WorldDelta: Codable, Hashable, Sendable {
         case let .scriptSourceChanged(source):
             try c.encode(Kind.scriptSourceChanged, forKey: .type)
             try c.encodeIfPresent(source, forKey: .scriptSource)
+        case let .imagesReplaced(images):
+            try c.encode(Kind.imagesReplaced, forKey: .type)
+            try c.encode(images, forKey: .images)
         }
     }
 
@@ -226,6 +231,9 @@ public enum WorldDelta: Codable, Hashable, Sendable {
         case .rulesReplaced: self = .rulesReplaced(try c.decode([EventRule].self, forKey: .rules))
         case .scriptsReplaced: self = .scriptsReplaced(try c.decode([ScriptFile].self, forKey: .scripts))
         case .scriptSourceChanged: self = .scriptSourceChanged(try c.decodeIfPresent(ScriptSource.self, forKey: .scriptSource))
+        case .imagesReplaced:
+            let images = try c.decode([WorldImage].self, forKey: .images)
+            self = .imagesReplaced(Array(images.filter(\.isAcceptable).prefix(WorldImage.maximumCount)))
         }
     }
 
@@ -262,6 +270,10 @@ public enum WorldDelta: Codable, Hashable, Sendable {
             return true
         case let .scriptSourceChanged(source):
             world.scriptSource = source
+            world.modifiedAt = Date()
+            return true
+        case let .imagesReplaced(images):
+            world.images = images
             world.modifiedAt = Date()
             return true
         }

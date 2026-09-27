@@ -366,6 +366,13 @@ public final class SessionCoordinator: ObservableObject {
             }
         }
 
+        let boards = LeaderboardStore()
+        let worldID = world.id
+        host.loadLeaderboards(boards.load(worldID: worldID))
+        host.onLeaderboards = { changed in
+            DispatchQueue.global(qos: .utility).async { boards.save(changed, worldID: worldID) }
+        }
+
         self.host = host
         host.start()
         host.startRound()

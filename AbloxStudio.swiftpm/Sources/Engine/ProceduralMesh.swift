@@ -103,6 +103,21 @@ enum ProceduralMesh {
     }
 }
 
+extension ProceduralMesh {
+    /// A unit sphere to be seen from inside: the sky.
+    static let skyDome: MeshResource = {
+        let geometry = MeshGeometry.sphere(radius: 1, rings: 24, segments: 48).insideOut
+        var descriptor = MeshDescriptor(name: "ablox.sky")
+        descriptor.positions = MeshBuffers.Positions(geometry.positions.map(\.simd))
+        descriptor.normals = MeshBuffers.Normals(geometry.normals.map(\.simd))
+        descriptor.textureCoordinates = MeshBuffers.TextureCoordinates(
+            geometry.textureCoordinates.map { SIMD2<Float>($0.u, $0.v) }
+        )
+        descriptor.primitives = .triangles(geometry.indices)
+        return (try? MeshResource.generate(from: [descriptor])) ?? .generateSphere(radius: 1)
+    }()
+}
+
 extension MeshResource {
     /// iOS 17-safe stand-in for `generateCylinder(height:radius:)`.
     static func abloxCylinder(height: Float, radius: Float) -> MeshResource {

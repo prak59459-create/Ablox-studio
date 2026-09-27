@@ -513,9 +513,20 @@ public enum CharacterSolver {
         snapshot: PlayerSnapshot,
         input: MovementInput,
         config: MovementConfig = .default,
+        surroundings: Surroundings = .normal,
+        floats: Bool = false,
         deltaTime: Float
     ) -> (velocity: Vec3, yawDegrees: Float) {
         let dt = Swift.max(0, Swift.min(deltaTime, 0.1))
+
+        switch surroundings {
+        case .normal:
+            break
+        case let .water(surface):
+            return swim(snapshot: snapshot, input: input, config: config, surface: surface, floats: floats, dt: dt)
+        case .ladder:
+            return climb(snapshot: snapshot, input: input, config: config, dt: dt)
+        }
 
         // Rotate the stick into world space around the camera.
         let cameraYaw = Quat.yaw(degrees: input.cameraYawDegrees)
@@ -557,5 +568,58 @@ public enum CharacterSolver {
         }
 
         return (Vec3(horizontal.x, verticalSpeed, horizontal.z), yaw)
+    }
+
+    /// Where the stick points, in the world, and how far it is pushed.
+    private static func direction(_ input: MovementInput) -> (Vec3, Float) {
+        let cameraYaw = Quat.yaw(degrees: input.cameraYawDegrees)
+        return (cameraYaw.act(Vec3(input.stick.x, 0, -input.stick.z)).normalized, input.magnitude)
+    }
+
+    private static func turned(_ yaw: Float, toward direction: Vec3, magnitude: Float, config: MovementConfig, dt: Float) -> Float {
+        guard magnitude > 0.01 else { return yaw }
+        let targetYaw = atan2(direction.x, -direction.z) * 180 / .pi
+        let delta = angularDelta(from: yaw, to: targetYaw)
+        let maxStep = config.turnSpeedDegreesPerSecond * dt
+        return normalizeDegrees(yaw + Swift.max(-maxStep, Swift.min(maxStep, delta)))
+    }
+
+    /// In water: slower, sinking gently, and jump swims up. A boat (`floats`)
+    /// rides on the surface instead.
+    static func swim(snapshot: PlayerSnapshot, input: MovementInput, config: MovementConfig, surface: Float, floats: Bool,
+                     dt: Float) -> (velocity: Vec3, yawDegrees: Float) {
+        let (direction, magnitude) = direction(input)
+        let speed = config.walkSpeed * (floats ? 1.1 : 0.6) * (input.isRunning ? 1.3 : 1) * magnitude
+        var horizontal = Vec3(snapshot.velocity.x, 0, snapshot.velocity.z)
+        horizontal = Vec3.lerp(horizontal, direction * speed, Swift.min(1, 4 * dt))
+
+        var vertical = snapshot.velocity.y
+        let depth = surface - snapshot.position.y
+        if floats {
+            // Bob at the surface: the hull sits just under it.
+            vertical = (depth - 0.3) * 4
+        } else if input.isJumping {
+            // Up towards the air; out with a hop at the top.
+            vertical = depth > 1.3 ? 3.2 : config.jumpSpeed * 0.8
+        } else {
+            vertical = Swift.max(-2.5, vertical + config.gravity * 0.15 * dt)
+        }
+        let yaw = turned(snapshot.yawDegrees, toward: direction, magnitude: magnitude, config: config, dt: dt)
+        return (Vec3(horizontal.x, vertical, horizontal.z), yaw)
+    }
+
+    /// On a ladder: the stick forward climbs, back climbs down, nothing
+    /// holds on; jump lets go.
+    static func climb(snapshot: PlayerSnapshot, input: MovementInput, config: MovementConfig,
+                      dt: Float) -> (velocity: Vec3, yawDegrees: Float) {
+        let (direction, magnitude) = direction(input)
+        if input.isJumping {
+            return (Vec3(-direction.x * 3, config.jumpSpeed * 0.8, -direction.z * 3), snapshot.yawDegrees)
+        }
+        let climbSpeed: Float = 3.2
+        let vertical = input.stick.z * climbSpeed
+        let sideways = direction * (config.walkSpeed * 0.4 * magnitude)
+        let yaw = turned(snapshot.yawDegrees, toward: direction, magnitude: magnitude, config: config, dt: dt)
+        return (Vec3(sideways.x, vertical, sideways.z), yaw)
     }
 }

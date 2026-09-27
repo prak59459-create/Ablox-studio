@@ -234,4 +234,29 @@ public enum ScriptEffect: Codable, Equatable, Hashable, Sendable {
     /// Someone waved, danced or sent an emoji: every iPad plays it on that
     /// avatar. See `Gesture`.
     case gesture(speaker: PeerID, wire: String)
+
+    // Protocol 8 — see `WorldFeatures.swift`.
+
+    /// The arrow pointing the way, or nil to take it down.
+    case waypoint(Waypoint?)
+    /// Everything the player is carrying, in order.
+    case inventory([InventoryItem])
+    /// A character talking, with answers; nil closes it.
+    case dialog(DialogBox?)
+    /// A shop window; nil closes it.
+    case shop(ShopPanel?)
+    /// A big timer; nil takes it away.
+    case countdown(CountdownDisplay?)
+    /// A leaderboard on the screen; nil closes it.
+    case leaderboard(LeaderboardPanel?)
+    /// Bits flying out at a place.
+    case particles(ParticleBurst)
+    /// A sound, louder or softer, higher or lower.
+    case sound(SoundPlay)
+    /// Music, or nil for quiet (then the world's own, if it has one).
+    case music(MusicPlay?)
+    /// Read out loud, if the iPad's sound is on.
+    case speak(String)
+    /// In a vehicle from a vehicle block: show the way out.
+    case vehicle(Bool)
 }
