@@ -11,6 +11,11 @@ on:
       - "scripts/ios-build-times.sh"
       - ".github/workflows/ios-build.yml"
   workflow_dispatch:
+    inputs:
+      per_file:
+        description: "One file per compile job, to list what each file costs"
+        type: boolean
+        default: false
 
 jobs:
   ios:
@@ -23,3 +28,4 @@ jobs:
         run: scripts/ios-build-times.sh
         env:
           SCHEME: "Ablox Studio"
+          PER_FILE: ${{ inputs.per_file && '1' || '' }}

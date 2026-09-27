@@ -106,6 +106,10 @@ source_rules=(
     '\b(MeshGradient|onGeometryChange|sidebarAdaptable|TabSection|presentationSizing|ToolbarSpacer|glassEffect|backgroundExtensionEffect|tabBarMinimizeBehavior)\b'$'\t''this API is newer than the iOS 17 deployment target. Either provide a fallback or raise the target deliberately.'
     '@Entry\b'$'\t''`@Entry` is iOS 18+. Declare the EnvironmentKey by hand.'
     '@Previewable\b'$'\t''`@Previewable` is iOS 18+.'
+
+    # Macros are expanded by a separate plugin during the build, which costs
+    # every compile job that has to look at them. None is worth that here.
+    '(^|[^A-Za-z])#Preview\b|@Observable\b|#Predicate\b|@Model\b'$'\t''a macro: the build has to run a plugin to expand it. Write it out (an ObservableObject, a plain closure), and leave previews out.'
 )
 
 # Only for files in the core (Sources/AbloxCore, and Studio's Sources/EditorCore).

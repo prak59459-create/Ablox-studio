@@ -10,6 +10,8 @@
 #
 #   scripts/ios-build-times.sh            full build, report
 #   KEEP_LOG=/path scripts/ios-build-times.sh   also keep the raw log
+#   PER_FILE=1 scripts/ios-build-times.sh       one file per compile job, so
+#                                               each file's own cost is listed
 
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -38,6 +40,10 @@ fi
 stats="/tmp/ablox-stats"
 rm -rf "$stats"; mkdir -p "$stats"
 flags="-Xfrontend -debug-time-function-bodies -Xfrontend -warn-long-expression-type-checking=150 -Xfrontend -stats-output-dir -Xfrontend $stats"
+# Slower overall (every job reads every file), but the statistics then belong
+# to one file each, code generation included.
+batch="YES"
+if [ -n "${PER_FILE:-}" ]; then batch="NO"; fi
 start=$(date +%s)
 xcodebuild build \
   -scheme "$scheme" \
@@ -46,6 +52,7 @@ xcodebuild build \
   -showBuildTimingSummary \
   ARCHS=arm64 \
   CODE_SIGNING_ALLOWED=NO \
+  SWIFT_ENABLE_BATCH_MODE="$batch" \
   OTHER_SWIFT_FLAGS="$flags" > "$log" 2>&1
 status=$?
 end=$(date +%s)
@@ -92,6 +99,48 @@ print(f"{jobs} jobs")
 for name, seconds in total.most_common(30):
     print(f"{seconds:9.2f}  {name}")
 PY
+
+if [ -n "${PER_FILE:-}" ]; then
+echo
+echo "== Cost per file, one compile job each (seconds: total = imports + checking + SILGen + IRGen + the rest, mostly LLVM)"
+python3 - "$stats" <<'PY'
+import glob, json, sys, collections
+rows = []
+modules = collections.Counter()
+for path in glob.glob(sys.argv[1] + "/*.json"):
+    try:
+        data = json.load(open(path))
+    except Exception:
+        continue
+    name = next((k[len("time.swift-frontend."):-len(".wall")] for k in data
+                 if k.startswith("time.swift-frontend.") and k.endswith(".wall")), None)
+    if not name:
+        continue
+    total = data["time.swift-frontend." + name + ".wall"]
+    module, _, rest = name.partition("-")
+    label = rest.split(".swift")[0] if ".swift" in rest else "(interface)"
+    part = lambda key: data.get("time.swift." + key + ".wall", 0.0)
+    imports, sema, silgen, irgen = part("parse-and-resolve-imports"), part("perform-sema"), part("SILGen"), part("IRGen")
+    other = max(0.0, total - imports - sema - silgen - irgen)
+    rows.append((total, module, label, imports, sema, silgen, irgen, other))
+    modules[module] += total
+print(f"{len(rows)} jobs; per module: " + ", ".join(f"{m} {t:.1f}" for m, t in modules.most_common()))
+print(f"{'total':>7} {'import':>7} {'check':>7} {'SILGen':>7} {'IRGen':>7} {'rest':>7}  file")
+for total, module, label, imports, sema, silgen, irgen, other in sorted(rows, reverse=True)[:60]:
+    print(f"{total:7.2f} {imports:7.2f} {sema:7.2f} {silgen:7.2f} {irgen:7.2f} {other:7.2f}  {module}/{label}")
+PY
+fi
+
+echo
+echo "== Largest object files (KB, lines): the code each file turned into"
+find "$derived" -name '*.o' -path '*arm64*' -print0 2>/dev/null \
+  | xargs -0 stat -f '%z %N' 2>/dev/null | sort -rn | head -40 \
+  | while read -r size path; do
+      name="$(basename "$path" .o)"
+      source="$(find . -name "$name.swift" | head -1)"
+      lines="$( [ -n "$source" ] && wc -l < "$source" | tr -d ' ' || echo "?")"
+      printf "%8d %6s  %s\n" $((size / 1024)) "$lines" "${source:-$name}"
+    done
 
 echo
 echo "== Build timing summary"

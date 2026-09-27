@@ -198,13 +198,3 @@ public struct AbloxLockup: View {
         .accessibilityLabel(showsSubtitle ? "Ablox, \(subtitle)" : "Ablox")
     }
 }
-
-#Preview("Mark") {
-    VStack(spacing: 30) {
-        AbloxMark().foregroundStyle(.white).frame(width: 120, height: 120)
-        AbloxMark(style: .flat).foregroundStyle(Ablox.Palette.accent).frame(width: 60, height: 60)
-        AbloxLockup(subtitle: "iPad Edition")
-    }
-    .padding(40)
-    .background(Color.black)
-}
