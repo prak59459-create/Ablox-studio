@@ -34,6 +34,11 @@ extension GameRuntime: ScriptObjectResolver {
         "ui_text", "ui_button", "ui_panel", "ui_image", "ui_bar", "ui_input", "ui_set", "ui_remove", "ui_clear"
     ] + partsMemberNames
 
+    /// Members added after worlds had been written that use the same
+    /// names for their own data. A world may store its own value under one
+    /// of these; the world's value is then what it reads back.
+    static let laterMemberNames: Set<String> = Set(partsMemberNames)
+
     /// Members only an NPC has: being told where to go.
     public static let npcOnlyMemberNames: [String] = [
         "move_to", "follow", "stop", "jump_now", "shoot", "say", "destroy"
@@ -220,6 +225,9 @@ extension GameRuntime: ScriptObjectResolver {
             default: return .null
             }
         }
+        // A world's own value under a name the API took later (see the
+        // setter below) wins over the API's member of that name.
+        if Self.laterMemberNames.contains(name), let own = state.custom[name] { return own }
         let body = snapshot(of: state)
         let position = body?.position ?? .zero
 
@@ -568,7 +576,12 @@ extension GameRuntime: ScriptObjectResolver {
         case "id", "is_npc", "alive", "x", "y", "z", "look", "weapon":
             throw ScriptError(line: line, kind: .runtime, message: L("A character’s “{}” cannot be set directly.", name))
         default:
-            if Self.characterMemberNames.contains(name) || Self.playerOnlyMemberNames.contains(name)
+            // Worlds written before items, vehicles, shops and the like
+            // existed keep their own data under those names (`p.items = {}`):
+            // storing it is allowed, and reading it back gives the world's
+            // value. Refusing it stopped nine games in the list mid-play.
+            if !Self.laterMemberNames.contains(name),
+               Self.characterMemberNames.contains(name) || Self.playerOnlyMemberNames.contains(name)
                 || Self.npcOnlyMemberNames.contains(name) {
                 throw ScriptError(line: line, kind: .runtime, message: L("“{}” is a function. Call it with ().", name))
             }

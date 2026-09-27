@@ -65,7 +65,7 @@ final class MoreToolsTests: XCTestCase {
         world.blocks.append(another)
         world.scripts = [ScriptFile(name: "main", source: """
         local d = block("door")          -- any case finds it
-        local g = block( 'Gate' )
+        local g = block( ’Gate’ )
         local x = block("Missing")
         -- block("Commented")
         local made = create_block("Nope")
@@ -241,6 +241,8 @@ final class MoreToolsTests: XCTestCase {
         XCTAssertEqual(Tools.withoutComment("x = 1 -- set x"), "x = 1 ")
         XCTAssertEqual(Tools.withoutComment("say(\"# not a comment\") # but this is"), "say(\"# not a comment\") ")
         XCTAssertEqual(Tools.withoutComment("plain"), "plain")
+        XCTAssertEqual(Tools.withoutComment("say(“-- still text”) -- note"), "say(“-- still text”) ")
+        XCTAssertEqual(Tools.withoutComment("say(\"a \\\" # b\") # c"), "say(\"a \\\" # b\") ")
         let file = ScriptFile(name: "main", source: "x = 1 -- TODO: faster\nsay(\"TODO in a string\")\n# あとで ボスを追加")
         let notes = Tools.notes(in: [file])
         XCTAssertEqual(notes.map(\.line), [1, 3])

@@ -102,14 +102,16 @@ public enum ScriptLineTools {
     /// The code of a line, without its comment. Quotes are respected, so a
     /// `#` inside a string stays.
     public static func withoutComment(_ line: String) -> String {
-        var quote: Character?
+        // Quotes as the lexer reads them: straight or curly, with `\` escapes.
+        var closers: Set<Character>?
+        var escaped = false
         var previous: Character?
         var result = ""
         for character in line {
-            if let open = quote {
-                if character == open { quote = nil }
-            } else if character == "\"" || character == "'" {
-                quote = character
+            if let open = closers {
+                if escaped { escaped = false } else if character == "\\" { escaped = true } else if open.contains(character) { closers = nil }
+            } else if let opened = ScriptLexer.closingQuotes(for: character) {
+                closers = opened
             } else if character == "#" {
                 return result
             } else if character == "-" && previous == "-" {

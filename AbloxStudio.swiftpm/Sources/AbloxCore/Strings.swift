@@ -2496,5 +2496,6 @@ public enum Strings {
         ("{} games put out of sight in Games.", "「ゲーム」でかくしているゲーム: {}本"),
         ("{} is playing “{}” nearby.", "{}さんが近くで「{}」をあそんでいます。"),
         ("No internet. You can still play with iPads nearby, and games you have downloaded.", "インターネットにつながっていません。近くのiPadとの対戦や、ダウンロード済みのゲームは遊べます。"),
+        ("Mission done: {}! Take the coins on the Play tab.", "ミッション達成: {}！「あそぶ」でコインを受け取れます。"),
     ]
 }

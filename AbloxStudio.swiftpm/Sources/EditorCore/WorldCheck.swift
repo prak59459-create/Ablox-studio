@@ -150,9 +150,9 @@ public struct WorldCheck: Hashable, Sendable {
                     rest = rest[call.upperBound...]
                     if let before, before.isLetter || before.isNumber || before == "_" { continue }
                     let trimmed = rest.drop { $0 == " " }
-                    guard let quote = trimmed.first, quote == "\"" || quote == "'" else { continue }
+                    guard let quote = trimmed.first, let closers = ScriptLexer.closingQuotes(for: quote) else { continue }
                     let body = trimmed.dropFirst()
-                    guard let end = body.firstIndex(of: quote) else { continue }
+                    guard let end = body.firstIndex(where: { closers.contains($0) }) else { continue }
                     let name = String(body[..<end])
                     if !name.isEmpty, !names.contains(name) { names.append(name) }
                 }

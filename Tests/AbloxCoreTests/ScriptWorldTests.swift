@@ -12,6 +12,39 @@ final class ScriptWorldTests: RuntimeTestCase {
         return world
     }
 
+    // MARK: Names the API took later
+
+    /// Worlds written before `p.items()`, `p.vehicle` and `p.shop()` existed
+    /// keep their own data under those names, as nine games in the list do.
+    func testAWorldKeepsItsOwnDataUnderNamesTheAPITookLater() {
+        let game = game(#"""
+        on join(p)
+          p.items = {}
+          p.items["ball"] = 5
+          p.vehicle = "bike"
+          p.shop = ["apple"]
+          print(p.items["ball"])
+          print(p.vehicle)
+          print(len(p.shop))
+          p.give_item("coin", 2)
+          print(p.has_item("coin"))
+        end
+        """#)
+        startWithBoth(game)
+        XCTAssertTrue(game.drainErrors().isEmpty)
+        XCTAssertEqual(game.drainOutput(), ["5", "bike", "1", "true", "5", "bike", "1", "true"])
+    }
+
+    func testOtherBuiltInNamesStillCannotBeReplaced() {
+        let game = game(#"""
+        on join(p)
+          p.teleport = 3
+        end
+        """#)
+        startWithBoth(game)
+        XCTAssertFalse(game.drainErrors().isEmpty)
+    }
+
     // MARK: Touchable blocks
 
     func testAScriptMadeBlockIsTouchableOnlyWithABehavior() {

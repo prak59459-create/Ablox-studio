@@ -24,7 +24,10 @@ public enum ScriptHighlighter {
 
     private static let pattern: NSRegularExpression = {
         // Comments first, then strings, so neither is coloured inside the other.
-        try! NSRegularExpression(pattern: #"(--[^\n]*)|("(?:\\.|[^"\\\n])*"?)|(\b\d+(?:\.\d+)?\b)|(\b[A-Za-z_][A-Za-z0-9_]*\b)"#)
+        // Both kinds of comment (`--` and `#`) and every quote the lexer
+        // reads: straight double and single, and the curly ones the iPad
+        // keyboard types.
+        try! NSRegularExpression(pattern: #"((?:--|#)[^\n]*)|("(?:\\.|[^"\\\n])*"?|'(?:\\.|[^'\\\n])*'?|[“”„](?:\\.|[^"“”＂\\\n])*["“”＂]?|[‘’](?:\\.|[^'‘’\\\n])*['‘’]?)|(\b\d+(?:\.\d+)?\b)|(\b[A-Za-z_][A-Za-z0-9_]*\b)"#)
     }()
 
     /// Everything worth colouring, in order. Very long text is left plain:

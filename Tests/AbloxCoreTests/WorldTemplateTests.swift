@@ -112,6 +112,19 @@ final class WorldTemplateTests: XCTestCase {
         XCTAssertNil(ScriptHighlighter.range(ofLine: 9, in: "a"))
     }
 
+    /// Everything the lexer reads as a comment or a string is coloured as
+    /// one: `#` comments, and single and curly quotes, with a `--` inside a
+    /// string left alone.
+    func testEveryCommentAndQuoteIsColoured() {
+        func kinds(_ text: String) -> [ScriptHighlighter.Kind] { ScriptHighlighter.spans(in: text).map(\.kind) }
+        XCTAssertEqual(kinds("# note"), [.comment])
+        XCTAssertFalse(kinds("say('a -- b')").contains(.comment))
+        XCTAssertTrue(kinds("say('a -- b')").contains(.string))
+        XCTAssertTrue(kinds("say(“こんにちは”)").contains(.string))
+        XCTAssertFalse(kinds("say(\"# not a comment\")").contains(.comment))
+        XCTAssertEqual(kinds("let x = 1 # set").last, .comment)
+    }
+
     func testLampsAndLocksAreKept() throws {
         var block = BlockData(name: "Lamp")
         block.light = BlockLight(kind: .spot, intensity: 9, range: 999)
