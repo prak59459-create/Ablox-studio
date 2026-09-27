@@ -14,6 +14,8 @@ struct StudioActionsMenu: View {
 
     @AppStorage(StudioSession.autosaveKey) private var autosaveSeconds: Double = 3
     @AppStorage("ablox.studio.dragSensitivity") private var dragSensitivity: Double = 1
+    /// Redraws the kept selections and views after one is kept.
+    @State private var keptRevision = 0
 
     var body: some View {
         Menu {
@@ -76,6 +78,11 @@ struct StudioActionsMenu: View {
                     }
                 }
             }
+            Section(L("Tools")) {
+                toolButtons
+                KeptPlacesMenu(session: session, commands: commands, sheet: $sheet,
+                               revision: keptRevision) { keptRevision += 1 }
+            }
             Section(L("Settings")) {
                 Picker(L("Autosave"), selection: $autosaveSeconds) {
                     Text(L("A moment after each change")).tag(3.0)
@@ -97,6 +104,51 @@ struct StudioActionsMenu: View {
                 .background(Circle().fill(.ultraThinMaterial))
         }
         .accessibilityLabel(L("More"))
+        .onChange(of: sheet == nil) { _, closed in if closed { keptRevision += 1 } }
+    }
+
+    /// Checking the world, and the tools that work on the selection.
+    @ViewBuilder private var toolButtons: some View {
+        let selected = session.document.selection.count
+        Button {
+            sheet = .worldCheck
+        } label: {
+            Label(L("World check"), systemImage: "checkmark.shield")
+        }
+        Button {
+            sheet = .statistics
+        } label: {
+            Label(L("What is in this world"), systemImage: "chart.bar.doc.horizontal")
+        }
+        Button {
+            sheet = .replaceColour
+        } label: {
+            Label(L("Replace a colour"), systemImage: "paintpalette")
+        }
+        Button {
+            sheet = .scatter
+        } label: {
+            Label(L("Scatter copies"), systemImage: "circle.hexagongrid")
+        }
+        .disabled(selected == 0)
+        Button {
+            session.edit { $0.dropToGround() }
+        } label: {
+            Label(L("Drop to the ground"), systemImage: "arrow.down.to.line")
+        }
+        .disabled(selected == 0)
+        Button {
+            session.edit { $0.varyColours(seed: UInt64.random(in: 1...UInt64.max)) }
+        } label: {
+            Label(L("Vary the colours a little"), systemImage: "circle.lefthalf.filled")
+        }
+        .disabled(selected == 0)
+        Button {
+            sheet = .renameInOrder
+        } label: {
+            Label(L("Name in order"), systemImage: "list.number")
+        }
+        .disabled(selected < 2)
     }
 }
 
@@ -104,6 +156,7 @@ struct StudioActionsMenu: View {
 enum StudioSheet: Identifiable {
     case library, history, weight, chat, remakeArea
     case testHere(Vec3)
+    case worldCheck, statistics, replaceColour, scatter, renameInOrder, saveSelection
 
     var id: String {
         switch self {
@@ -113,6 +166,12 @@ enum StudioSheet: Identifiable {
         case .chat: return "chat"
         case .remakeArea: return "remake"
         case .testHere: return "test"
+        case .worldCheck: return "check"
+        case .statistics: return "statistics"
+        case .replaceColour: return "replaceColour"
+        case .scatter: return "scatter"
+        case .renameInOrder: return "rename"
+        case .saveSelection: return "saveSelection"
         }
     }
 }

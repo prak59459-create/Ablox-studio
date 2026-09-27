@@ -121,6 +121,18 @@ struct StudioView: View {
                 TestHereSheet(world: session.document.world, start: point)
             case .remakeArea:
                 MapAreaSheet(session: session)
+            case .worldCheck:
+                WorldCheckSheet(session: session, commands: viewportCommands)
+            case .statistics:
+                WorldStatsSheet(session: session)
+            case .replaceColour:
+                ReplaceColourSheet(session: session)
+            case .scatter:
+                ScatterSheet(session: session)
+            case .renameInOrder:
+                RenameInOrderSheet(session: session)
+            case .saveSelection:
+                SaveSelectionSheet(session: session)
             }
         }
     }

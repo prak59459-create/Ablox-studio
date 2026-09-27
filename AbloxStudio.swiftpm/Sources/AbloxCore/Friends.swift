@@ -14,6 +14,15 @@ public struct PlayerContact: Codable, Hashable, Sendable, Identifiable {
     public var lastGame: String
     /// Separate visits, not roster updates.
     public var timesMet: Int
+    /// What this player calls them ("Taro from school"). Only on this iPad;
+    /// their own name still shows beside it.
+    public var nickname: String?
+
+    /// The nickname when there is one, otherwise their own name.
+    public var shownName: String {
+        guard let nickname, !nickname.isEmpty else { return name }
+        return nickname
+    }
 
     public init(id: PeerID, name: String, lastSeen: Date = Date(), lastGame: String = "", timesMet: Int = 1) {
         self.id = id
@@ -86,6 +95,16 @@ public struct SocialBook: Codable, Hashable, Sendable {
 
     public mutating func removeFriend(_ id: PeerID) {
         friends.removeAll { $0.id == id }
+    }
+
+    public static let maximumNicknameLength = 24
+
+    /// A friend's nickname on this iPad; empty clears it. Kept when they
+    /// change their own name.
+    public mutating func setNickname(_ nickname: String, for id: PeerID) {
+        guard let index = friends.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = String(nickname.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maximumNicknameLength))
+        friends[index].nickname = trimmed.isEmpty ? nil : trimmed
     }
 
     /// Blocking also ends a friendship: the two do not go together.

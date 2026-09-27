@@ -405,10 +405,20 @@ struct ProjectBrowserView: View {
 
             VStack(alignment: .leading, spacing: 7) {
                 Text(L("Name")).font(.caption.weight(.semibold)).foregroundStyle(Ablox.Palette.inkMuted)
-                AbloxTextField(L("My World"), text: $newName)
-                    .textFieldStyle(.plain)
-                    .padding(12)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                HStack(spacing: 8) {
+                    AbloxTextField(L("My World"), text: $newName)
+                        .textFieldStyle(.plain)
+                        .padding(12)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    // A name for someone staring at an empty field.
+                    Button {
+                        newName = WorldNameIdeas.suggest(seed: UInt64.random(in: 1...UInt64.max),
+                                                         taken: Set(store.entries.map(\.name)))
+                    } label: {
+                        Image(systemName: "dice.fill").font(.title3)
+                    }
+                    .accessibilityLabel(L("Suggest a name"))
+                }
             }
 
             VStack(alignment: .leading, spacing: 9) {

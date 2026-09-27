@@ -598,6 +598,12 @@ public extension WorldDocument {
     }
 
     static func decoded(from data: Data) throws -> WorldDocument {
+        try decodedAndRepaired(from: data).world
+    }
+
+    /// The world, mended where it would misbehave (see `WorldRepair`), and
+    /// what was mended.
+    static func decodedAndRepaired(from data: Data) throws -> (world: WorldDocument, repairs: WorldRepair.Report) {
         // The version first, on its own: a world from a newer app may use
         // things this one cannot read, and "made with a newer version" is a
         // better thing to be told than a decoding error.
@@ -608,7 +614,8 @@ public extension WorldDocument {
         guard world.schemaVersion <= currentSchemaVersion else {
             throw WorldDocumentError.unsupportedSchema(found: world.schemaVersion, supported: currentSchemaVersion)
         }
-        return world
+        let mended = WorldRepair.repaired(world)
+        return (mended.world, mended.report)
     }
 
     private struct SchemaPeek: Decodable {

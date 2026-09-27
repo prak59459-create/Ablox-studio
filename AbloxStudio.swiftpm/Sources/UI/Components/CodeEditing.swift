@@ -145,6 +145,21 @@ public final class CodeEditorHandle: ObservableObject {
         textView?.text ?? ""
     }
 
+    /// The selected text's range, or the cursor as an empty one (UTF-16).
+    public var selection: NSRange {
+        textView?.selectedRange ?? NSRange(location: 0, length: 0)
+    }
+
+    /// Selects `range`, kept inside the text.
+    public func select(_ range: NSRange) {
+        guard let view = textView else { return }
+        let length = (view.text as NSString).length
+        let location = min(max(0, range.location), length)
+        view.selectedRange = NSRange(location: location, length: min(max(0, range.length), length - location))
+        view.scrollRangeToVisible(view.selectedRange)
+        cursorMoved()
+    }
+
     /// Puts `text` in place of `range` (or at the cursor), cursor after it.
     public func replace(_ range: NSRange? = nil, with text: String) {
         guard let view = textView else { return }

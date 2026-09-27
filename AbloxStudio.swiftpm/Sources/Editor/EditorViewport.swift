@@ -263,6 +263,19 @@ public struct EditorViewport: UIViewRepresentable {
         /// Where the camera is looking, on the ground.
         var focusPoint: Vec3 { focus }
 
+        /// The camera as it is, to come back to later.
+        var spot: CameraBookmarks.Spot {
+            CameraBookmarks.Spot(target: focus, yaw: yaw, pitch: pitch, distance: distance)
+        }
+
+        func go(to spot: CameraBookmarks.Spot) {
+            focus = spot.target
+            yaw = spot.yaw
+            pitch = max(-89, min(89, spot.pitch))
+            distance = max(1, min(400, spot.distance))
+            updateCamera()
+        }
+
         /// Where a new part should land: where the camera is looking, dropped
         /// onto the ground plane.
         ///
@@ -548,6 +561,17 @@ public final class ViewportCommands: ObservableObject {
     @MainActor
     public func focusPoint() -> Vec3 {
         coordinator?.focusPoint ?? .zero
+    }
+
+    /// Where the camera is now; nil before the viewport has attached.
+    @MainActor
+    public func cameraSpot() -> CameraBookmarks.Spot? {
+        coordinator?.spot
+    }
+
+    @MainActor
+    public func go(to spot: CameraBookmarks.Spot) {
+        coordinator?.go(to: spot)
     }
 }
 

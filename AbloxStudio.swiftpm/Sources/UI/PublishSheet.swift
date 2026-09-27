@@ -35,6 +35,7 @@ struct PublishSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    beforePublishing
                     coverPreview
                     details
                     whatHappensNext
@@ -69,6 +70,37 @@ struct PublishSheet: View {
     }
 
     // MARK: Pieces
+
+    /// The world check and a missing summary, before anyone downloads it.
+    @ViewBuilder private var beforePublishing: some View {
+        let check = WorldCheck.run(world)
+        let serious = check.findings.filter { $0.level >= .warning }
+        let noSummary = listing.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if !serious.isEmpty || noSummary {
+            GlassCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(L("Before publishing"), systemImage: "checkmark.shield")
+                        .font(.headline)
+                    ForEach(serious) { finding in
+                        Label {
+                            Text(finding.message).font(.caption).fixedSize(horizontal: false, vertical: true)
+                        } icon: {
+                            Image(systemName: WorldCheckSheet.symbol(finding.level))
+                                .foregroundStyle(WorldCheckSheet.tint(finding.level))
+                        }
+                    }
+                    if noSummary {
+                        Label(L("Add a summary so players know what the game is."), systemImage: "text.bubble")
+                            .font(.caption)
+                            .foregroundStyle(Ablox.Palette.warning)
+                    }
+                    Text(L("You can still publish; these are things players would notice."))
+                        .font(.caption2)
+                        .foregroundStyle(Ablox.Palette.inkFaint)
+                }
+            }
+        }
+    }
 
     private var coverPreview: some View {
         VStack(alignment: .leading, spacing: 7) {

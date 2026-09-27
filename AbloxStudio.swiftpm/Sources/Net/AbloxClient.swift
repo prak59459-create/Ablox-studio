@@ -157,7 +157,10 @@ public final class AbloxClient {
             worldName = payload.worldName
 
         case .worldSnapshot:
-            guard let world = try? codec.decodePayload(WorldDocument.self, from: packet) else { return }
+            guard let sent = try? codec.decodePayload(WorldDocument.self, from: packet) else { return }
+            // Mended as a file would be: one bad number from a host must
+            // not send this iPad's camera to infinity.
+            let world = WorldRepair.repaired(sent).world
             state = .playing
             onWorld?(world)
 

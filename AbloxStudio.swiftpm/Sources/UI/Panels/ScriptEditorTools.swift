@@ -81,6 +81,61 @@ struct OutlineSheet: View {
     }
 }
 
+// MARK: - Notes to self, and going to a line
+
+/// The comments with TODO, FIXME, あとで or メモ in the open file.
+struct NotesSheet: View {
+    let file: ScriptFile
+    var onJump: (Int) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        let notes = ScriptLineTools.notes(in: [file])
+        NavigationStack {
+            List(notes) { note in
+                Button {
+                    onJump(note.line)
+                    dismiss()
+                } label: {
+                    HStack {
+                        Image(systemName: "checklist").foregroundStyle(Ablox.Palette.warning)
+                        Text(note.preview).font(.system(.subheadline, design: .monospaced))
+                        Spacer()
+                        Text(L("line {}", note.line)).font(.caption).foregroundStyle(Ablox.Palette.inkFaint)
+                    }
+                }
+            }
+            .overlay {
+                if notes.isEmpty {
+                    Text(L("No notes. Write “-- TODO: …” in a comment to leave one."))
+                        .foregroundStyle(Ablox.Palette.inkMuted)
+                        .multilineTextAlignment(.center)
+                        .padding()
+                }
+            }
+            .navigationTitle(L("TODO notes"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { dismiss() } } }
+        }
+        .preferredColorScheme(.dark)
+        .presentationDetents([.medium, .large])
+    }
+}
+
+struct GoToLineSheet: View {
+    let lines: Int
+    var onJump: (Int) -> Void
+    @State private var text = ""
+
+    var body: some View {
+        TextPromptSheet(title: L("Go to line"), message: L("1 to {}", lines), placeholder: "1",
+                        confirm: L("Go"), text: $text) {
+            let digits = text.filter(\.isNumber)
+            if let line = Int(digits) { onJump(min(max(1, line), lines)) }
+        }
+    }
+}
+
 // MARK: - Find and replace, in every file
 
 struct FindReplaceSheet: View {

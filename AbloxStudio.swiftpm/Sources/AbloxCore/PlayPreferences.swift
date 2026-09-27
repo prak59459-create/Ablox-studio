@@ -110,6 +110,9 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
     /// Stripes on dangers and checks on goals, so no part's job is told by
     /// its colour alone.
     public var markMeaning = false
+    /// The aiming mark in the middle of the screen, when a game shows one.
+    public var crosshair: CrosshairStyle = .plus
+    public var crosshairColor: CrosshairColor = .white
 
     public struct PointOffset: Codable, Hashable, Sendable {
         public var x: Double = 0
@@ -149,6 +152,8 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
         readLinesAloud = try c.decodeIfPresent(Bool.self, forKey: .readLinesAloud) ?? d.readLinesAloud
         colourVision = (try? c.decodeIfPresent(ColourVision.self, forKey: .colourVision)) ?? d.colourVision
         markMeaning = (try? c.decodeIfPresent(Bool.self, forKey: .markMeaning)) ?? d.markMeaning
+        crosshair = (try? c.decodeIfPresent(CrosshairStyle.self, forKey: .crosshair)) ?? d.crosshair
+        crosshairColor = (try? c.decodeIfPresent(CrosshairColor.self, forKey: .crosshairColor)) ?? d.crosshairColor
         clamp()
     }
 

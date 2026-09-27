@@ -189,8 +189,15 @@ public final class ProjectStore: ObservableObject {
     /// The world in `url`, or — when that file will not read — the newest of
     /// its kept versions that does.
     private func readWorld(at url: URL) -> WorldDocument? {
-        if let data = try? Data(contentsOf: url), let world = try? WorldDocument.decoded(from: data) {
-            return world
+        if let data = try? Data(contentsOf: url), let read = try? WorldDocument.decodedAndRepaired(from: data) {
+            // Mended on the way in (see `WorldRepair`); said once in the
+            // problem reports, so a broken save is not a mystery.
+            // Written back mended, so it is mended (and said) only once.
+            if !read.repairs.isEmpty {
+                ProblemRecorder.shared.record(.saving, L("Mended “{}”: {}.", read.world.name, read.repairs.summary))
+                if let mended = try? read.world.encodedForFile() { try? mended.write(to: url, options: .atomic) }
+            }
+            return read.world
         }
         guard let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent) else { return nil }
         for version in versions(ofWorld: id) {

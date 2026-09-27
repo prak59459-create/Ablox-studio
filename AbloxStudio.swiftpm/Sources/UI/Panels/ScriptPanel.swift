@@ -748,6 +748,10 @@ struct ScriptEditorView: View {
                 DiffSheet(title: L("What changed"), old: opened, new: draft)
             case .debug:
                 DebugSheet(world: worldWithDraft, fileName: file?.name ?? "")
+            case .notes:
+                NotesSheet(file: ScriptFile(name: file?.name ?? "", source: draft)) { line in jumpLater(line) }
+            case .goToLine:
+                GoToLineSheet(lines: ScriptLineTools.lineCount(draft)) { line in jumpLater(line) }
             }
         }
         .onAppear {
@@ -763,8 +767,65 @@ struct ScriptEditorView: View {
         }
     }
 
+    /// Jumps once a sheet has gone, so the editor can take focus.
+    private func jumpLater(_ line: Int) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 350_000_000)
+            handle.jump(toLine: line)
+        }
+    }
+
+    /// Runs a line tool on the draft at the cursor, then puts the cursor
+    /// where the tool says.
+    private func editLines(_ tool: (String, ScriptLineTools.Selection) -> ScriptLineTools.Edit?) {
+        let range = handle.selection
+        guard let edit = tool(draft, ScriptLineTools.Selection(location: range.location, length: range.length)) else { return }
+        draft = edit.text
+        let selection = NSRange(location: edit.selection.location, length: edit.selection.length)
+        Task { @MainActor in handle.select(selection) }
+    }
+
+    private var lineMenu: some View {
+        Menu {
+            Button {
+                editLines { ScriptLineTools.toggleComment($0, selection: $1) }
+            } label: {
+                Label(L("Comment out / back in"), systemImage: "number")
+            }
+            Button {
+                editLines { ScriptLineTools.duplicateLines($0, selection: $1) }
+            } label: {
+                Label(L("Copy the line below"), systemImage: "plus.square.on.square")
+            }
+            Button {
+                editLines { ScriptLineTools.moveLines($0, selection: $1, up: true) }
+            } label: {
+                Label(L("Move the line up"), systemImage: "arrow.up")
+            }
+            Button {
+                editLines { ScriptLineTools.moveLines($0, selection: $1, up: false) }
+            } label: {
+                Label(L("Move the line down"), systemImage: "arrow.down")
+            }
+            Divider()
+            Button {
+                tool = .goToLine
+            } label: {
+                Label(L("Go to line…"), systemImage: "arrow.right.to.line")
+            }
+            Button {
+                tool = .notes
+            } label: {
+                Label(L("TODO notes"), systemImage: "checklist")
+            }
+        } label: {
+            Label(L("Lines"), systemImage: "text.line.first.and.arrowtriangle.forward")
+        }
+    }
+
     private var moreMenu: some View {
         Menu {
+            lineMenu
             Menu {
                 ForEach(ScriptSnippets.all) { snippet in
                     Button {
@@ -944,7 +1005,7 @@ struct ScriptEditorView: View {
 
 /// The editor's sheets.
 enum ScriptEditorTool: String, Identifiable {
-    case outline, find, diff, debug
+    case outline, find, diff, debug, notes, goToLine
     var id: String { rawValue }
 }
 
