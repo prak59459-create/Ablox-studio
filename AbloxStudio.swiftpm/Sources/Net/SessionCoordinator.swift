@@ -785,6 +785,23 @@ public final class SessionCoordinator: ObservableObject {
         return JoinTicket(host: address, port: port, salt: host.keySalt, code: roomCode, world: world.name)
     }
 
+    /// Something went wrong putting the room on the internet, or reaching
+    /// one there. The game carries on (on the router, for a host).
+    public func noteCloudProblem(_ message: String) {
+        if role == .hosting {
+            show(announcement: L("This room couldn't go on the internet: {}", message), for: 6)
+        } else {
+            status = .error(L("Couldn't reach that internet room: {}", message))
+        }
+    }
+
+    /// What the internet relay needs to reach this room: the listener's
+    /// port, and the code, salt and size of the room.
+    public var roomKeys: (port: UInt16, salt: String, code: String, capacity: Int)? {
+        guard role == .hosting, let host, let port = hostingPort else { return nil }
+        return (port, host.keySalt, roomCode, host.configuration.capacity)
+    }
+
     // MARK: Gameplay bridge
 
     /// Publishes the local avatar. Called by the render loop at the protocol's

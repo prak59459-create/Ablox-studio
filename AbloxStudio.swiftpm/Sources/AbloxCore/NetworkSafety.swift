@@ -92,10 +92,20 @@ public struct AttemptLimiter: Sendable {
     public init() {}
 
     public func isBanned(_ address: String, at time: Double) -> Bool {
-        (bannedUntil[address] ?? -.infinity) > time
+        guard !Self.isLoopback(address) else { return false }
+        return (bannedUntil[address] ?? -.infinity) > time
+    }
+
+    /// This iPad itself: every internet guest arrives through the relay
+    /// from here, so one guest's mistakes must not shut the door on all.
+    /// (An internet room's code is in its listing anyway.)
+    public static func isLoopback(_ address: String) -> Bool {
+        let bare = address.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        return bare.hasPrefix("127.") || bare == "::1" || bare.hasPrefix("::1%") || bare == "localhost"
     }
 
     public mutating func recordFailure(_ address: String, at time: Double) {
+        guard !Self.isLoopback(address) else { return }
         var list = (failures[address] ?? []).filter { time - $0 <= Self.window }
         list.append(time)
         failures[address] = list
