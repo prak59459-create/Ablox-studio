@@ -9,6 +9,7 @@ on:
     paths:
       - "AbloxStudio.swiftpm/**"
       - "scripts/ios-build-times.sh"
+      - "scripts/ios-build-compare.sh"
       - ".github/workflows/ios-build.yml"
   workflow_dispatch:
     inputs:
@@ -16,6 +17,10 @@ on:
         description: "One file per compile job, to list what each file costs"
         type: boolean
         default: false
+      compare:
+        description: "Build settings to compare against a plain build, e.g. GCC_GENERATE_DEBUGGING_SYMBOLS=NO"
+        type: string
+        default: ""
 
 jobs:
   ios:
@@ -25,7 +30,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build and report
+        if: ${{ !inputs.compare }}
         run: scripts/ios-build-times.sh
         env:
           SCHEME: "Ablox Studio"
           PER_FILE: ${{ inputs.per_file && '1' || '' }}
+      - name: Compare a build setting
+        if: ${{ inputs.compare }}
+        run: scripts/ios-build-compare.sh
+        env:
+          SCHEME: "Ablox Studio"
+          COMPARE: ${{ inputs.compare }}

@@ -44,6 +44,15 @@ flags="-Xfrontend -debug-time-function-bodies -Xfrontend -warn-long-expression-t
 # to one file each, code generation included.
 batch="YES"
 if [ -n "${PER_FILE:-}" ]; then batch="NO"; fi
+if [ -n "${PER_FILE:-}" ]; then
+  # Once without measuring, then clean: the system modules are then already
+  # built, as on an iPad that has built before, and each file's time is its
+  # own rather than whichever file first needed UIKit.
+  xcodebuild build -scheme "$scheme" -destination 'generic/platform=iOS Simulator' \
+    -derivedDataPath "$derived" ARCHS=arm64 CODE_SIGNING_ALLOWED=NO > /dev/null 2>&1
+  xcodebuild clean -scheme "$scheme" -destination 'generic/platform=iOS Simulator' \
+    -derivedDataPath "$derived" > /dev/null 2>&1
+fi
 start=$(date +%s)
 xcodebuild build \
   -scheme "$scheme" \
