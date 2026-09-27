@@ -157,7 +157,7 @@ struct PublishSheet: View {
     private func field(_ title: String, text: Binding<String>, hint: String = "", axis: Axis = .horizontal) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).font(.caption).foregroundStyle(Ablox.Palette.inkMuted)
-            TextField(hint, text: text, axis: axis)
+            AbloxTextField(hint, text: text, axis: axis)
                 .textFieldStyle(.plain)
                 .lineLimit(axis == .vertical ? 3...5 : 1...1)
                 .padding(10)

@@ -60,7 +60,7 @@ struct ExplorerPanel: View {
                 Image(systemName: "magnifyingglass")
                     .font(.caption)
                     .foregroundStyle(Ablox.Palette.inkFaint)
-                TextField(L("Find a part"), text: $searchText)
+                AbloxTextField(L("Find a part"), text: $searchText)
                     .textFieldStyle(.plain)
                     .font(.caption)
                 if !searchText.isEmpty {

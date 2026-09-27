@@ -19,6 +19,9 @@ struct AbloxStudioApp: App {
                 // forces one rebuild — deliberately below the state objects,
                 // so the open project and its undo history survive it.
                 .id(settings.language)
+                // Offers Ablox's own keyboard on an iPad where the system one
+                // does not come up.
+                .onAppear { KeyboardController.shared.startWatching() }
         }
     }
 }

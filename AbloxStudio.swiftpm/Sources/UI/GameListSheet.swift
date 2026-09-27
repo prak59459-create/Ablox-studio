@@ -154,7 +154,7 @@ struct GameListSheet: View {
     }
 
     private func field(_ placeholder: String, text: Binding<String>) -> some View {
-        TextField(placeholder, text: text)
+        AbloxTextField(placeholder, text: text)
             .textFieldStyle(.plain)
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)

@@ -86,7 +86,7 @@ struct MapAISheet: View {
 
                 VStack(alignment: .leading, spacing: 5) {
                     Text(L("Theme")).font(.caption).foregroundStyle(Ablox.Palette.inkMuted)
-                    TextField(L("a floating ruin, a lava cave, a candy town…"), text: $request.theme)
+                    AbloxTextField(L("a floating ruin, a lava cave, a candy town…"), text: $request.theme)
                         .textFieldStyle(.plain)
                         .padding(10)
                         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -144,9 +144,7 @@ struct MapAISheet: View {
 
     private var answerStep: some View {
         VStack(alignment: .leading, spacing: 9) {
-            TextEditor(text: $answer)
-                .font(.system(size: 11, design: .monospaced))
-                .scrollContentBackground(.hidden)
+            AbloxTextEditor(L("Paste the JSON the assistant replied with"), text: $answer, fontSize: 11)
                 .frame(height: 130)
                 .padding(7)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))

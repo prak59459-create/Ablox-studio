@@ -108,7 +108,7 @@ struct RulesPanel: View {
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 12) {
-                    TextField(L("Rule name"), text: Binding(
+                    AbloxTextField(L("Rule name"), text: Binding(
                         get: { rule.name },
                         set: { newValue in update(rule) { $0.name = newValue } }
                     ))
@@ -187,7 +187,7 @@ struct RulesPanel: View {
             }
 
         case let .tagTouched(tag):
-            TextField(L("tag"), text: Binding(
+            AbloxTextField(L("tag"), text: Binding(
                 get: { tag },
                 set: { newValue in update(rule) { $0.trigger = .tagTouched(tag: newValue) } }
             ))

@@ -68,7 +68,7 @@ struct InspectorPanel: View {
 
     private func nameField(_ block: BlockData) -> some View {
         InspectorGroup(L("Name")) {
-            TextField(L("Part"), text: Binding(
+            AbloxTextField(L("Part"), text: Binding(
                 get: { block.name },
                 set: { newValue in
                     session.edit { $0.mutateSelection(label: "Rename") { $0.name = newValue } }
@@ -279,7 +279,7 @@ struct InspectorPanel: View {
     private func tagsSection(_ block: BlockData) -> some View {
         InspectorGroup(L("Tags")) {
             VStack(alignment: .leading, spacing: 7) {
-                TextField(L("coin, trap, door…"), text: Binding(
+                AbloxTextField(L("coin, trap, door…"), text: Binding(
                     get: { block.tags.joined(separator: ", ") },
                     set: { newValue in
                         let tags = newValue
@@ -368,7 +368,7 @@ struct InspectorPanel: View {
 
         return VStack(alignment: .leading, spacing: 18) {
             InspectorGroup(L("World name")) {
-                TextField(L("World"), text: Binding(
+                AbloxTextField(L("World"), text: Binding(
                     get: { session.document.world.name },
                     set: { newName in
                         session.edit { document in document.renameWorld(newName) }

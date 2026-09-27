@@ -10,6 +10,7 @@ struct ProjectBrowserView: View {
     @State private var openSession: StudioSession?
     @State private var isCreating = false
     @State private var newName = ""
+    @AppStorage(KeyboardPreference.key) private var usesAbloxKeyboard = false
     @State private var selectedTemplate: ProjectStore.Template = .starter
     @State private var pendingDeletion: ProjectStore.Entry?
     @State private var showingVersions: ProjectStore.Entry?
@@ -129,6 +130,7 @@ struct ProjectBrowserView: View {
             Spacer()
 
             languageMenu
+            keyboardMenu
 
             Button { showingUpdates = true } label: {
                 Label(L("Updates"), systemImage: updater.availability == .current ? "arrow.triangle.2.circlepath" : "arrow.down.app.fill")
@@ -187,6 +189,22 @@ struct ProjectBrowserView: View {
         }
         .foregroundStyle(Ablox.Palette.inkMuted)
         .accessibilityLabel(L("Language"))
+    }
+
+    /// Ablox's own keyboard, for iPads where the system one does not come
+    /// up — beside the language switch, where it is found without typing.
+    private var keyboardMenu: some View {
+        Menu {
+            Toggle(L("Use the Ablox keyboard"), isOn: $usesAbloxKeyboard)
+        } label: {
+            Label(L("Keyboard"), systemImage: usesAbloxKeyboard ? "keyboard.fill" : "keyboard")
+                .labelStyle(.iconOnly)
+                .font(.title3)
+                .frame(width: Ablox.Metrics.minimumTapTarget, height: Ablox.Metrics.minimumTapTarget)
+                .contentShape(Rectangle())
+        }
+        .foregroundStyle(usesAbloxKeyboard ? Ablox.Palette.accent : Ablox.Palette.inkMuted)
+        .accessibilityLabel(L("Keyboard"))
     }
 
     // MARK: Projects
@@ -367,7 +385,7 @@ struct ProjectBrowserView: View {
 
             VStack(alignment: .leading, spacing: 7) {
                 Text(L("Name")).font(.caption.weight(.semibold)).foregroundStyle(Ablox.Palette.inkMuted)
-                TextField(L("My World"), text: $newName)
+                AbloxTextField(L("My World"), text: $newName)
                     .textFieldStyle(.plain)
                     .padding(12)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -452,15 +470,24 @@ struct ProjectBrowserView: View {
                 // A hardware keyboard types straight into the field; the pad
                 // below is for every iPad where the on-screen keyboard does not
                 // appear — see `CodePad`.
-                TextField("ABC DEF", text: Binding(
-                    get: { RoomCode.formatted(joinCode) },
-                    set: { joinCode = RoomCode.normalize($0) }
-                ))
-                    .textFieldStyle(.plain)
+                Group {
+                    // With the Ablox keyboard on, the pad below is the keyboard.
+                    if usesAbloxKeyboard {
+                        Text(verbatim: joinCode.isEmpty ? "ABC DEF" : RoomCode.formatted(joinCode))
+                            .foregroundStyle(joinCode.isEmpty ? Ablox.Palette.inkFaint : Ablox.Palette.ink)
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        TextField("ABC DEF", text: Binding(
+                            get: { RoomCode.formatted(joinCode) },
+                            set: { joinCode = RoomCode.normalize($0) }
+                        ))
+                        .textFieldStyle(.plain)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                    }
+                }
                     .font(.system(size: 28, weight: .bold, design: .monospaced))
                     .multilineTextAlignment(.center)
-                    .textInputAutocapitalization(.characters)
-                    .autocorrectionDisabled()
                     .padding(.vertical, 12)
                     .frame(maxWidth: 250)
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))

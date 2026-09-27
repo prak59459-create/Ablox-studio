@@ -1778,5 +1778,17 @@ public enum Strings {
         ("New teams?", "チームを分け直す？"),
         ("Which is best?", "どれがいい？"),
         ("Yes", "はい"),
+        ("For iPads where the keyboard doesn't come up. Types letters, kana, numbers and marks. Turn it off to use the iPad's own keyboard again.", "キーボードが出てこない iPad 用です。英字・かな・数字・記号を打てます。オフにすると iPad のキーボードに戻ります。"),
+        ("Hide the keyboard", "キーボードをしまう"),
+        ("No keyboard? Use the Ablox keyboard instead.", "キーボードが出ませんか？ Ablox のキーボードを使えます。"),
+        ("Shift", "シフト"),
+        ("Tap the text box again to type.", "もう一度入力欄をタップして入力してね。"),
+        ("Use it", "使う"),
+        ("Use the Ablox keyboard", "Ablox のキーボードを使う"),
+        ("iPad keyboard", "iPad のキーボード"),
+        ("return", "改行"),
+        ("small", "小"),
+        ("space", "空白"),
+        ("Keyboard", "キーボード"),
     ]
 }

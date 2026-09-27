@@ -93,18 +93,12 @@ struct ScriptPanel: View {
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.data, .plainText], allowsMultipleSelection: true) { result in
             importFiles(result)
         }
-        .alert(L("Rename file"), isPresented: Binding(
-            get: { renaming != nil },
-            set: { if !$0 { renaming = nil } }
-        )) {
-            TextField(L("File name"), text: $newName)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-            Button(L("Rename")) {
-                if let file = renaming { session.edit { $0.renameScript(file.id, to: newName) } }
-                renaming = nil
+        // A sheet rather than an alert: an alert's text field only types
+        // with the iPad keyboard.
+        .sheet(item: $renaming) { file in
+            TextPromptSheet(title: L("Rename file"), placeholder: L("File name"), confirm: L("Rename"), text: $newName) {
+                session.edit { $0.renameScript(file.id, to: newName) }
             }
-            Button(L("Cancel"), role: .cancel) { renaming = nil }
         }
     }
 
@@ -485,7 +479,7 @@ struct ScriptSourceSheet: View {
     private func field(_ title: String, placeholder: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title).font(.caption).foregroundStyle(Ablox.Palette.inkMuted)
-            TextField(placeholder, text: text)
+            AbloxTextField(placeholder, text: text)
                 .textFieldStyle(.plain)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
@@ -556,7 +550,6 @@ struct ScriptEditorView: View {
     @State private var report: ScriptTestReport?
     @State private var showReference = true
     @State private var commitTask: Task<Void, Never>?
-    @FocusState private var editorFocused: Bool
 
     init(session: StudioSession, fileID: UUID) {
         self.session = session
@@ -574,16 +567,12 @@ struct ScriptEditorView: View {
         NavigationStack {
             HStack(spacing: 0) {
                 VStack(spacing: 0) {
-                    TextEditor(text: $draft)
-                        .font(.system(size: 15, design: .monospaced))
-                        // Code, not prose: no capitals at the start of a
-                        // line, no "corrections" of `func` into `fun`.
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .scrollContentBackground(.hidden)
+                    // Code, not prose: the editor turns off capitals at the
+                    // start of a line and "corrections" of `func` into `fun`.
+                    // It types with the Ablox keyboard when that is on.
+                    AbloxTextEditor(L("Script"), text: $draft, autoFocus: true)
                         .padding(8)
                         .background(Color.black.opacity(0.35))
-                        .focused($editorFocused)
                         .onChange(of: draft) { _, _ in scheduleCommit() }
 
                     Divider().background(Color.white.opacity(0.08))
@@ -644,12 +633,6 @@ struct ScriptEditorView: View {
             // One undo step for the whole visit, not one per keystroke.
             session.edit { $0.beginGesture() }
             check()
-        }
-        .task {
-            // Focus once the sheet has finished presenting. Asked for any
-            // earlier, some iPads drop the request and no keyboard appears.
-            try? await Task.sleep(nanoseconds: 600_000_000)
-            editorFocused = true
         }
         .onDisappear {
             commitNow()
