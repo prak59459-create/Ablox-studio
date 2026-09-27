@@ -40,8 +40,8 @@ struct MapAISheet: View {
                 VStack(alignment: .leading, spacing: 18) {
                     intro
                     whatToMake
-                    step(1, L("Copy the prompt"), content: promptStep)
-                    step(2, L("Paste the answer"), content: answerStep)
+                    step(1, L("Copy the prompt")) { promptStep }
+                    step(2, L("Paste the answer")) { answerStep }
 
                     if !problems.isEmpty { problemList }
                     if let note {

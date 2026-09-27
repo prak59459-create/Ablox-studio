@@ -171,12 +171,13 @@ struct PublishSheet: View {
     /// The listing with the tag field parsed, validated one last time.
     private var finalListing: GameListing {
         var listing = self.listing
-        listing.tags = tagText
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+        // In typed steps: as one chain, `prefix` had two readings the
+        // compiler could not choose between.
+        let pieces: [Substring] = tagText.split(separator: ",")
+        let tags: [String] = pieces
+            .map { (piece: Substring) -> String in piece.trimmingCharacters(in: .whitespaces).lowercased() }
             .filter { !$0.isEmpty }
-            .prefix(GameCatalogue.Limits.maximumTags)
-            .map(String.init)
+        listing.tags = Array(tags.prefix(GameCatalogue.Limits.maximumTags))
         listing.blockCount = world.blocks.count
         listing.updatedAt = Date()
         return listing
