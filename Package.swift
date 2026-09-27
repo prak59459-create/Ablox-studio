@@ -6,14 +6,9 @@ import PackageDescription
 // It points at the same sources the iPad app compiles.
 //
 // The shipping app is `AbloxStudio.swiftpm` — that is what you open in Swift
-// Playgrounds, and it is a single target, because that is the layout Swift
-// Playgrounds expects.
-//
-// The module boundary lives here instead. `AbloxCore` below covers both the
+// Playgrounds. Its `AbloxCore` target is the same as the one below: the
 // mirrored core and Studio's own `EditorCore`, compiled together as one
-// module. That is what lets the app stay single-target while these sources
-// stay testable: no file has to say `import AbloxCore`, so the same files work
-// under both manifests.
+// module, which the app's other files import.
 //
 // The core sources are a mirror of the Ablox client's; run
 // `scripts/sync-core.sh --check` to confirm they have not drifted.
@@ -26,15 +21,9 @@ let package = Package(
         .target(
             name: "AbloxCore",
             path: "AbloxStudio.swiftpm/Sources",
-            // Everything that needs SwiftUI, RealityKit or Network is carved
-            // out: what remains is portable Swift that builds anywhere.
-            exclude: [
-                "Net",
-                "Engine",
-                "Editor",
-                "UI",
-                "StudioApp.swift"
-            ]
+            // Only what builds anywhere: SwiftUI, RealityKit and Network stay
+            // with the app.
+            sources: ["AbloxCore", "EditorCore"]
         ),
         .testTarget(
             name: "AbloxCoreTests",

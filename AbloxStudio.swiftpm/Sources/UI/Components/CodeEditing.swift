@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import AbloxCore
 
 // Helpers for editing code in `AbloxTextEditor`: colours for the words of
 // `.absc`, a red underline under lines with a problem, and a handle to the

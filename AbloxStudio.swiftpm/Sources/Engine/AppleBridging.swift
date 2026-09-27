@@ -1,9 +1,10 @@
 import Foundation
+import AbloxCore
 
-// Everything in this file is Apple-only. `AbloxCore` itself is deliberately
-// portable — it builds and unit-tests on Linux — so the bridges to `simd`,
-// SwiftUI and RealityKit live behind `canImport` guards rather than forcing
-// the whole module to depend on them.
+// The core's types as simd, RealityKit and SwiftUI see them. Kept out of
+// AbloxCore on purpose: the core imports Foundation alone, so it builds and
+// unit-tests on Linux, and on the iPad none of its compile jobs has to load
+// SwiftUI or RealityKit.
 
 #if canImport(simd)
 import simd

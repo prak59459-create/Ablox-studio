@@ -7,7 +7,7 @@ import Foundation
 /// `AbloxCore` deliberately avoids Apple's `simd` module so that the entire
 /// data model and wire format can be compiled and unit-tested on any Swift
 /// platform, including Linux CI. On Apple platforms `Vec3` bridges to
-/// `SIMD3<Float>` for free — see `AppleBridging.swift`.
+/// `SIMD3<Float>` for free — see `Engine/AppleBridging.swift`.
 ///
 /// Coordinate system matches RealityKit: right-handed, +Y up, -Z forward.
 public struct Vec3: Codable, Hashable, Sendable {

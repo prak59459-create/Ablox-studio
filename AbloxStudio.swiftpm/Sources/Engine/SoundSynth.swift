@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import AbloxCore
 
 /// Ablox's sound effects and music, made from numbers as they play.
 ///
@@ -223,27 +224,44 @@ final class SoundSynth: @unchecked Sendable {
         }
     }
 
+    // Written in small typed steps: as a few long expressions the compiler
+    // spent over a second choosing among number overloads here.
     private func sample(_ voice: inout Voice, rate: Double) -> Float {
-        let progress = Double(voice.position) / Double(voice.length)
-        let frequency = voice.start + (voice.end - voice.start) * progress
+        let position: Double = Double(voice.position)
+        let length: Double = Double(voice.length)
+        let progress: Double = position / length
+        let span: Double = voice.end - voice.start
+        let frequency: Double = voice.start + span * progress
+        let phase: Double = voice.phase
         let value: Float
         switch voice.wave {
-        case .sine: value = Float(sin(voice.phase * 2 * .pi))
-        case .square: value = voice.phase < 0.5 ? 0.6 : -0.6
-        case .triangle: value = Float(4 * abs(voice.phase - 0.5) - 1)
-        case .saw: value = Float(2 * voice.phase - 1) * 0.7
+        case .sine:
+            let angle: Double = phase * 2.0 * Double.pi
+            value = Float(sin(angle))
+        case .square:
+            value = phase < 0.5 ? 0.6 : -0.6
+        case .triangle:
+            let distance: Double = Swift.abs(phase - 0.5)
+            value = Float(4.0 * distance - 1.0)
+        case .saw:
+            let ramp: Double = 2.0 * phase - 1.0
+            value = Float(ramp) * 0.7
         case .noise:
             noise ^= noise << 13
             noise ^= noise >> 17
             noise ^= noise << 5
-            value = Float(noise) / Float(UInt32.max) * 2 - 1
+            let unit: Float = Float(noise) / Float(UInt32.max)
+            value = unit * 2.0 - 1.0
         }
-        voice.phase += frequency / rate
-        if voice.phase >= 1 { voice.phase -= voice.phase.rounded(.down) }
+        var next: Double = phase + frequency / rate
+        if next >= 1.0 { next -= next.rounded(.down) }
+        voice.phase = next
 
         // A quick fade in and a longer fade out, so nothing clicks.
-        let attack = min(1, Float(voice.position) / Float(max(1, min(voice.length / 8, Int(rate * 0.006)))))
-        let release = min(1, Float(voice.length - voice.position) / Float(max(1, voice.length / 4)))
+        let attackFrames: Int = Swift.max(1, Swift.min(voice.length / 8, Int(rate * 0.006)))
+        let releaseFrames: Int = Swift.max(1, voice.length / 4)
+        let attack: Float = Swift.min(1.0, Float(voice.position) / Float(attackFrames))
+        let release: Float = Swift.min(1.0, Float(voice.length - voice.position) / Float(releaseFrames))
         voice.position += 1
         return value * voice.volume * attack * release
     }

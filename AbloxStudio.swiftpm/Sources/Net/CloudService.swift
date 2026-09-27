@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import AbloxCore
 
 /// A friend over the internet: added by friend code, and a friend once both
 /// have added each other. Until then their profile cannot be read (the

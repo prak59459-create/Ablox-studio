@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import AbloxCore
 
 /// A session found on the local network, as shown in the Play lobby.
 public struct DiscoveredPeer: Identifiable, Hashable {

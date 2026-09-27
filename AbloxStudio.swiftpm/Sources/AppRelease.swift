@@ -1,4 +1,5 @@
 import Foundation
+import AbloxCore
 
 /// This app's version, and where new ones come from.
 ///

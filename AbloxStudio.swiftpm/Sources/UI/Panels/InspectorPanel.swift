@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import AbloxCore
 
 /// Properties of whatever is selected.
 struct InspectorPanel: View {

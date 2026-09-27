@@ -90,8 +90,10 @@ Hard-coding either breaks the other, and only the iPad can report the one it
 breaks. The fix is to depend on neither: the four lines of arithmetic are
 written out inline.
 
-The same trap is why **no file under `Sources/` contains `import AbloxCore`**.
-On device there is one module and nothing to import.
+The same trap is why, at the time, **no file under `Sources/` contained
+`import AbloxCore`**: on device there was one module and nothing to import.
+That changed with *Two targets* below — the core is now a module called
+`AbloxCore` in both builds, and every file outside it imports it.
 
 ### `is only available in iOS 18.0 or newer`
 
@@ -126,19 +128,72 @@ precisely so the next added action forces the decision again.
 
 ---
 
-## One target, always
+## Round 3 — six minutes, "build failed", and no error
 
-Both apps declare exactly one `.executableTarget`. Swift Playgrounds builds and
-navigates an App project as a single module; splitting the sources into library
-targets bought nothing on device and added another way for loading to fail.
+Reported from the Ablox client; the shared layers here are the same files.
 
-The module boundary the tests need comes from the **root** `Package.swift`
-instead — an ordinary SwiftPM manifest that points at the same source files and
-compiles them as `AbloxCore`.
+On an iPad (9th generation, 3 GB of memory) the first build after an update
+took about six minutes and stopped with a failed build that listed no error.
+The third attempt launched, about eighteen minutes in all. Nothing in the
+source was wrong — the same code builds for the iOS simulator on CI — so the
+reading here is that the build ran out of memory. As one module of about
+46,000 lines, every compile job held the whole app.
 
-SwiftPM dependencies are avoided for the same reason. Swift Playgrounds can only
-resolve them by git URL, which would mean the project cannot be opened without a
-network. The shared core is mirrored between the two repositories as files, and
+The same round's screen listed these, fixed at the time:
+
+| Written | Compiler said | Correct form |
+|---|---|---|
+| `some Gesture` in a view | A 'some' type must specify only 'Any', 'AnyObject', protocols, and/or a base class | `AbloxCore` has a `Gesture` of its own, which hides SwiftUI's: `some SwiftUI.Gesture` |
+| a generic function nested in a view method, reading `settings.wallet` | Main actor-isolated property 'wallet' can not be referenced from a nonisolated context | read it into a local first |
+| `.onChange(of:perform:)` | deprecated in iOS 17 | the two-parameter closure |
+| a captured `var resumed` in a continuation | mutation of captured var in concurrently-executing code (warning) | a small class with a lock |
+
+---
+
+## Two targets
+
+Both apps now declare two targets: the library `AbloxCore` (here the
+mirrored `Sources/AbloxCore` and Studio's own `Sources/EditorCore`),
+and the app, which depends on it. Each compile job then holds one module's
+source, with the other read back as a small compiled summary, instead of the
+whole app at once.
+
+What CI measured, building for the iOS simulator on a 3-core `macos-15`
+runner (timing instrumentation on, so the figures run high):
+
+| Ablox | Build | Swift compiling, summed | Core interface |
+|---|---|---|---|
+| two targets, core still importing SwiftUI and RealityKit | 140 s | 204 s | 24 s |
+| two targets, core importing Foundation alone | 95 s | 116 s | 5.6 s |
+
+The second row is the point of the rules below: every compile job of a module
+loads whatever any of its files imports, and the app side waits for the core's
+interface before it can start.
+
+- **The core imports Foundation alone** (and `Compression`). Glue to Apple
+  frameworks lives in `Engine/AppleBridging.swift`.
+- **Every file outside the core says `import AbloxCore`.**
+- **Names the core shares with Apple frameworks** — `Gesture`, `BoundingBox`,
+  `MusicTrack` — are pinned to the core's in `Engine/CoreNames.swift`, so the
+  app's files mean what they meant as one module.
+- **What the app uses from the core is `public`.** An internal member used
+  from the app is a compile error on device, not on Linux, so the macOS CI
+  build (`.github/workflows/ios-build.yml`) is what catches it.
+- **The library target's name differs from the app product's.**
+
+**Not yet seen on device.** Whether Swift Playgrounds opens and builds the
+two-target project has to be confirmed on an iPad. If it refuses, its exact
+words go on this page; going back to one target is a manifest change, and the
+rest of the work (the Foundation-only core, the faster view bodies) holds
+either way.
+
+The module boundary the tests need still comes from the **root**
+`Package.swift`, which points at the same folders and compiles them as
+`AbloxCore`.
+
+SwiftPM dependencies are still avoided. Swift Playgrounds can only resolve them
+by git URL, which would mean the project cannot be opened without a network.
+The shared core is mirrored between the two repositories as files, and
 `scripts/sync-core.sh --check` keeps the copies byte-identical.
 
 ---
@@ -147,8 +202,9 @@ network. The shared core is mirrored between the two repositories as files, and
 
 `scripts/check-playgrounds-project.sh` runs in CI. It cannot type-check the
 manifest or the Apple layers — nothing here can. All it does is refuse the
-spellings this page records as rejected, plus assert the single-target shape and
-the `AppleProductTypes` import.
+spellings this page records as rejected, plus assert the two-target shape, the
+`AppleProductTypes` import, `import AbloxCore` outside the core, and a core
+that imports Foundation alone.
 
 It is a ratchet on known mistakes, not a substitute for opening the project on
 an iPad. **When a new error turns up on device, add its exact wording to this

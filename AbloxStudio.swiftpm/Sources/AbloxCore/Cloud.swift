@@ -371,6 +371,12 @@ public struct CloudEvent: Hashable, Sendable {
     public var kind: Kind
     public var path: [String]
     public var data: JSONValue
+
+    public init(kind: Kind, path: [String], data: JSONValue) {
+        self.kind = kind
+        self.path = path
+        self.data = data
+    }
 }
 
 /// Reads Firebase's event stream a line at a time.

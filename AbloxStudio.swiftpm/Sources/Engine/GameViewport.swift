@@ -3,6 +3,7 @@ import RealityKit
 import ARKit
 import simd
 import Combine
+import AbloxCore
 
 /// Lets the play screen reach into the viewport for the things that are
 /// actions rather than state: a screenshot, back to the start.

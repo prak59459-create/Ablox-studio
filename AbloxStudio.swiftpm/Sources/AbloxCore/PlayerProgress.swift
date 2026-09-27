@@ -223,6 +223,8 @@ public enum CatalogueShelf {
         public var hard = false
         public var gentle = false
         public var social = false
+
+        public init() {}
     }
 
     public static func traits(of listing: GameListing) -> Traits {

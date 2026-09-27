@@ -3,6 +3,7 @@ import RealityKit
 import UIKit
 import CoreGraphics
 import Metal
+import AbloxCore
 
 /// Pictures the engine paints for itself: the patterns of the natural
 /// materials (wood grain, bricks, grass…), the sky, and the pictures a world
@@ -25,6 +26,14 @@ enum SurfaceTextures {
         descriptor.magFilter = .linear
         descriptor.mipFilter = .linear
         return MaterialParameters.Texture.Sampler(descriptor)
+    }
+
+    /// A sine wave across `over` points, `cycles` times, moved by `shift`.
+    /// A function of its own so the drawing code stays quick to compile.
+    private static func wave(_ x: CGFloat, over length: CGFloat, cycles: CGFloat, shift: CGFloat) -> CGFloat {
+        let turns: CGFloat = x / length * cycles
+        let angle: CGFloat = turns * CGFloat.pi + shift
+        return sin(angle)
     }
 
     // MARK: Meaning marks
@@ -187,7 +196,7 @@ enum SurfaceTextures {
                     cg.move(to: CGPoint(x: 0, y: y))
                     var x: CGFloat = 0
                     while x <= CGFloat(size) {
-                        cg.addLine(to: CGPoint(x: x, y: y + sin(x / 128 * .pi * 4 + CGFloat(line)) * 2.5))
+                        cg.addLine(to: CGPoint(x: x, y: y + wave(x, over: 128, cycles: 4, shift: CGFloat(line)) * 2.5))
                         x += 4
                     }
                     cg.strokePath()
@@ -242,12 +251,16 @@ enum SurfaceTextures {
             default: starAmount = night
             }
             if starAmount > 0.05 {
-                let count = style == .space ? 900 : 420
+                let count: Int = style == .space ? 900 : 420
+                let biggest: Double = style == .space ? 2.6 : 1.9
+                let lowest: Double = Double(horizon) * 0.96
                 for _ in 0..<count {
-                    let size = CGFloat(random.next(in: 0.6...(style == .space ? 2.6 : 1.9)))
-                    let y = CGFloat(random.next(in: 0...Double(horizon) * 0.96))
-                    cg.setFillColor(UIColor(white: 1, alpha: CGFloat(starAmount) * CGFloat(random.next(in: 0.35...1))).cgColor)
-                    cg.fillEllipse(in: CGRect(x: CGFloat(random.next(in: 0...Double(width))), y: y, width: size, height: size))
+                    let size = CGFloat(random.next(in: 0.6...biggest))
+                    let y = CGFloat(random.next(in: 0...lowest))
+                    let x = CGFloat(random.next(in: 0...Double(width)))
+                    let brightness = CGFloat(random.next(in: 0.35...1))
+                    cg.setFillColor(UIColor(white: 1, alpha: CGFloat(starAmount) * brightness).cgColor)
+                    cg.fillEllipse(in: CGRect(x: x, y: y, width: size, height: size))
                 }
             }
 
@@ -285,7 +298,7 @@ enum SurfaceTextures {
                     cg.move(to: CGPoint(x: 0, y: base))
                     var x: CGFloat = 0
                     while x <= CGFloat(width) {
-                        cg.addLine(to: CGPoint(x: x, y: base + sin(x / CGFloat(width) * .pi * 6 + CGFloat(band)) * 12))
+                        cg.addLine(to: CGPoint(x: x, y: base + wave(x, over: CGFloat(width), cycles: 6, shift: CGFloat(band)) * 12))
                         x += 8
                     }
                     cg.strokePath()

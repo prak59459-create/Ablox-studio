@@ -2,6 +2,7 @@ import Foundation
 import AudioToolbox
 #if canImport(UIKit)
 import UIKit
+import AbloxCore
 #endif
 
 /// Plays the sound and haptic for a `SoundCue`.

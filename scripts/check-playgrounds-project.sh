@@ -70,11 +70,20 @@ for manifest in "${manifests[@]}"; do
     echo "Checking ${manifest#"$repo_root"/}"
     scan "$manifest" "${manifest_rules[@]}"
 
-    # The app must stay a single executable target: Swift Playgrounds builds an
-    # App project as one module, and splitting it has broken loading before.
-    target_count=$(grep -cE '^\s*\.(executableTarget|target)\(' "$manifest" || true)
-    if [ "$target_count" -ne 1 ]; then
-        fail "expected exactly one target, found $target_count — Swift Playgrounds App projects are built as a single module"
+    # Two targets: the portable core as a library, and the app on top of it.
+    # Each compile job then holds one module's source rather than the whole
+    # app, which is what ran an older iPad out of memory (docs/ipad-build.md).
+    library_count=$(grep -cE '^\s*\.target\(' "$manifest" || true)
+    app_count=$(grep -cE '^\s*\.executableTarget\(' "$manifest" || true)
+    if [ "$library_count" -ne 1 ] || [ "$app_count" -ne 1 ]; then
+        fail "expected one .target (AbloxCore) and one .executableTarget, found $library_count and $app_count"
+    fi
+    if ! grep -A1 -E '^\s*\.target\(' "$manifest" | grep -q 'name: "AbloxCore"'; then
+        fail "the library target must be named AbloxCore — every file outside the core says \`import AbloxCore\`"
+    fi
+    product=$(grep -A1 -E '\.iOSApplication\(' "$manifest" | grep -oE 'name: "[^"]+"' | head -1 || true)
+    if [ -n "$product" ] && grep -A1 -E '^\s*\.(executableTarget|target)\(' "$manifest" | grep -qF "$product"; then
+        fail "a target has the app's own name ($product) — give the target a different one"
     fi
 
     if ! grep -q 'import AppleProductTypes' "$manifest"; then
@@ -87,11 +96,9 @@ done
 # The deployment target the manifest declares. Anything newer than this is a
 # compile error on device, not a graceful degradation.
 source_rules=(
-    # The app is one module named after its target (`AbloxApp` /
-    # `AbloxStudioApp`); the off-device test package compiles the same files as
-    # `AbloxCore`. Naming either one only works in one of the two builds.
-    '\b(AbloxCore|EditorCore)\.[A-Za-z_]'$'\t''module-qualified reference: on device these sources are one module with a different name, so this cannot resolve. Call the function unqualified, or write the expression out.'
-    '^[[:space:]]*import[[:space:]]+(AbloxCore|EditorCore)[[:space:]]*$'$'\t''there is no such module on device — the app is a single target. Delete the import.'
+    # The core is the module `AbloxCore` in both builds; EditorCore is only a
+    # folder inside it.
+    '\bEditorCore\.[A-Za-z_]'$'\t''EditorCore is a folder in the AbloxCore module, not a module of its own. Call it unqualified.'
 
     # iOS 18 API. Ablox deploys to iOS 17; see Engine/ProceduralMesh.swift.
     '\.generateCylinder\('$'\t''`MeshResource.generateCylinder(height:radius:)` is iOS 18+. Use `.abloxCylinder(height:radius:)`.'
@@ -101,10 +108,29 @@ source_rules=(
     '@Previewable\b'$'\t''`@Previewable` is iOS 18+.'
 )
 
+# Only for files in the core (Sources/AbloxCore, and Studio's Sources/EditorCore).
+core_rules=(
+    '^[[:space:]]*(@preconcurrency[[:space:]]+)?import[[:space:]]+AbloxCore\b'$'\t''these files are the AbloxCore module; a module cannot import itself.'
+    # Every compile job of a module loads whatever any of its files imports,
+    # so one SwiftUI import here would be paid by every core job — and the
+    # Linux tests could not build it at all.
+    '^[[:space:]]*(@preconcurrency[[:space:]]+)?import[[:space:]]+(SwiftUI|RealityKit|UIKit|Network|GameController|AVFoundation|AVFAudio|Combine|CoreGraphics|simd|CryptoKit|Security)\b'$'\t''the core imports Foundation alone (and Compression). Put glue to Apple frameworks in Engine/, like Engine/AppleBridging.swift.'
+)
+
 for root in "${source_roots[@]}"; do
     echo "Checking ${root#"$repo_root"/}"
     while IFS= read -r -d '' file; do
         scan "$file" "${source_rules[@]}"
+        case "${file#"$root"/}" in
+            AbloxCore/*|EditorCore/*)
+                scan "$file" "${core_rules[@]}"
+                ;;
+            *)
+                if ! grep -qE '^import AbloxCore$' "$file"; then
+                    fail "${file#"$repo_root"/}: missing \`import AbloxCore\` — the core is its own module, so without it none of its types are in scope"
+                fi
+                ;;
+        esac
     done < <(find "$root" -name '*.swift' -print0)
 done
 

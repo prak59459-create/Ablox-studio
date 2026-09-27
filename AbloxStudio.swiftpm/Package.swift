@@ -10,9 +10,10 @@
 // repository — run `scripts/sync-core.sh --check` to confirm they have not
 // drifted.
 //
-// Deliberately ONE target, matching the client. Swift Playgrounds App projects
-// are built as a single module; the off-device test package supplies the
-// module boundary instead, which is why no file in Sources/ imports AbloxCore.
+// Two targets, as in the client: AbloxCore (the mirrored core and Studio's own
+// EditorCore, one module, also built and tested off-device by the root
+// package) and the app. Every file outside those two folders says
+// `import AbloxCore`.
 
 import PackageDescription
 import AppleProductTypes
@@ -57,9 +58,24 @@ let package = Package(
         )
     ],
     targets: [
+        // Two modules rather than one, for the build on an iPad: each compile
+        // job then holds only its own module's source, with the other one read
+        // back as a small compiled summary. One module of this size had the
+        // compiler holding the whole editor in every job at once, which is
+        // what ran an older iPad out of memory and made a build take minutes.
+        //
+        // The library target's name must differ from the app product's;
+        // Swift Playgrounds refuses a target and a product that share one.
+        .target(
+            name: "AbloxCore",
+            path: "Sources",
+            sources: ["AbloxCore", "EditorCore"]
+        ),
         .executableTarget(
             name: "AbloxStudioApp",
-            path: "Sources"
+            dependencies: ["AbloxCore"],
+            path: "Sources",
+            exclude: ["AbloxCore", "EditorCore"]
         )
     ]
 )

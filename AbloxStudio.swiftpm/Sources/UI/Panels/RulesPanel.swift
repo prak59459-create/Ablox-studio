@@ -1,4 +1,5 @@
 import SwiftUI
+import AbloxCore
 
 /// Visual rule editor.
 ///
