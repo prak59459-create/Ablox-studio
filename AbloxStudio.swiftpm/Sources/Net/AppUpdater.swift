@@ -11,9 +11,13 @@ import AbloxCore
 /// Swift Playgrounds. After the new version starts, it says once what
 /// changed.
 ///
+/// With the project on this iPad chosen once, a new version can instead go
+/// straight into it, only the files that changed (`ProjectSync`), so Swift
+/// Playgrounds rebuilds those rather than the whole app.
+///
 /// The rules — what is newer, what a manifest may say, which files are the
-/// project — are in `AppUpdate.swift` in the core, where they are tested.
-/// This is the networking and the files.
+/// project — are in `AppUpdate.swift` and `ProjectSync.swift` in the core,
+/// where they are tested. This is the networking and the files.
 @MainActor
 public final class AppUpdater: ObservableObject {
 
@@ -49,6 +53,32 @@ public final class AppUpdater: ObservableObject {
         didSet { defaults.set(downloadsAutomatically, forKey: Keys.autoDownload) }
     }
 
+    /// Putting a new version straight into the project on this iPad.
+    public enum InPlace: Equatable {
+        case idle
+        case working
+        /// Files written and deleted; both 0 when it was already the same.
+        case done(written: Int, deleted: Int)
+        case failed(String)
+    }
+
+    @Published public private(set) var inPlace: InPlace = .idle
+    /// The project chosen in Files ("Ablox.swiftpm"), once there is one.
+    @Published public private(set) var linkedProject: String?
+    /// A branch to take versions from instead of the released ones, for
+    /// trying something before it is out. Empty: the released ones.
+    @Published public var followedBranch: String {
+        didSet { defaults.set(followedBranch, forKey: Keys.branch) }
+    }
+
+    /// Where versions come from: the release channel, or the followed
+    /// branch of the same repository.
+    public var channel: UpdateChannel {
+        let branch = followedBranch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !branch.isEmpty else { return release.channel }
+        return UpdateChannel(owner: release.channel.owner, repository: release.channel.repository, branch: branch)
+    }
+
     private let defaults: UserDefaults
     private var timer: AnyCancellable?
 
@@ -60,6 +90,9 @@ public final class AppUpdater: ObservableObject {
         static let skipped = "update.skipped"
         static let staged = "update.staged"
         static let lastRun = "update.lastRun"
+        static let project = "update.project"
+        static let projectInside = "update.projectInside"
+        static let branch = "update.branch"
     }
 
     public init(release: InstalledApp, defaults: UserDefaults = .standard) {
@@ -67,6 +100,10 @@ public final class AppUpdater: ObservableObject {
         self.defaults = defaults
         checksAutomatically = defaults.object(forKey: Keys.autoCheck) as? Bool ?? true
         downloadsAutomatically = defaults.object(forKey: Keys.autoDownload) as? Bool ?? true
+        followedBranch = defaults.string(forKey: Keys.branch) ?? ""
+        if defaults.data(forKey: Keys.project) != nil {
+            linkedProject = defaults.string(forKey: Keys.projectInside).flatMap { $0.isEmpty ? nil : $0 } ?? release.package
+        }
         if let seconds = defaults.object(forKey: Keys.lastChecked) as? Double {
             lastChecked = Date(timeIntervalSince1970: seconds)
         }
@@ -131,7 +168,7 @@ public final class AppUpdater: ObservableObject {
     // MARK: Checking
 
     public func check(userInitiated: Bool = true) async {
-        guard !isBusy, let url = release.channel.manifestURL else { return }
+        guard !isBusy, let url = channel.manifestURL else { return }
         let before = phase
         phase = .checking
         do {
@@ -168,41 +205,48 @@ public final class AppUpdater: ObservableObject {
     // MARK: Downloading
 
     public func download(automatic: Bool = false) async {
-        guard let manifest = latest, let url = release.channel.archiveURL,
-              phase != .downloading, phase != .unpacking else { return }
+        guard let manifest = latest, phase != .downloading, phase != .unpacking else { return }
         phase = .downloading
         do {
-            var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 180)
-            if automatic {
-                // Not on a phone's data plan or in Low Data Mode without asking.
-                request.allowsExpensiveNetworkAccess = false
-                request.allowsConstrainedNetworkAccess = false
-            }
-            let (file, response) = try await URLSession.shared.download(for: request)
-            defer { try? FileManager.default.removeItem(at: file) }
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw Failure.server }
-            let size = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? Int) ?? 0
-            guard size <= UpdatePackage.Limits.maximumBytes else { throw Failure.tooLarge }
-            let data = try Data(contentsOf: file)
-
+            let data = try await fetchArchive(automatic: automatic)
             phase = .unpacking
-            let folder = stagingFolder(for: manifest)
-            let package = release.package
-            // Unzipping a few megabytes is real work: off the main thread.
-            let staged = try await Task.detached(priority: .userInitiated) { () throws -> URL in
-                let archive = try ZipArchive(data)
-                let project = try UpdatePackage(archive: archive, package: package)
-                try? FileManager.default.removeItem(at: folder.deletingLastPathComponent())
-                try FileManager.default.createDirectory(at: folder.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try project.write(into: folder.deletingLastPathComponent())
-                return folder
-            }.value
-            stagedPackage = staged
+            stagedPackage = try await unpack(data, into: stagingFolder(for: manifest))
             defaults.set(Self.label(manifest), forKey: Keys.staged)
             phase = .ready
         } catch {
             phase = automatic ? .available : .failed(Self.message(for: error))
         }
+    }
+
+    /// The repository as a zip, checked for size.
+    private func fetchArchive(automatic: Bool) async throws -> Data {
+        guard let url = channel.archiveURL else { throw Failure.server }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 180)
+        if automatic {
+            // Not on a phone's data plan or in Low Data Mode without asking.
+            request.allowsExpensiveNetworkAccess = false
+            request.allowsConstrainedNetworkAccess = false
+        }
+        let (file, response) = try await URLSession.shared.download(for: request)
+        defer { try? FileManager.default.removeItem(at: file) }
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw Failure.server }
+        let size = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? Int) ?? 0
+        guard size <= UpdatePackage.Limits.maximumBytes else { throw Failure.tooLarge }
+        return try Data(contentsOf: file)
+    }
+
+    /// The project folder out of the zip, checked, written to `folder`.
+    private func unpack(_ data: Data, into folder: URL) async throws -> URL {
+        let package = release.package
+        // Unzipping a few megabytes is real work: off the main thread.
+        return try await Task.detached(priority: .userInitiated) { () throws -> URL in
+            let archive = try ZipArchive(data)
+            let project = try UpdatePackage(archive: archive, package: package)
+            try? FileManager.default.removeItem(at: folder.deletingLastPathComponent())
+            try FileManager.default.createDirectory(at: folder.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try project.write(into: folder.deletingLastPathComponent())
+            return folder
+        }.value
     }
 
     /// Caches/Update/<version>/<Package>.swiftpm — the folder name has to be
@@ -216,6 +260,181 @@ public final class AppUpdater: ObservableObject {
 
     private static func label(_ manifest: UpdateManifest) -> String {
         "\(manifest.version)-\(manifest.build)"
+    }
+
+    // MARK: Straight into the project on this iPad
+
+    /// Remembers the project chosen in Files: its folder, or the
+    /// Playgrounds folder it is in. Returns what was wrong, if anything.
+    public func linkProject(at picked: URL) -> String? {
+        let access = picked.startAccessingSecurityScopedResource()
+        defer { if access { picked.stopAccessingSecurityScopedResource() } }
+        let manager = FileManager.default
+        var inside = ""
+        if !manager.fileExists(atPath: picked.appendingPathComponent(ProjectSync.manifest).path) {
+            let child = picked.appendingPathComponent(release.package, isDirectory: true)
+            guard manager.fileExists(atPath: child.appendingPathComponent(ProjectSync.manifest).path) else {
+                return L("That is not the project. In Files, choose {} in the Playgrounds folder.", release.package)
+            }
+            inside = release.package
+        }
+        let project = inside.isEmpty ? picked : picked.appendingPathComponent(inside, isDirectory: true)
+        if let manifest = try? String(contentsOf: project.appendingPathComponent(ProjectSync.manifest), encoding: .utf8),
+           let staged = stagedPackage.flatMap({ try? String(contentsOf: $0.appendingPathComponent(ProjectSync.manifest), encoding: .utf8) }),
+           ProjectSync.bundleIdentifier(inManifest: manifest) != ProjectSync.bundleIdentifier(inManifest: staged) {
+            return L("That project is a different app. Choose {} in the Playgrounds folder.", release.package)
+        }
+        guard let bookmark = try? picked.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) else {
+            return L("That folder could not be remembered. Choose it again.")
+        }
+        defaults.set(bookmark, forKey: Keys.project)
+        defaults.set(inside, forKey: Keys.projectInside)
+        linkedProject = project.lastPathComponent
+        inPlace = .idle
+        return nil
+    }
+
+    public func unlinkProject() {
+        defaults.removeObject(forKey: Keys.project)
+        defaults.removeObject(forKey: Keys.projectInside)
+        linkedProject = nil
+        inPlace = .idle
+    }
+
+    /// Writes the downloaded version into the project on this iPad, only
+    /// the files that changed.
+    public func installInPlace() async {
+        guard let staged = stagedPackage else { return }
+        await putInPlace(staged)
+    }
+
+    /// The followed branch (or the released version) as it is right now,
+    /// straight into the project, whatever its version number says: for
+    /// trying something before it is released.
+    public func pullLatest() async {
+        guard linkedProject != nil, inPlace != .working else { return }
+        inPlace = .working
+        do {
+            let data = try await fetchArchive(automatic: false)
+            let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory
+            let folder = caches.appendingPathComponent("Update", isDirectory: true)
+                .appendingPathComponent("latest", isDirectory: true)
+                .appendingPathComponent(release.package, isDirectory: true)
+            let staged = try await unpack(data, into: folder)
+            await putInPlace(staged, alreadyWorking: true)
+        } catch {
+            inPlace = .failed(Self.message(for: error))
+        }
+    }
+
+    private func putInPlace(_ staged: URL, alreadyWorking: Bool = false) async {
+        guard alreadyWorking || inPlace != .working else { return }
+        guard let data = defaults.data(forKey: Keys.project) else {
+            inPlace = .failed(L("Choose the project first."))
+            return
+        }
+        inPlace = .working
+        var stale = false
+        guard let scope = try? URL(resolvingBookmarkData: data, options: [], relativeTo: nil, bookmarkDataIsStale: &stale) else {
+            inPlace = .failed(L("The project could not be found. Choose it again."))
+            return
+        }
+        let inside = defaults.string(forKey: Keys.projectInside) ?? ""
+        let project = inside.isEmpty ? scope : scope.appendingPathComponent(inside, isDirectory: true)
+        let outcome: Result<ProjectSync.Plan, Error> = await Task.detached(priority: .userInitiated) {
+            let access = scope.startAccessingSecurityScopedResource()
+            defer { if access { scope.stopAccessingSecurityScopedResource() } }
+            return Result { try Self.sync(from: staged, into: project) }
+        }.value
+        if stale, scope.startAccessingSecurityScopedResource() {
+            if let fresh = try? scope.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) {
+                defaults.set(fresh, forKey: Keys.project)
+            }
+            scope.stopAccessingSecurityScopedResource()
+        }
+        switch outcome {
+        case let .success(plan):
+            inPlace = .done(written: plan.writes.count, deleted: plan.deletions.count)
+        case let .failure(error):
+            inPlace = .failed(inPlaceMessage(for: error))
+        }
+    }
+
+    /// Reads both projects, works out the difference and writes it, all
+    /// under file coordination: Swift Playgrounds sees the change the way
+    /// it sees one arriving from iCloud.
+    nonisolated private static func sync(from staged: URL, into project: URL) throws -> ProjectSync.Plan {
+        let new = try files(in: staged)
+        var coordination: NSError?
+        var outcome: Result<ProjectSync.Plan, Error> = .failure(ProjectSync.Problem.notAProject)
+        NSFileCoordinator().coordinate(writingItemAt: project, options: [], error: &coordination) { folder in
+            outcome = Result {
+                let plan = try ProjectSync.plan(new: new, current: try files(in: folder))
+                let manager = FileManager.default
+                for (path, bytes) in plan.writes {
+                    let url = folder.appendingPathComponent(path)
+                    try manager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try Data(bytes).write(to: url, options: .atomic)
+                }
+                for path in plan.deletions {
+                    try? manager.removeItem(at: folder.appendingPathComponent(path))
+                    removeEmptyFolders(above: path, in: folder)
+                }
+                return plan
+            }
+        }
+        if let coordination { throw coordination }
+        return try outcome.get()
+    }
+
+    /// `Package.swift` and every file under `Sources/`, as path → bytes.
+    /// A file that cannot be read is left out, so it is written again.
+    nonisolated private static func files(in package: URL) throws -> [String: [UInt8]] {
+        let manager = FileManager.default
+        var result: [String: [UInt8]] = [:]
+        if let data = manager.contents(atPath: package.appendingPathComponent(ProjectSync.manifest).path) {
+            result[ProjectSync.manifest] = [UInt8](data)
+        }
+        let sources = package.appendingPathComponent("Sources", isDirectory: true)
+        let base = sources.resolvingSymlinksInPath().pathComponents
+        guard let walker = manager.enumerator(at: sources, includingPropertiesForKeys: [.isRegularFileKey],
+                                              options: [.skipsHiddenFiles]) else { return result }
+        for case let url as URL in walker {
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
+            let parts = url.resolvingSymlinksInPath().pathComponents
+            guard parts.count > base.count, Array(parts.prefix(base.count)) == base else { continue }
+            guard result.count < UpdatePackage.Limits.maximumFiles else { throw UpdatePackage.Problem.tooLarge }
+            let path = (["Sources"] + parts.dropFirst(base.count)).joined(separator: "/")
+            if let data = manager.contents(atPath: url.path) { result[path] = [UInt8](data) }
+        }
+        return result
+    }
+
+    /// After a deletion, the folders it leaves empty, up to `Sources`.
+    nonisolated private static func removeEmptyFolders(above path: String, in package: URL) {
+        let manager = FileManager.default
+        var folder = (path as NSString).deletingLastPathComponent
+        while folder.hasPrefix("Sources/") {
+            let url = package.appendingPathComponent(folder, isDirectory: true)
+            guard let contents = try? manager.contentsOfDirectory(atPath: url.path),
+                  contents.allSatisfy({ $0 == ".DS_Store" }) else { return }
+            try? manager.removeItem(at: url)
+            folder = (folder as NSString).deletingLastPathComponent
+        }
+    }
+
+    private func inPlaceMessage(for error: Error) -> String {
+        switch error as? ProjectSync.Problem {
+        case .notAProject?:
+            return L("The chosen folder is not the project any more. Choose it again.")
+        case .otherApp?:
+            return L("That project is a different app. Choose {} in the Playgrounds folder.", release.package)
+        case nil:
+            if (error as NSError).domain == NSCocoaErrorDomain {
+                return L("The project's folder could not be written to. Choose it again in Files.")
+            }
+            return Self.message(for: error)
+        }
     }
 
     // MARK: After updating

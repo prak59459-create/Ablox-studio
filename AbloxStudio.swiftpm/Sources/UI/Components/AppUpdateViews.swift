@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import AbloxCore
 
 // What the player sees of `AppUpdater`: a banner in the menu when a new
@@ -92,6 +93,8 @@ public struct UpdateBanner: View {
 public struct UpdateSettingsCard: View {
     @ObservedObject private var updater: AppUpdater
     private let install: () -> Void
+    @State private var choosingProject = false
+    @State private var linkProblem: String?
 
     public init(updater: AppUpdater, install: @escaping () -> Void) {
         self.updater = updater
@@ -156,6 +159,10 @@ public struct UpdateSettingsCard: View {
 
                 Divider().background(Ablox.Palette.line)
 
+                inPlaceSection
+
+                Divider().background(Ablox.Palette.line)
+
                 Toggle(isOn: $updater.checksAutomatically) {
                     label(L("Look for updates by itself"), L("When the app opens, and every few hours while it is open."))
                 }
@@ -172,6 +179,45 @@ public struct UpdateSettingsCard: View {
                         .foregroundStyle(Ablox.Palette.inkFaint)
                 }
             }
+        }
+    }
+
+    /// Choosing the project on this iPad, so updates go straight into it.
+    private var inPlaceSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            label(L("Update the project already on this iPad"),
+                  L("Only the files that changed are written into it, so Swift Playgrounds builds just those. A version sent over as a new project is built whole, which takes much longer."))
+            ProjectLinkRow(updater: updater, problem: $linkProblem) { choosingProject = true }
+            InPlaceStatusLine(updater: updater)
+            DisclosureGroup {
+                VStack(alignment: .leading, spacing: 8) {
+                    AbloxTextField(L("Branch to follow (empty: released versions)"), text: $updater.followedBranch)
+                        .textFieldStyle(.plain)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .font(.callout.monospaced())
+                        .padding(10)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    Button { Task { await updater.pullLatest() } } label: {
+                        Label(L("Take the latest now"), systemImage: "arrow.down.to.line")
+                    }
+                    .buttonStyle(NeonButtonStyle(.primary))
+                    .disabled(updater.linkedProject == nil || updater.inPlace == .working)
+                    Text(L("Takes the project as it is on that branch right now, whatever its version number, and puts it straight into the chosen project."))
+                        .font(.caption2)
+                        .foregroundStyle(Ablox.Palette.inkFaint)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, 6)
+            } label: {
+                Text(L("For trying versions before they are out"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Ablox.Palette.inkMuted)
+            }
+            .tint(Ablox.Palette.accent)
+        }
+        .fileImporter(isPresented: $choosingProject, allowedContentTypes: ProjectLinkRow.types) { result in
+            if case let .success(url) = result { linkProblem = updater.linkProject(at: url) }
         }
     }
 
@@ -210,6 +256,8 @@ public struct UpdateInstallSheet: View {
     /// A backup of everything, made as the sheet opens.
     private let backup: URL?
     @Environment(\.dismiss) private var dismiss
+    @State private var choosingProject = false
+    @State private var linkProblem: String?
 
     public init(updater: AppUpdater, backup: URL?) {
         self.updater = updater
@@ -232,6 +280,11 @@ public struct UpdateInstallSheet: View {
                     }
                 }
 
+                inPlaceChoice
+
+                Text(L("Or as a new project:"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Ablox.Palette.inkMuted)
                 step(1, L("Tap the button below and choose Swift Playgrounds. (Not in the list? Choose “Save to Files” and put it in the Playgrounds folder.)"))
                 if let package = updater.stagedPackage {
                     ShareLink(item: package) {
@@ -261,6 +314,34 @@ public struct UpdateInstallSheet: View {
             .padding(28)
         }
         .presentationDetents([.large])
+        .fileImporter(isPresented: $choosingProject, allowedContentTypes: ProjectLinkRow.types) { result in
+            if case let .success(url) = result { linkProblem = updater.linkProject(at: url) }
+        }
+    }
+
+    /// The quick way: only the changed files, into the project already here.
+    private var inPlaceChoice: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if updater.linkedProject != nil {
+                Button { Task { await updater.installInPlace() } } label: {
+                    Label(L("Put it straight into {} on this iPad", updater.linkedProject ?? updater.release.package), systemImage: "bolt.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(NeonButtonStyle(.primary, fullWidth: true))
+                .disabled(updater.inPlace == .working)
+                Text(L("Only the files that changed are written, so the next build is quick. Then go back to Swift Playgrounds and press ▶︎."))
+                    .font(.caption)
+                    .foregroundStyle(Ablox.Palette.inkMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(L("Quicker: choose the project already on this iPad, and only the files that changed are written into it."))
+                    .font(.caption)
+                    .foregroundStyle(Ablox.Palette.inkMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ProjectLinkRow(updater: updater, problem: $linkProblem) { choosingProject = true }
+            InPlaceStatusLine(updater: updater)
+        }
     }
 
     private func step(_ number: Int, _ text: String) -> some View {
@@ -274,6 +355,86 @@ public struct UpdateInstallSheet: View {
                 .font(.subheadline)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+}
+
+/// Which project updates go into, and the button to choose it.
+struct ProjectLinkRow: View {
+    @ObservedObject var updater: AppUpdater
+    @Binding var problem: String?
+    let choose: () -> Void
+
+    /// A Swift Playgrounds project is a package (a folder shown as one
+    /// file); the Playgrounds folder around it will do too.
+    static var types: [UTType] {
+        [.folder, .package] + [UTType(filenameExtension: "swiftpm")].compactMap { $0 }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                if let project = updater.linkedProject {
+                    Label(project, systemImage: "folder.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Ablox.Palette.success)
+                    Spacer()
+                    Button(L("Choose again"), action: choose)
+                        .font(.caption.weight(.semibold))
+                    Button(L("Forget"), role: .destructive) { updater.unlinkProject() }
+                        .font(.caption.weight(.semibold))
+                } else {
+                    Button(action: choose) {
+                        Label(L("Choose the project in Files"), systemImage: "folder.badge.plus")
+                    }
+                    .buttonStyle(NeonButtonStyle(.secondary))
+                }
+            }
+            if updater.linkedProject == nil {
+                Text(L("In Files, open the Playgrounds folder and choose {}.", updater.release.package))
+                    .font(.caption2)
+                    .foregroundStyle(Ablox.Palette.inkFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let problem {
+                Label(problem, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(Ablox.Palette.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+/// How putting a version straight into the project went.
+struct InPlaceStatusLine: View {
+    @ObservedObject var updater: AppUpdater
+
+    var body: some View {
+        switch updater.inPlace {
+        case .idle:
+            EmptyView()
+        case .working:
+            Label(L("Writing the new files…"), systemImage: "hourglass")
+                .font(.caption)
+                .foregroundStyle(Ablox.Palette.inkMuted)
+        case let .done(written, deleted):
+            Label(doneText(written: written, deleted: deleted), systemImage: "checkmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(Ablox.Palette.success)
+                .fixedSize(horizontal: false, vertical: true)
+        case let .failed(message):
+            Label(message, systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundStyle(Ablox.Palette.warning)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func doneText(written: Int, deleted: Int) -> String {
+        if written == 0 && deleted == 0 {
+            return L("The project is already this version.")
+        }
+        return L("{} files updated, {} removed. Go back to Swift Playgrounds and press ▶︎: only these are built again.", written, deleted)
     }
 }
 
