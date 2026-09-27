@@ -54,6 +54,7 @@ MIRRORED_FILES=(
   "Sources/UI/Components/AbloxKeyboard.swift:Sources/UI/Components/AbloxKeyboard.swift"
   "Sources/UI/Components/CodeEditing.swift:Sources/UI/Components/CodeEditing.swift"
   "Sources/UI/Components/ProblemReports.swift:Sources/UI/Components/ProblemReports.swift"
+  "Sources/UI/Components/PresentationQueue.swift:Sources/UI/Components/PresentationQueue.swift"
 )
 
 if [[ ! -d "$UPSTREAM_APP" ]]; then

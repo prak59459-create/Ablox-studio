@@ -9,6 +9,8 @@ struct ProjectBrowserView: View {
     @EnvironmentObject private var updater: AppUpdater
 
     @State private var openSession: StudioSession?
+    /// An editor on its way in, waiting for a sheet to finish leaving.
+    @State private var presenting = false
     @State private var isCreating = false
     @State private var newName = ""
     @AppStorage(KeyboardPreference.key) private var usesAbloxKeyboard = false
@@ -68,12 +70,13 @@ struct ProjectBrowserView: View {
                 // Straight into the editor: the point of generating a level is
                 // to look at it, and a world that lands silently in a list is
                 // a world nobody opens.
-                openSession = StudioSession(
+                isAsking = false
+                present(StudioSession(
                     world: world,
                     store: store,
                     localPeerID: settings.peerID,
                     profile: settings.profile
-                )
+                ))
             }
         }
         .sheet(isPresented: $isBrowsingGames, onDismiss: openDownloadedGame) {
@@ -358,12 +361,24 @@ struct ProjectBrowserView: View {
 
     private func open(_ entry: ProjectStore.Entry) {
         guard let world = store.load(entry) else { return }
-        openSession = StudioSession(
+        present(StudioSession(
             world: world,
             store: store,
             localPeerID: settings.peerID,
             profile: settings.profile
-        )
+        ))
+    }
+
+    /// The editor covers the whole screen only when nothing else is up:
+    /// opened from a sheet still on its way out, it was refused or shown
+    /// inside that sheet. A second tap while waiting is ignored.
+    private func present(_ session: StudioSession) {
+        guard openSession == nil, !presenting else { return }
+        presenting = true
+        PresentationQueue.whenClear {
+            presenting = false
+            openSession = session
+        }
     }
 
     /// A published game becomes a project of its own: saved under a name
@@ -374,12 +389,12 @@ struct ProjectBrowserView: View {
         downloadedGame = nil
         world.name = store.uniqueName(basedOn: world.name)
         guard store.save(world) else { return }
-        openSession = StudioSession(
+        present(StudioSession(
             world: world,
             store: store,
             localPeerID: settings.peerID,
             profile: settings.profile
-        )
+        ))
     }
 
     // MARK: Sheets
@@ -441,12 +456,12 @@ struct ProjectBrowserView: View {
                         author: settings.profile.displayName
                     )
                     isCreating = false
-                    openSession = StudioSession(
+                    present(StudioSession(
                         world: world,
                         store: store,
                         localPeerID: settings.peerID,
                         profile: settings.profile
-                    )
+                    ))
                 }
                 .buttonStyle(NeonButtonStyle(.primary, fullWidth: true))
             }
@@ -511,7 +526,7 @@ struct ProjectBrowserView: View {
                 )
                 session.join(peer, code: joinCode)
                 joiningPeer = nil
-                openSession = session
+                present(session)
             }
             .buttonStyle(NeonButtonStyle(.primary, fullWidth: true))
             .disabled(!RoomCode.isPlausible(joinCode))
