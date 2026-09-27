@@ -102,21 +102,60 @@ public final class ProjectStore: ObservableObject {
     // MARK: Listing
 
     public func reload() {
+        // What each file said last time: an unchanged file is listed from
+        // here instead of being read in full, which is most of the time it
+        // takes the app to open with many worlds.
+        let previous = listCache
+        var fresh = WorldListCache()
         do {
             let urls = try fileManager.contentsOfDirectory(
                 at: directory,
-                includingPropertiesForKeys: [.contentModificationDateKey],
+                includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
                 options: [.skipsHiddenFiles]
             ).filter { $0.pathExtension == Self.fileExtension }
 
-            entries = urls.compactMap(entry(for:)).sorted { $0.modifiedAt > $1.modifiedAt }
+            entries = urls.compactMap { url -> Entry? in
+                let name = url.lastPathComponent
+                let (size, modified) = Self.stamp(of: url)
+                if let item = previous.item(named: name, byteCount: size, fileModified: modified) {
+                    fresh.items[name] = item
+                    return Entry(id: item.id, name: item.name, authorName: item.authorName,
+                                 modifiedAt: Date(timeIntervalSince1970: item.modifiedAt), blockCount: item.blockCount, url: url)
+                }
+                guard let entry = entry(for: url) else { return nil }
+                fresh.items[name] = WorldListCache.Item(byteCount: size, fileModified: modified, id: entry.id, name: entry.name,
+                                                        authorName: entry.authorName,
+                                                        modifiedAt: entry.modifiedAt.timeIntervalSince1970, blockCount: entry.blockCount)
+                return entry
+            }
+            .sorted { $0.modifiedAt > $1.modifiedAt }
             lastError = nil
         } catch {
             entries = []
             lastError = "Could not read saved worlds: \(error.localizedDescription)"
         }
-        deleted = deletedEntries()
+        deleted = deletedEntries(previous: previous, into: &fresh)
+        if fresh != previous {
+            listCache = fresh
+            if let data = fresh.encoded() { try? data.write(to: listCacheURL, options: .atomic) }
+        }
         forgetShelfOfMissingWorlds()
+    }
+
+    // MARK: The list cache
+
+    private lazy var listCache: WorldListCache = {
+        (try? Data(contentsOf: listCacheURL)).map(WorldListCache.decoded(from:)) ?? WorldListCache()
+    }()
+
+    /// Hidden, so the listing above never mistakes it for a world.
+    private var listCacheURL: URL { directory.appendingPathComponent(".list-cache.json") }
+
+    /// A file's size and modification time, which together say whether it
+    /// has changed since it was last read.
+    private static func stamp(of url: URL) -> (Int, Double) {
+        let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+        return (values?.fileSize ?? -1, values?.contentModificationDate?.timeIntervalSince1970 ?? 0)
     }
 
     /// Reads just enough of a world file to list it.
@@ -211,14 +250,30 @@ public final class ProjectStore: ObservableObject {
     // MARK: Recently deleted
 
     private func deletedEntries() -> [DeletedEntry] {
-        let urls = (try? fileManager.contentsOfDirectory(at: trashDirectory, includingPropertiesForKeys: [.contentModificationDateKey],
+        var scratch = WorldListCache()
+        return deletedEntries(previous: listCache, into: &scratch)
+    }
+
+    private func deletedEntries(previous: WorldListCache, into fresh: inout WorldListCache) -> [DeletedEntry] {
+        let urls = (try? fileManager.contentsOfDirectory(at: trashDirectory, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
                                                          options: [.skipsHiddenFiles])) ?? []
-        return urls.filter { $0.pathExtension == Self.fileExtension }.compactMap { url -> DeletedEntry? in
-            guard let data = try? Data(contentsOf: url), let world = try? WorldDocument.decoded(from: data) else { return nil }
-            let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? Date()
-            return DeletedEntry(id: world.id, name: world.name, deletedAt: date, blockCount: world.blocks.count, url: url)
+        var found: [DeletedEntry] = []
+        for url in urls where url.pathExtension == Self.fileExtension {
+            let key = "trash/" + url.lastPathComponent
+            let (size, modified) = Self.stamp(of: url)
+            let date = Date(timeIntervalSince1970: modified)
+            if let item = previous.item(named: key, byteCount: size, fileModified: modified) {
+                fresh.items[key] = item
+                found.append(DeletedEntry(id: item.id, name: item.name, deletedAt: date, blockCount: item.blockCount, url: url))
+                continue
+            }
+            guard let data = try? Data(contentsOf: url), let world = try? WorldDocument.decoded(from: data) else { continue }
+            fresh.items[key] = WorldListCache.Item(byteCount: size, fileModified: modified, id: world.id, name: world.name,
+                                                   authorName: world.authorName, modifiedAt: world.modifiedAt.timeIntervalSince1970,
+                                                   blockCount: world.blocks.count)
+            found.append(DeletedEntry(id: world.id, name: world.name, deletedAt: date, blockCount: world.blocks.count, url: url))
         }
-        .sorted { $0.deletedAt > $1.deletedAt }
+        return found.sorted { $0.deletedAt > $1.deletedAt }
     }
 
     /// Puts a deleted world back in the library.

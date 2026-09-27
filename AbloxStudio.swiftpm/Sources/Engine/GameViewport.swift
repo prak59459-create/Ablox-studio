@@ -107,8 +107,12 @@ public struct GameViewport: UIViewRepresentable {
         // Ablox draws its own selection affordances; RealityKit's debug
         // options and default gestures would fight them.
         view.renderOptions.insert(.disableMotionBlur)
+        // Before any part is built: dangers and goals marked, or not, for
+        // this whole game.
+        BlockEntityFactory.marksMeaning = preferences.markMeaning
 
         context.coordinator.attach(to: view)
+        context.coordinator.applyColourVision(preferences.colourVision)
 
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         view.addGestureRecognizer(tap)
@@ -266,6 +270,7 @@ public struct GameViewport: UIViewRepresentable {
 
             let sky = Atmosphere(parent: worldScene.anchor)
             sky.attach(to: view)
+            sky.setColourVision(preferences.colourVision)
             atmosphere = sky
             particles = ParticleField(parent: worldScene.anchor)
             let waypoint = WaypointOverlay(frame: view.bounds)
@@ -303,6 +308,11 @@ public struct GameViewport: UIViewRepresentable {
             case .strong: feedback.hapticIntensity = 1
             }
             if batteryChanged { powerClock = 5 }
+            applyColourVision(preferences.colourVision)
+        }
+
+        func applyColourVision(_ vision: ColourVision) {
+            atmosphere?.setColourVision(vision)
         }
 
         func detach() {

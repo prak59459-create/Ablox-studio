@@ -105,6 +105,11 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
     public var showClock = false
     /// Characters' lines in a game read aloud by the iPad.
     public var readLinesAloud = false
+    /// The game's picture shifted for colour vision that differs.
+    public var colourVision: ColourVision = .off
+    /// Stripes on dangers and checks on goals, so no part's job is told by
+    /// its colour alone.
+    public var markMeaning = false
 
     public struct PointOffset: Codable, Hashable, Sendable {
         public var x: Double = 0
@@ -142,6 +147,8 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
         showMap = try c.decodeIfPresent(Bool.self, forKey: .showMap) ?? d.showMap
         showClock = try c.decodeIfPresent(Bool.self, forKey: .showClock) ?? d.showClock
         readLinesAloud = try c.decodeIfPresent(Bool.self, forKey: .readLinesAloud) ?? d.readLinesAloud
+        colourVision = (try? c.decodeIfPresent(ColourVision.self, forKey: .colourVision)) ?? d.colourVision
+        markMeaning = (try? c.decodeIfPresent(Bool.self, forKey: .markMeaning)) ?? d.markMeaning
         clamp()
     }
 

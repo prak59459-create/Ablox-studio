@@ -72,6 +72,21 @@ public final class GameLibrary: ObservableObject {
 
     // MARK: Refresh
 
+    /// When each list was last fetched in this run of the app. The Games tab
+    /// makes a new library each time it opens; asking GitHub again every
+    /// time was the slowest part of opening it.
+    private static var lastFetched: [String: Date] = [:]
+    public static let freshFor: TimeInterval = 10 * 60
+
+    /// Fetches the list unless it was fetched in the last few minutes (and
+    /// the saved copy is on screen). Pulling down always fetches.
+    public func refreshIfStale() async {
+        let key = source.repository + "@" + source.reference
+        if !listings.isEmpty, let last = Self.lastFetched[key], Date().timeIntervalSince(last) < Self.freshFor { return }
+        await refresh()
+        if status == .idle { Self.lastFetched[key] = Date() }
+    }
+
     public func refresh() async {
         guard let url = source.indexURL else {
             status = .failed(L("That catalogue address is not a GitHub repository."))

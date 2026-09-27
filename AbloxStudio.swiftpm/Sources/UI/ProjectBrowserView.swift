@@ -85,9 +85,13 @@ struct ProjectBrowserView: View {
         }
         .sheet(isPresented: $showingUpdates) {
             ScrollView {
-                UpdateSettingsCard(updater: updater) {
-                    showingUpdates = false
-                    installingUpdate = true
+                VStack(spacing: 18) {
+                    UpdateSettingsCard(updater: updater) {
+                        showingUpdates = false
+                        installingUpdate = true
+                    }
+                    // Errors and crashes, to copy and send.
+                    ProblemReportsCard()
                 }
                 .padding(24)
             }

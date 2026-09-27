@@ -153,7 +153,7 @@ public struct UpdateSettingsCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Divider().background(Color.white.opacity(0.08))
+                Divider().background(Ablox.Palette.line)
 
                 Toggle(isOn: $updater.checksAutomatically) {
                     label(L("Look for updates by itself"), L("When the app opens, and every few hours while it is open."))
@@ -243,7 +243,7 @@ public struct UpdateInstallSheet: View {
                 step(3, L("That's it. Your worlds, coins and saved games carry over. When the new one runs, you can delete the old one."))
 
                 if let backup {
-                    Divider().background(Color.white.opacity(0.08))
+                    Divider().background(Ablox.Palette.line)
                     Text(L("A backup of everything was made just now. Keep a copy in Files too, to be extra safe:"))
                         .font(.caption)
                         .foregroundStyle(Ablox.Palette.inkMuted)

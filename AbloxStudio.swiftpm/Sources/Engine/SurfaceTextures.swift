@@ -27,6 +27,54 @@ enum SurfaceTextures {
         return MaterialParameters.Texture.Sampler(descriptor)
     }
 
+    // MARK: Meaning marks
+
+    private static var marks: [MeaningMark: TextureResource] = [:]
+
+    /// Stripes for danger, checks for a goal: dark lines over white, so the
+    /// part's own colour still shows through the tint.
+    static func texture(for mark: MeaningMark) -> TextureResource? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = marks[mark] { return cached }
+        let size: CGFloat = 128
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let image = UIGraphicsImageRenderer(size: CGSize(width: size, height: size), format: format).image { context in
+            let cg = context.cgContext
+            cg.setFillColor(UIColor.white.cgColor)
+            cg.fill(CGRect(x: 0, y: 0, width: size, height: size))
+            cg.setFillColor(UIColor(white: 0.12, alpha: 1).cgColor)
+            switch mark {
+            case .danger:
+                // Two diagonal bands that meet at the edges, so the stripes
+                // run on unbroken from one tile into the next.
+                for start in stride(from: -size, to: size * 2, by: size / 2) {
+                    let path = CGMutablePath()
+                    path.move(to: CGPoint(x: start, y: 0))
+                    path.addLine(to: CGPoint(x: start + size / 4, y: 0))
+                    path.addLine(to: CGPoint(x: start + size / 4 - size, y: size))
+                    path.addLine(to: CGPoint(x: start - size, y: size))
+                    path.closeSubpath()
+                    cg.addPath(path)
+                }
+                cg.fillPath()
+            case .goal:
+                let cell = size / 4
+                for row in 0..<4 {
+                    for column in 0..<4 where (row + column) % 2 == 0 {
+                        cg.fill(CGRect(x: CGFloat(column) * cell, y: CGFloat(row) * cell, width: cell, height: cell))
+                    }
+                }
+            }
+        }
+        guard let cgImage = image.cgImage,
+              let texture = try? TextureResource.generate(from: cgImage, options: .init(semantic: .color)) else { return nil }
+        marks[mark] = texture
+        return texture
+    }
+
     // MARK: Material patterns
 
     static func texture(for pattern: SurfacePattern) -> TextureResource? {

@@ -5,22 +5,37 @@ import SwiftUI
 public enum Ablox {
 
     public enum Palette {
-        public static let accent = Color(red: 0.13, green: 0.83, blue: 0.93)     // cyan
-        public static let accentDeep = Color(red: 0.23, green: 0.51, blue: 0.96) // blue
+        /// The player's chosen colour (Settings → Look), cyan to begin with.
+        public static var accent: Color { AbloxAccent.current.color }
+        public static var accentDeep: Color { AbloxAccent.current.deep }
         public static let magenta = Color(red: 0.66, green: 0.33, blue: 0.97)
         public static let success = Color(red: 0.29, green: 0.87, blue: 0.50)
         public static let warning = Color(red: 1.00, green: 0.62, blue: 0.11)
         public static let danger = Color(red: 1.00, green: 0.35, blue: 0.37)
 
-        public static let ink = Color.white
-        public static let inkMuted = Color.white.opacity(0.62)
-        public static let inkFaint = Color.white.opacity(0.38)
+        // Text and lines follow light or dark mode.
+        public static let ink = dynamic(dark: UIColor.white, light: UIColor(red: 0.07, green: 0.08, blue: 0.13, alpha: 1))
+        public static let inkMuted = dynamic(dark: UIColor(white: 1, alpha: 0.62), light: UIColor(red: 0.07, green: 0.08, blue: 0.13, alpha: 0.68))
+        public static let inkFaint = dynamic(dark: UIColor(white: 1, alpha: 0.38), light: UIColor(red: 0.07, green: 0.08, blue: 0.13, alpha: 0.45))
+        /// Behind everything.
+        public static let background = dynamic(dark: UIColor(red: 0.03, green: 0.04, blue: 0.09, alpha: 1),
+                                               light: UIColor(red: 0.93, green: 0.95, blue: 0.98, alpha: 1))
+        /// Behind a sheet's contents.
+        public static let surface = dynamic(dark: UIColor(red: 0.05, green: 0.06, blue: 0.11, alpha: 1),
+                                            light: UIColor(red: 0.97, green: 0.98, blue: 1, alpha: 1))
+        /// Card edges and dividers.
+        public static let line = dynamic(dark: UIColor(white: 1, alpha: 0.09), light: UIColor(white: 0, alpha: 0.10))
+        public static let lineStrong = dynamic(dark: UIColor(white: 1, alpha: 0.18), light: UIColor(white: 0, alpha: 0.16))
+        /// A faint fill behind a row or a quiet button.
+        public static let wash = dynamic(dark: UIColor(white: 1, alpha: 0.06), light: UIColor(white: 0, alpha: 0.05))
 
-        public static let brand = LinearGradient(
-            colors: [accent, accentDeep],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        public static var brand: LinearGradient {
+            LinearGradient(colors: [accent, accentDeep], startPoint: .topLeading, endPoint: .bottomTrailing)
+        }
+
+        private static func dynamic(dark: UIColor, light: UIColor) -> Color {
+            Color(uiColor: UIColor { traits in traits.userInterfaceStyle == .light ? light : dark })
+        }
     }
 
     public enum Metrics {
@@ -32,6 +47,108 @@ public enum Ablox {
         /// aimed at children with imprecise aim, so controls go bigger where
         /// there is room.
         public static let minimumTapTarget: CGFloat = 44
+    }
+}
+
+// MARK: - Themes
+
+/// The colour buttons, highlights and the background glow are drawn in.
+public enum AbloxAccent: String, CaseIterable, Identifiable, Sendable {
+    case cyan, pink, lime, orange, violet
+
+    public var id: String { rawValue }
+    public static let key = "ablox.accent"
+
+    // A plain `static var` and a lock, like `Localization.language`.
+    private static let lock = NSLock()
+    private static var _current: AbloxAccent?
+
+    /// Read on every draw, so kept in memory after the first look.
+    public static var current: AbloxAccent {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            if let _current { return _current }
+            let stored = AbloxAccent(rawValue: UserDefaults.standard.string(forKey: key) ?? "") ?? .cyan
+            _current = stored
+            return stored
+        }
+        set {
+            lock.lock()
+            _current = newValue
+            lock.unlock()
+            UserDefaults.standard.set(newValue.rawValue, forKey: key)
+        }
+    }
+
+    public var color: Color {
+        switch self {
+        case .cyan: return Color(red: 0.13, green: 0.83, blue: 0.93)
+        case .pink: return Color(red: 0.98, green: 0.45, blue: 0.71)
+        case .lime: return Color(red: 0.52, green: 0.86, blue: 0.25)
+        case .orange: return Color(red: 1.0, green: 0.62, blue: 0.2)
+        case .violet: return Color(red: 0.65, green: 0.52, blue: 1.0)
+        }
+    }
+
+    public var deep: Color {
+        switch self {
+        case .cyan: return Color(red: 0.23, green: 0.51, blue: 0.96)
+        case .pink: return Color(red: 0.86, green: 0.25, blue: 0.62)
+        case .lime: return Color(red: 0.13, green: 0.64, blue: 0.4)
+        case .orange: return Color(red: 0.93, green: 0.35, blue: 0.2)
+        case .violet: return Color(red: 0.45, green: 0.3, blue: 0.93)
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .cyan: return L("Cyan")
+        case .pink: return L("Pink")
+        case .lime: return L("Lime")
+        case .orange: return L("Orange")
+        case .violet: return L("Violet")
+        }
+    }
+}
+
+/// Dark, light, or whatever the iPad is set to.
+public enum AbloxAppearance: String, CaseIterable, Identifiable, Sendable {
+    case dark, light, system
+
+    public var id: String { rawValue }
+    public static let key = "ablox.appearance"
+
+    public var colorScheme: ColorScheme? {
+        switch self {
+        case .dark: return .dark
+        case .light: return .light
+        case .system: return nil
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .dark: return L("Dark")
+        case .light: return L("Light")
+        case .system: return L("Match the iPad")
+        }
+    }
+}
+
+private struct AbloxColorSchemeModifier: ViewModifier {
+    @AppStorage(AbloxAppearance.key) private var appearance = AbloxAppearance.dark.rawValue
+
+    func body(content: Content) -> some View {
+        content.preferredColorScheme((AbloxAppearance(rawValue: appearance) ?? .dark).colorScheme)
+    }
+}
+
+public extension View {
+    /// Dark or light, as chosen in Settings → Look. The game itself is
+    /// always dark.
+    func abloxColorScheme() -> some View {
+        modifier(AbloxColorSchemeModifier())
     }
 }
 
@@ -72,7 +189,7 @@ public struct DynamicBackgroundView: View {
 
     public var body: some View {
         ZStack {
-            Color(red: 0.03, green: 0.04, blue: 0.09).ignoresSafeArea()
+            Ablox.Palette.background.ignoresSafeArea()
 
             Circle()
                 .fill(Ablox.Palette.magenta.opacity(0.30))
@@ -119,7 +236,7 @@ public struct GlassCard<Content: View>: View {
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Ablox.Metrics.cardRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: Ablox.Metrics.cardRadius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.09), lineWidth: 1)
+                    .strokeBorder(Ablox.Palette.line, lineWidth: 1)
             )
     }
 }
@@ -160,7 +277,7 @@ public struct NeonButtonStyle: ButtonStyle {
     @ViewBuilder private var background: some View {
         switch prominence {
         case .primary: Ablox.Palette.brand
-        case .secondary: Color.white.opacity(0.06)
+        case .secondary: Ablox.Palette.wash
         case .destructive: Ablox.Palette.danger
         }
     }
@@ -168,13 +285,13 @@ public struct NeonButtonStyle: ButtonStyle {
     private var foreground: Color {
         switch prominence {
         case .primary: return .black
-        case .secondary: return .white
+        case .secondary: return Ablox.Palette.ink
         case .destructive: return .white
         }
     }
 
     private var borderColor: Color {
-        prominence == .secondary ? Color.white.opacity(0.18) : .clear
+        prominence == .secondary ? Ablox.Palette.lineStrong : .clear
     }
 }
 
@@ -240,6 +357,7 @@ public struct SectionHeader: View {
             Text(title)
                 .font(.title3.weight(.bold))
                 .foregroundStyle(Ablox.Palette.ink)
+                .accessibilityAddTraits(.isHeader)
             Spacer()
             trailing
         }
@@ -300,7 +418,7 @@ public struct ColorSwatch: View {
                 .frame(width: size, height: size)
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(isSelected ? Color.white : Color.white.opacity(0.15), lineWidth: isSelected ? 2.5 : 1)
+                        .strokeBorder(isSelected ? Ablox.Palette.ink : Ablox.Palette.lineStrong, lineWidth: isSelected ? 2.5 : 1)
                 )
                 .overlay(
                     Image(systemName: "checkmark")
@@ -312,7 +430,7 @@ public struct ColorSwatch: View {
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text(color.hexString))
+        .accessibilityLabel(Text(color.spokenName))
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
 }

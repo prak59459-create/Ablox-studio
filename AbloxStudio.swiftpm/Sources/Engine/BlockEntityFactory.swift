@@ -82,9 +82,26 @@ public enum BlockEntityFactory {
         /// How many times a pattern repeats across the block.
         var tiles: UInt8
         var picture: UUID?
+        var mark: MeaningMark?
     }
 
     private static var materialCache: [MaterialKey: RealityKit.Material] = [:]
+
+    private static var _marksMeaning = false
+    /// Settings → Colour vision: dangers striped and goals checked, for parts
+    /// built from now on.
+    public static var marksMeaning: Bool {
+        get {
+            cacheLock.lock()
+            defer { cacheLock.unlock() }
+            return _marksMeaning
+        }
+        set {
+            cacheLock.lock()
+            _marksMeaning = newValue
+            cacheLock.unlock()
+        }
+    }
 
     public static func material(for block: BlockData, picture: WorldImage? = nil) -> RealityKit.Material {
         let alpha = block.color.a * block.material.alphaScale
@@ -92,9 +109,12 @@ public enum BlockEntityFactory {
         // A pattern repeats about every two metres, so a long wall has many
         // bricks rather than a few stretched ones.
         let span = max(block.scale.x, block.scale.z, block.scale.y * 0.5)
-        let tiles = block.material.pattern == .none ? 1 : UInt8(max(1, min(24, (span.isFinite ? span : 1) / 2)).rounded())
+        // Read before the cache lock: `marksMeaning` takes the same lock.
+        let mark = picture == nil && marksMeaning ? MeaningMark.mark(for: block.behavior) : nil
+        let tiles = block.material.pattern == .none && mark == nil
+            ? 1 : UInt8(max(1, min(24, (span.isFinite ? span : 1) / 2)).rounded())
         let key = MaterialKey(r: byte(block.color.r), g: byte(block.color.g), b: byte(block.color.b), a: byte(alpha),
-                              kind: block.material, tiles: tiles, picture: picture?.id)
+                              kind: block.material, tiles: tiles, picture: picture?.id, mark: mark)
 
         cacheLock.lock()
         defer { cacheLock.unlock() }
@@ -114,6 +134,20 @@ public enum BlockEntityFactory {
             material.baseColor = .init(tint: .white, texture: .init(texture))
             material.roughness = .init(floatLiteral: 0.7)
             material.metallic = .init(floatLiteral: 0)
+            if alpha < 0.999 { material.blending = .transparent(opacity: .init(floatLiteral: alpha)) }
+            made = material
+        } else if let mark, let texture = SurfaceTextures.texture(for: mark) {
+            // What the part does, drawn on it, whatever it is made of.
+            var material = PhysicallyBasedMaterial()
+            material.baseColor = .init(tint: tint.withAlphaComponent(1),
+                                       texture: .init(texture, sampler: SurfaceTextures.repeatingSampler))
+            material.roughness = .init(floatLiteral: block.material.roughness)
+            material.metallic = .init(floatLiteral: 0)
+            if block.material.isUnlit {
+                material.emissiveColor = .init(color: tint.withAlphaComponent(1), texture: .init(texture, sampler: SurfaceTextures.repeatingSampler))
+                material.emissiveIntensity = 0.6
+            }
+            material.textureCoordinateTransform = .init(offset: .zero, scale: SIMD2<Float>(repeating: Float(tiles)), rotation: 0)
             if alpha < 0.999 { material.blending = .transparent(opacity: .init(floatLiteral: alpha)) }
             made = material
         } else if !block.material.isUnlit, block.material.pattern != .none,

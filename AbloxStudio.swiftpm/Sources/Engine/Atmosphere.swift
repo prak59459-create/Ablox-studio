@@ -32,6 +32,7 @@ final class Atmosphere {
     private var lightningIn: Float = 9
     private let post = PostEffect()
     private var appliedEffect: ScreenEffect = .none
+    private var appliedVision: ColourVision = .off
 
     init(parent: Entity) {
         dome = ModelEntity(mesh: ProceduralMesh.skyDome, materials: [UnlitMaterial(color: .black)])
@@ -131,12 +132,26 @@ final class Atmosphere {
         return Light(pitch: pitch, yaw: yaw, brightness: brightness, skyBottom: bottom)
     }
 
+    /// Settings → Colour vision, drawn over whatever the world looks like.
+    func setColourVision(_ vision: ColourVision) {
+        guard vision != appliedVision else { return }
+        appliedVision = vision
+        post.colourMatrix = vision.matrix
+        installPostProcess()
+    }
+
     /// The world's screen look, drawn by Core Image after each frame.
     private func setEffect(_ effect: ScreenEffect) {
-        guard effect != appliedEffect, let view else { return }
+        guard effect != appliedEffect else { return }
         appliedEffect = effect
         post.effect = effect
-        if effect == .none {
+        installPostProcess()
+    }
+
+    /// Core Image only runs when there is something for it to do.
+    private func installPostProcess() {
+        guard let view else { return }
+        if appliedEffect == .none && appliedVision == .off {
             view.renderCallbacks.postProcess = nil
         } else {
             let post = self.post
@@ -151,18 +166,34 @@ final class PostEffect: @unchecked Sendable {
     private let lock = NSLock()
     private var context: CIContext?
     private var _effect: ScreenEffect = .none
+    private var _colourMatrix: [Float]?
 
     var effect: ScreenEffect {
         get { lock.withLock { _effect } }
         set { lock.withLock { _effect = newValue } }
     }
 
+    /// Three rows of three for colour vision, or nil.
+    var colourMatrix: [Float]? {
+        get { lock.withLock { _colourMatrix } }
+        set { lock.withLock { _colourMatrix = newValue } }
+    }
+
     func process(_ frame: ARView.PostProcessContext) {
-        let (effect, existing) = lock.withLock { (_effect, context) }
+        let (effect, matrix, existing) = lock.withLock { (_effect, _colourMatrix, context) }
         let ciContext = existing ?? CIContext(mtlDevice: frame.device)
         if existing == nil { lock.withLock { context = ciContext } }
         guard let input = CIImage(mtlTexture: frame.sourceColorTexture) else { return }
-        let output = Self.filtered(input, effect).cropped(to: input.extent)
+        var picture = Self.filtered(input, effect)
+        if let m = matrix, m.count == 9 {
+            picture = CIFilter(name: "CIColorMatrix", parameters: [
+                kCIInputImageKey: picture,
+                "inputRVector": CIVector(x: CGFloat(m[0]), y: CGFloat(m[1]), z: CGFloat(m[2]), w: 0),
+                "inputGVector": CIVector(x: CGFloat(m[3]), y: CGFloat(m[4]), z: CGFloat(m[5]), w: 0),
+                "inputBVector": CIVector(x: CGFloat(m[6]), y: CGFloat(m[7]), z: CGFloat(m[8]), w: 0)
+            ])?.outputImage ?? picture
+        }
+        let output = picture.cropped(to: input.extent)
         let destination = CIRenderDestination(mtlTexture: frame.targetColorTexture, commandBuffer: frame.commandBuffer)
         destination.isFlipped = false
         _ = try? ciContext.startTask(toRender: output, to: destination)

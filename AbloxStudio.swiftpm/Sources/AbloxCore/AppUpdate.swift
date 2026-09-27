@@ -216,6 +216,12 @@ public struct UpdateChannel: Equatable, Sendable {
         return URL(string: "https://raw.githubusercontent.com/\(owner)/\(repository)/\(branch)/update.json")
     }
 
+    /// `notices.json` beside it: messages for the main menu.
+    public var noticesURL: URL? {
+        guard isValid else { return nil }
+        return URL(string: "https://raw.githubusercontent.com/\(owner)/\(repository)/\(branch)/notices.json")
+    }
+
     /// The whole repository as a zip. GitHub redirects this to its archive
     /// server, and URLSession follows.
     public var archiveURL: URL? {
