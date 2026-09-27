@@ -225,95 +225,130 @@ enum SurfaceTextures {
     /// middle the horizon. Decorated by style; `night` (0 to 1) brings the
     /// stars out.
     static func sky(style: SkyStyle, top: ColorRGBA, bottom: ColorRGBA, night: Float) -> TextureResource? {
-        let width = 512
-        let height = 256
+        let size = CGSize(width: 512, height: 256)
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         format.opaque = true
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: format)
-        var random = SeededRandom(seed: 42)
-        func ui(_ color: ColorRGBA, alpha: CGFloat = 1) -> UIColor {
-            UIColor(red: CGFloat(color.r), green: CGFloat(color.g), blue: CGFloat(color.b), alpha: alpha)
-        }
-        let horizon = CGFloat(height) / 2
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
         let image = renderer.image { context in
-            let cg = context.cgContext
-            // Top colour overhead, bottom colour at the horizon and below.
-            let colors = [ui(top).cgColor, ui(bottom).cgColor, ui(bottom).cgColor] as CFArray
-            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 0.5, 1]) {
-                cg.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 0, y: CGFloat(height)), options: [])
-            }
-
-            let starAmount: Float
-            switch style {
-            case .space: starAmount = 1
-            case .stars: starAmount = max(0.55, night)
-            default: starAmount = night
-            }
-            if starAmount > 0.05 {
-                let count: Int = style == .space ? 900 : 420
-                let biggest: Double = style == .space ? 2.6 : 1.9
-                let lowest: Double = Double(horizon) * 0.96
-                for _ in 0..<count {
-                    let size = CGFloat(random.next(in: 0.6...biggest))
-                    let y = CGFloat(random.next(in: 0...lowest))
-                    let x = CGFloat(random.next(in: 0...Double(width)))
-                    let brightness = CGFloat(random.next(in: 0.35...1))
-                    cg.setFillColor(UIColor(white: 1, alpha: CGFloat(starAmount) * brightness).cgColor)
-                    cg.fillEllipse(in: CGRect(x: x, y: y, width: size, height: size))
-                }
-            }
-
-            switch style {
-            case .gradient, .stars:
-                break
-            case .clouds:
-                for _ in 0..<26 {
-                    let x = CGFloat(random.next(in: 0...Double(width)))
-                    let y = CGFloat(random.next(in: Double(horizon) * 0.35...Double(horizon) * 0.92))
-                    let w = CGFloat(random.next(in: 40...110))
-                    let alpha = CGFloat(0.55 * (1 - night * 0.6))
-                    cg.setFillColor(UIColor(white: 1, alpha: alpha).cgColor)
-                    for puff in 0..<4 {
-                        cg.fillEllipse(in: CGRect(x: x + CGFloat(puff) * w * 0.22, y: y - CGFloat(puff % 2) * 5,
-                                                  width: w * 0.5, height: w * 0.18))
-                    }
-                }
-            case .sunset:
-                let warm = [UIColor(red: 1, green: 0.55, blue: 0.25, alpha: 0).cgColor,
-                            UIColor(red: 1, green: 0.5, blue: 0.3, alpha: 0.75).cgColor,
-                            UIColor(red: 1, green: 0.82, blue: 0.45, alpha: 0.9).cgColor] as CFArray
-                if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: warm, locations: [0, 0.7, 1]) {
-                    cg.drawLinearGradient(gradient, start: CGPoint(x: 0, y: horizon * 0.45), end: CGPoint(x: 0, y: horizon), options: [])
-                }
-                cg.setFillColor(UIColor(red: 1, green: 0.9, blue: 0.6, alpha: 1).cgColor)
-                cg.fillEllipse(in: CGRect(x: 120, y: horizon - 26, width: 40, height: 40))
-            case .aurora:
-                for band in 0..<3 {
-                    let color = band == 1 ? UIColor(red: 0.6, green: 0.35, blue: 1, alpha: 0.35)
-                                          : UIColor(red: 0.3, green: 1, blue: 0.6, alpha: 0.4)
-                    cg.setStrokeColor(color.cgColor)
-                    cg.setLineWidth(CGFloat(14 - band * 3))
-                    let base = horizon * (0.35 + CGFloat(band) * 0.12)
-                    cg.move(to: CGPoint(x: 0, y: base))
-                    var x: CGFloat = 0
-                    while x <= CGFloat(width) {
-                        cg.addLine(to: CGPoint(x: x, y: base + wave(x, over: CGFloat(width), cycles: 6, shift: CGFloat(band)) * 12))
-                        x += 8
-                    }
-                    cg.strokePath()
-                }
-            case .space:
-                // A planet, low in the sky.
-                cg.setFillColor(UIColor(red: 0.55, green: 0.45, blue: 0.9, alpha: 1).cgColor)
-                cg.fillEllipse(in: CGRect(x: 300, y: horizon * 0.4, width: 60, height: 60))
-                cg.setStrokeColor(UIColor(red: 0.85, green: 0.8, blue: 1, alpha: 0.8).cgColor)
-                cg.setLineWidth(3)
-                cg.strokeEllipse(in: CGRect(x: 284, y: horizon * 0.4 + 24, width: 92, height: 14))
-            }
+            drawSky(in: context.cgContext, size: size, style: style, top: top, bottom: bottom, night: night)
         }
         guard let cgImage = image.cgImage else { return nil }
         return try? TextureResource.generate(from: cgImage, options: .init(semantic: .color))
+    }
+
+    // Each layer of the sky is its own function, so the compiler checks
+    // them one at a time; as one closure this was among the slowest things
+    // in the app to compile.
+    private static func drawSky(in cg: CGContext, size: CGSize, style: SkyStyle, top: ColorRGBA, bottom: ColorRGBA, night: Float) {
+        var random = SeededRandom(seed: 42)
+        let horizon: CGFloat = size.height / 2
+        // Top colour overhead, bottom colour at the horizon and below.
+        let colors = [skyColor(top).cgColor, skyColor(bottom).cgColor, skyColor(bottom).cgColor] as CFArray
+        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 0.5, 1]) {
+            cg.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 0, y: size.height), options: [])
+        }
+
+        let stars: Float
+        switch style {
+        case .space: stars = 1
+        case .stars: stars = max(0.55, night)
+        default: stars = night
+        }
+        if stars > 0.05 {
+            drawStars(in: cg, amount: stars, style: style, horizon: horizon, width: size.width, random: &random)
+        }
+
+        switch style {
+        case .gradient, .stars:
+            break
+        case .clouds:
+            drawClouds(in: cg, horizon: horizon, width: size.width, night: night, random: &random)
+        case .sunset:
+            drawSunset(in: cg, horizon: horizon)
+        case .aurora:
+            drawAurora(in: cg, horizon: horizon, width: size.width)
+        case .space:
+            drawPlanet(in: cg, horizon: horizon)
+        }
+    }
+
+    private static func skyColor(_ color: ColorRGBA) -> UIColor {
+        UIColor(red: CGFloat(color.r), green: CGFloat(color.g), blue: CGFloat(color.b), alpha: 1)
+    }
+
+    private static func drawStars(in cg: CGContext, amount: Float, style: SkyStyle, horizon: CGFloat, width: CGFloat, random: inout SeededRandom) {
+        let count: Int = style == .space ? 900 : 420
+        let biggest: Double = style == .space ? 2.6 : 1.9
+        let lowest: Double = Double(horizon) * 0.96
+        let widest: Double = Double(width)
+        let strength: CGFloat = CGFloat(amount)
+        for _ in 0..<count {
+            let size = CGFloat(random.next(in: 0.6...biggest))
+            let y = CGFloat(random.next(in: 0...lowest))
+            let x = CGFloat(random.next(in: 0...widest))
+            let brightness = CGFloat(random.next(in: 0.35...1))
+            cg.setFillColor(UIColor(white: 1, alpha: strength * brightness).cgColor)
+            cg.fillEllipse(in: CGRect(x: x, y: y, width: size, height: size))
+        }
+    }
+
+    private static func drawClouds(in cg: CGContext, horizon: CGFloat, width: CGFloat, night: Float, random: inout SeededRandom) {
+        let widest: Double = Double(width)
+        let low: Double = Double(horizon) * 0.35
+        let high: Double = Double(horizon) * 0.92
+        let fade: Float = 0.55 * (1 - night * 0.6)
+        let alpha = CGFloat(fade)
+        for _ in 0..<26 {
+            let x = CGFloat(random.next(in: 0...widest))
+            let y = CGFloat(random.next(in: low...high))
+            let w = CGFloat(random.next(in: 40...110))
+            cg.setFillColor(UIColor(white: 1, alpha: alpha).cgColor)
+            for puff in 0..<4 {
+                let along: CGFloat = x + CGFloat(puff) * w * 0.22
+                let lift: CGFloat = CGFloat(puff % 2) * 5
+                cg.fillEllipse(in: CGRect(x: along, y: y - lift, width: w * 0.5, height: w * 0.18))
+            }
+        }
+    }
+
+    private static func drawSunset(in cg: CGContext, horizon: CGFloat) {
+        let warm = [UIColor(red: 1, green: 0.55, blue: 0.25, alpha: 0).cgColor,
+                    UIColor(red: 1, green: 0.5, blue: 0.3, alpha: 0.75).cgColor,
+                    UIColor(red: 1, green: 0.82, blue: 0.45, alpha: 0.9).cgColor] as CFArray
+        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: warm, locations: [0, 0.7, 1]) {
+            cg.drawLinearGradient(gradient, start: CGPoint(x: 0, y: horizon * 0.45), end: CGPoint(x: 0, y: horizon), options: [])
+        }
+        cg.setFillColor(UIColor(red: 1, green: 0.9, blue: 0.6, alpha: 1).cgColor)
+        cg.fillEllipse(in: CGRect(x: 120, y: horizon - 26, width: 40, height: 40))
+    }
+
+    private static func drawAurora(in cg: CGContext, horizon: CGFloat, width: CGFloat) {
+        let violet = UIColor(red: 0.6, green: 0.35, blue: 1, alpha: 0.35)
+        let green = UIColor(red: 0.3, green: 1, blue: 0.6, alpha: 0.4)
+        for band in 0..<3 {
+            let shift = CGFloat(band)
+            cg.setStrokeColor((band == 1 ? violet : green).cgColor)
+            cg.setLineWidth(CGFloat(14 - band * 3))
+            let base: CGFloat = horizon * (0.35 + shift * 0.12)
+            cg.move(to: CGPoint(x: 0, y: base))
+            var x: CGFloat = 0
+            while x <= width {
+                let y: CGFloat = base + wave(x, over: width, cycles: 6, shift: shift) * 12
+                cg.addLine(to: CGPoint(x: x, y: y))
+                x += 8
+            }
+            cg.strokePath()
+        }
+    }
+
+    /// A planet, low in the sky.
+    private static func drawPlanet(in cg: CGContext, horizon: CGFloat) {
+        cg.setFillColor(UIColor(red: 0.55, green: 0.45, blue: 0.9, alpha: 1).cgColor)
+        cg.fillEllipse(in: CGRect(x: 300, y: horizon * 0.4, width: 60, height: 60))
+        cg.setStrokeColor(UIColor(red: 0.85, green: 0.8, blue: 1, alpha: 0.8).cgColor)
+        cg.setLineWidth(3)
+        cg.strokeEllipse(in: CGRect(x: 284, y: horizon * 0.4 + 24, width: 92, height: 14))
     }
 }
 

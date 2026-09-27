@@ -555,53 +555,98 @@ public final class AvatarEntity: Entity {
             return false
         }
         let t = gestureTime
-        let x = SIMD3<Float>(1, 0, 0), z = SIMD3<Float>(0, 0, 1), y = SIMD3<Float>(0, 1, 0)
-        /// An arm straight up from the shoulder, tilted `swing` outwards.
-        func raise(_ arm: ModelEntity, side: Float, swing: Float = 0) {
-            arm.position = SIMD3<Float>(side * (0.42 + abs(swing) * 0.1), 1.5, 0)
-            arm.orientation = simd_quatf(angle: side * swing, axis: z)
-        }
-        func lower(_ arm: ModelEntity, side: Float) {
-            arm.position = SIMD3<Float>(side * 0.39, 0.95, 0)
-        }
+        // One pose per function, so the compiler checks each on its own.
         switch emote {
-        case .wave:
-            raise(rightArm, side: 1, swing: 0.35 * sin(t * 12))
-            lower(leftArm, side: -1)
-        case .dance:
-            let beat = sin(t * 9)
-            rig.position = SIMD3<Float>(0, seatHeight + abs(beat) * 0.12, 0)
-            rig.orientation = simd_quatf(angle: sin(t * 4.5) * 0.35, axis: y)
-            if beat > 0 { raise(rightArm, side: 1, swing: 0.4); lower(leftArm, side: -1) } else { raise(leftArm, side: -1, swing: 0.4); lower(rightArm, side: 1) }
-            leftLeg.orientation = simd_quatf(angle: beat * 0.35, axis: x)
-            rightLeg.orientation = simd_quatf(angle: -beat * 0.35, axis: x)
-        case .clap:
-            let open = (sin(t * 16) + 1) * 0.18
-            leftArm.position = SIMD3<Float>(-0.25 - open, 1.05, -0.28)
-            rightArm.position = SIMD3<Float>(0.25 + open, 1.05, -0.28)
-            leftArm.orientation = simd_quatf(angle: -1.35, axis: x)
-            rightArm.orientation = simd_quatf(angle: -1.35, axis: x)
-        case .cheer:
-            raise(leftArm, side: -1, swing: 0.35)
-            raise(rightArm, side: 1, swing: 0.35)
-            rig.position = SIMD3<Float>(0, seatHeight + abs(sin(t * 7)) * 0.3, 0)
-        case .bow:
-            let depth = sin(Swift.min(1, t / Float(emote.seconds)) * .pi) * 0.7
-            rig.orientation = simd_quatf(angle: -depth, axis: x)
-        case .point:
-            rightArm.position = SIMD3<Float>(0.39, 1.2, -0.3)
-            rightArm.orientation = simd_quatf(angle: -1.5, axis: x)
-        case .laugh:
-            head.orientation = simd_quatf(angle: 0.3 + sin(t * 20) * 0.08, axis: x)
-            rig.position = SIMD3<Float>(0, seatHeight + abs(sin(t * 18)) * 0.04, 0)
-        case .sit:
-            rig.position = SIMD3<Float>(0, seatHeight - 0.32, 0)
-            for (leg, side) in [(leftLeg, Float(-1)), (rightLeg, Float(1))] {
-                leg.position = SIMD3<Float>(side * 0.16, 0.55, -0.25)
-                leg.orientation = simd_quatf(angle: -1.45, axis: x)
-            }
+        case .wave: poseWave(t)
+        case .dance: poseDance(t)
+        case .clap: poseClap(t)
+        case .cheer: poseCheer(t)
+        case .bow: poseBow(t, seconds: Float(emote.seconds))
+        case .point: posePoint()
+        case .laugh: poseLaugh(t)
+        case .sit: poseSit()
         }
         return true
+    }
+
+    private static let sideways = SIMD3<Float>(1, 0, 0)
+    private static let upright = SIMD3<Float>(0, 1, 0)
+    private static let forwards = SIMD3<Float>(0, 0, 1)
+
+    /// An arm straight up from the shoulder, tilted `swing` outwards.
+    private func raise(_ arm: ModelEntity, side: Float, swing: Float = 0) {
+        let reach: Float = 0.42 + abs(swing) * 0.1
+        arm.position = SIMD3<Float>(side * reach, 1.5, 0)
+        arm.orientation = simd_quatf(angle: side * swing, axis: Self.forwards)
+    }
+
+    private func lower(_ arm: ModelEntity, side: Float) {
+        arm.position = SIMD3<Float>(side * 0.39, 0.95, 0)
+    }
+
+    private func poseWave(_ t: Float) {
+        let swing: Float = 0.35 * sin(t * 12)
+        raise(rightArm, side: 1, swing: swing)
+        lower(leftArm, side: -1)
+    }
+
+    private func poseDance(_ t: Float) {
+        let beat: Float = sin(t * 9)
+        let bounce: Float = seatHeight + abs(beat) * 0.12
+        let turn: Float = sin(t * 4.5) * 0.35
+        rig.position = SIMD3<Float>(0, bounce, 0)
+        rig.orientation = simd_quatf(angle: turn, axis: Self.upright)
+        if beat > 0 {
+            raise(rightArm, side: 1, swing: 0.4)
+            lower(leftArm, side: -1)
+        } else {
+            raise(leftArm, side: -1, swing: 0.4)
+            lower(rightArm, side: 1)
+        }
+        let kick: Float = beat * 0.35
+        leftLeg.orientation = simd_quatf(angle: kick, axis: Self.sideways)
+        rightLeg.orientation = simd_quatf(angle: -kick, axis: Self.sideways)
+    }
+
+    private func poseClap(_ t: Float) {
+        let open: Float = (sin(t * 16) + 1) * 0.18
+        leftArm.position = SIMD3<Float>(-0.25 - open, 1.05, -0.28)
+        rightArm.position = SIMD3<Float>(0.25 + open, 1.05, -0.28)
+        leftArm.orientation = simd_quatf(angle: -1.35, axis: Self.sideways)
+        rightArm.orientation = simd_quatf(angle: -1.35, axis: Self.sideways)
+    }
+
+    private func poseCheer(_ t: Float) {
+        raise(leftArm, side: -1, swing: 0.35)
+        raise(rightArm, side: 1, swing: 0.35)
+        let jump: Float = seatHeight + abs(sin(t * 7)) * 0.3
+        rig.position = SIMD3<Float>(0, jump, 0)
+    }
+
+    private func poseBow(_ t: Float, seconds: Float) {
+        let progress: Float = Swift.min(1, t / seconds)
+        let depth: Float = sin(progress * .pi) * 0.7
+        rig.orientation = simd_quatf(angle: -depth, axis: Self.sideways)
+    }
+
+    private func posePoint() {
+        rightArm.position = SIMD3<Float>(0.39, 1.2, -0.3)
+        rightArm.orientation = simd_quatf(angle: -1.5, axis: Self.sideways)
+    }
+
+    private func poseLaugh(_ t: Float) {
+        let nod: Float = 0.3 + sin(t * 20) * 0.08
+        let shake: Float = seatHeight + abs(sin(t * 18)) * 0.04
+        head.orientation = simd_quatf(angle: nod, axis: Self.sideways)
+        rig.position = SIMD3<Float>(0, shake, 0)
+    }
+
+    private func poseSit() {
+        rig.position = SIMD3<Float>(0, seatHeight - 0.32, 0)
+        for (leg, side) in [(leftLeg, Float(-1)), (rightLeg, Float(1))] {
+            leg.position = SIMD3<Float>(side * 0.16, 0.55, -0.25)
+            leg.orientation = simd_quatf(angle: -1.45, axis: Self.sideways)
+        }
     }
 
     private func animateLimbs(speed: Float) {

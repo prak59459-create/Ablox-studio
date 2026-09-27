@@ -143,21 +143,34 @@ private final class SpeakerStack: UIView {
         }
         order = messages.map(\.id)
 
-        // Lay out bottom-up: the newest just over the head, with the tail.
+        layOut()
+    }
+
+    /// Bottom-up: the newest just over the head, with the tail. In plain
+    /// typed steps, which the compiler checks far faster than the sums
+    /// written inline.
+    private func layOut() {
         let spacing: CGFloat = 5
         var sizes: [CGSize] = []
         for (index, id) in order.enumerated() {
-            let bubble = bubbles[id]!
+            guard let bubble = bubbles[id] else { continue }
             bubble.showsTail = index == order.count - 1
             sizes.append(bubble.fittedSize)
         }
-        let width = sizes.map(\.width).max() ?? 0
-        let height = sizes.map(\.height).reduce(0, +) + spacing * CGFloat(max(0, sizes.count - 1))
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+        for size in sizes {
+            width = Swift.max(width, size.width)
+            height += size.height
+        }
+        let gaps = CGFloat(Swift.max(0, sizes.count - 1))
+        height += spacing * gaps
         bounds = CGRect(x: 0, y: 0, width: width, height: height)
         var y: CGFloat = 0
-        for (index, id) in order.enumerated() {
-            let size = sizes[index]
-            bubbles[id]!.frame = CGRect(x: (width - size.width) / 2, y: y, width: size.width, height: size.height)
+        for (index, id) in order.enumerated() where index < sizes.count {
+            let size: CGSize = sizes[index]
+            let x: CGFloat = (width - size.width) / 2
+            bubbles[id]?.frame = CGRect(x: x, y: y, width: size.width, height: size.height)
             y += size.height + spacing
         }
     }

@@ -105,15 +105,10 @@ public enum BlockEntityFactory {
     }
 
     public static func material(for block: BlockData, picture: WorldImage? = nil) -> RealityKit.Material {
-        let alpha = block.color.a * block.material.alphaScale
-        func byte(_ value: Float) -> UInt8 { value.isFinite ? UInt8(max(0, min(255, (value * 255).rounded()))) : 0 }
-        // A pattern repeats about every two metres, so a long wall has many
-        // bricks rather than a few stretched ones.
-        let span = max(block.scale.x, block.scale.z, block.scale.y * 0.5)
+        let alpha: Float = block.color.a * block.material.alphaScale
         // Read before the cache lock: `marksMeaning` takes the same lock.
-        let mark = picture == nil && marksMeaning ? MeaningMark.mark(for: block.behavior) : nil
-        let tiles = block.material.pattern == .none && mark == nil
-            ? 1 : UInt8(max(1, min(24, (span.isFinite ? span : 1) / 2)).rounded())
+        let mark: MeaningMark? = picture == nil && marksMeaning ? MeaningMark.mark(for: block.behavior) : nil
+        let tiles: UInt8 = tileCount(for: block, marked: mark != nil)
         let key = MaterialKey(r: byte(block.color.r), g: byte(block.color.g), b: byte(block.color.b), a: byte(alpha),
                               kind: block.material, tiles: tiles, picture: picture?.id, mark: mark)
 
@@ -121,64 +116,102 @@ public enum BlockEntityFactory {
         defer { cacheLock.unlock() }
         if let cached = materialCache[key] { return cached }
 
+        let made = makeMaterial(for: block, alpha: alpha, tiles: tiles, picture: picture, mark: mark)
+        // A script recolouring blocks every tick could otherwise grow this
+        // forever; a few thousand colours is far more than any world uses.
+        if materialCache.count > 4096 { materialCache.removeAll() }
+        materialCache[key] = made
+        return made
+    }
+
+    private static func byte(_ value: Float) -> UInt8 {
+        guard value.isFinite else { return 0 }
+        let scaled: Float = (value * 255).rounded()
+        return UInt8(Swift.max(0, Swift.min(255, scaled)))
+    }
+
+    /// A pattern repeats about every two metres, so a long wall has many
+    /// bricks rather than a few stretched ones.
+    private static func tileCount(for block: BlockData, marked: Bool) -> UInt8 {
+        guard block.material.pattern != .none || marked else { return 1 }
+        let span: Float = Swift.max(block.scale.x, block.scale.z, block.scale.y * 0.5)
+        let halved: Float = (span.isFinite ? span : 1) / 2
+        return UInt8(Swift.max(1, Swift.min(24, halved)).rounded())
+    }
+
+    // Each kind of material in its own function, so the compiler checks
+    // them one at a time; as one function this was among the slowest things
+    // in the app to compile.
+    private static func makeMaterial(for block: BlockData, alpha: Float, tiles: UInt8,
+                                     picture: WorldImage?, mark: MeaningMark?) -> RealityKit.Material {
         let tint = UIColor(
             red: CGFloat(block.color.r),
             green: CGFloat(block.color.g),
             blue: CGFloat(block.color.b),
             alpha: CGFloat(alpha)
         )
-
-        let made: RealityKit.Material
         if let picture, let texture = SurfaceTextures.texture(for: picture) {
-            // The picture as it is, on every side.
-            var material = PhysicallyBasedMaterial()
-            material.baseColor = .init(tint: .white, texture: .init(texture))
-            material.roughness = .init(floatLiteral: 0.7)
-            material.metallic = .init(floatLiteral: 0)
-            if alpha < 0.999 { material.blending = .transparent(opacity: .init(floatLiteral: alpha)) }
-            made = material
-        } else if let mark, let texture = SurfaceTextures.texture(for: mark) {
-            // What the part does, drawn on it, whatever it is made of.
-            var material = PhysicallyBasedMaterial()
-            material.baseColor = .init(tint: tint.withAlphaComponent(1),
-                                       texture: .init(texture, sampler: SurfaceTextures.repeatingSampler))
-            material.roughness = .init(floatLiteral: block.material.roughness)
-            material.metallic = .init(floatLiteral: 0)
-            if block.material.isUnlit {
-                material.emissiveColor = .init(color: tint.withAlphaComponent(1), texture: .init(texture, sampler: SurfaceTextures.repeatingSampler))
-                material.emissiveIntensity = 0.6
-            }
-            material.textureCoordinateTransform = .init(offset: .zero, scale: SIMD2<Float>(repeating: Float(tiles)), rotation: 0)
-            if alpha < 0.999 { material.blending = .transparent(opacity: .init(floatLiteral: alpha)) }
-            made = material
-        } else if !block.material.isUnlit, block.material.pattern != .none,
-                  let texture = SurfaceTextures.texture(for: block.material.pattern) {
-            var material = PhysicallyBasedMaterial()
-            material.baseColor = .init(tint: tint.withAlphaComponent(1),
-                                       texture: .init(texture, sampler: SurfaceTextures.repeatingSampler))
-            material.roughness = .init(floatLiteral: block.material.roughness)
-            material.metallic = .init(floatLiteral: 0)
-            material.textureCoordinateTransform = .init(offset: .zero, scale: SIMD2<Float>(repeating: Float(tiles)), rotation: 0)
-            if alpha < 0.999 { material.blending = .transparent(opacity: .init(floatLiteral: alpha)) }
-            made = material
-        } else if block.material.isUnlit {
+            return pictureMaterial(texture, alpha: alpha)
+        }
+        if let mark, let texture = SurfaceTextures.texture(for: mark) {
+            return markedMaterial(texture, block: block, tint: tint, alpha: alpha, tiles: tiles)
+        }
+        if !block.material.isUnlit, block.material.pattern != .none,
+           let texture = SurfaceTextures.texture(for: block.material.pattern) {
+            return patternMaterial(texture, block: block, tint: tint, alpha: alpha, tiles: tiles)
+        }
+        if block.material.isUnlit {
             // Neon reads as emissive without needing a light probe, which
             // keeps it bright in the Studio's flat editor lighting too.
             var unlit = UnlitMaterial(color: tint)
             unlit.blending = alpha < 0.999 ? .transparent(opacity: .init(floatLiteral: alpha)) : .opaque
-            made = unlit
-        } else {
-            var material = SimpleMaterial()
-            material.color = .init(tint: tint)
-            material.roughness = .init(floatLiteral: block.material.roughness)
-            material.metallic = .init(floatLiteral: block.material.isMetallic ? 1.0 : 0.0)
-            made = material
+            return unlit
         }
-        // A script recolouring blocks every tick could otherwise grow this
-        // forever; a few thousand colours is far more than any world uses.
-        if materialCache.count > 4096 { materialCache.removeAll() }
-        materialCache[key] = made
-        return made
+        var material = SimpleMaterial()
+        material.color = .init(tint: tint)
+        material.roughness = .init(floatLiteral: block.material.roughness)
+        material.metallic = .init(floatLiteral: block.material.isMetallic ? 1.0 : 0.0)
+        return material
+    }
+
+    /// The picture as it is, on every side.
+    private static func pictureMaterial(_ texture: TextureResource, alpha: Float) -> RealityKit.Material {
+        var material = PhysicallyBasedMaterial()
+        material.baseColor = .init(tint: .white, texture: .init(texture))
+        material.roughness = .init(floatLiteral: 0.7)
+        material.metallic = .init(floatLiteral: 0)
+        if alpha < 0.999 { material.blending = .transparent(opacity: .init(floatLiteral: alpha)) }
+        return material
+    }
+
+    /// What the part does, drawn on it, whatever it is made of.
+    private static func markedMaterial(_ texture: TextureResource, block: BlockData, tint: UIColor,
+                                       alpha: Float, tiles: UInt8) -> RealityKit.Material {
+        let solid: UIColor = tint.withAlphaComponent(1)
+        let repeating = MaterialParameters.Texture(texture, sampler: SurfaceTextures.repeatingSampler)
+        var material = PhysicallyBasedMaterial()
+        material.baseColor = .init(tint: solid, texture: repeating)
+        material.roughness = .init(floatLiteral: block.material.roughness)
+        material.metallic = .init(floatLiteral: 0)
+        if block.material.isUnlit {
+            material.emissiveColor = .init(color: solid, texture: repeating)
+            material.emissiveIntensity = 0.6
+        }
+        material.textureCoordinateTransform = .init(offset: .zero, scale: SIMD2<Float>(repeating: Float(tiles)), rotation: 0)
+        if alpha < 0.999 { material.blending = .transparent(opacity: .init(floatLiteral: alpha)) }
+        return material
+    }
+
+    private static func patternMaterial(_ texture: TextureResource, block: BlockData, tint: UIColor,
+                                        alpha: Float, tiles: UInt8) -> RealityKit.Material {
+        let repeating = MaterialParameters.Texture(texture, sampler: SurfaceTextures.repeatingSampler)
+        var material = PhysicallyBasedMaterial()
+        material.baseColor = .init(tint: tint.withAlphaComponent(1), texture: repeating)
+        material.roughness = .init(floatLiteral: block.material.roughness)
+        material.metallic = .init(floatLiteral: 0)
+        material.textureCoordinateTransform = .init(offset: .zero, scale: SIMD2<Float>(repeating: Float(tiles)), rotation: 0)
+        if alpha < 0.999 { material.blending = .transparent(opacity: .init(floatLiteral: alpha)) }
+        return material
     }
 
     // MARK: Entity construction

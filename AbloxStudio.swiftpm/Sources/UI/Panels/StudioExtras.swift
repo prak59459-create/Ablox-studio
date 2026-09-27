@@ -124,55 +124,15 @@ struct ToolOptionsBar: View {
     @ObservedObject var session: StudioSession
     @State private var generating = false
 
+    // A function per tool, each type-checked on its own: as one switch
+    // this bar was among the slowest things in the editor to compile.
     var body: some View {
         HStack(spacing: 10) {
             switch session.document.tool {
             case .paint, .eyedropper:
-                Image(systemName: session.document.tool.symbolName)
-                ColorPicker(L("Colour"), selection: Binding(
-                    get: { color(session.document.paintColor) },
-                    set: { session.setPaintColor(rgba($0)) }
-                ), supportsOpacity: false)
-                .labelsHidden()
-                ForEach(Array((session.document.recentColors + ColorRGBA.palette).prefix(12).enumerated()), id: \.offset) { _, swatch in
-                    ColorSwatch(color: swatch, isSelected: swatch == session.document.paintColor, size: 24) {
-                        session.setPaintColor(swatch)
-                    }
-                }
-                Text(session.document.tool == .paint ? L("Tap or drag over parts to paint them.") : L("Tap a part to take its colour."))
-                    .font(.caption)
-                    .foregroundStyle(Ablox.Palette.inkMuted)
+                paintOptions
             case .terrain:
-                ForEach(TerrainAction.allCases) { action in
-                    Button {
-                        session.setTerrain(action)
-                    } label: {
-                        Label(action.displayName, systemImage: action.symbolName)
-                            .font(.caption.weight(.semibold))
-                    }
-                    .buttonStyle(NeonButtonStyle(session.document.terrainAction == action ? .primary : .secondary))
-                }
-                Stepper(L("Brush {}", session.document.terrainBrush), value: Binding(
-                    get: { session.document.terrainBrush },
-                    set: { session.setTerrain(brush: $0) }
-                ), in: 1...4)
-                .font(.caption)
-                .fixedSize()
-                Button {
-                    generating = true
-                } label: {
-                    Label(L("Make hills"), systemImage: "mountain.2")
-                        .font(.caption.weight(.semibold))
-                }
-                .buttonStyle(NeonButtonStyle(.secondary))
-                .confirmationDialog(L("Make rolling hills?"), isPresented: $generating, titleVisibility: .visible) {
-                    ForEach([12, 20, 30], id: \.self) { size in
-                        Button(L("{} × {} metres", size * 2, size * 2)) {
-                            session.edit { $0.generateTerrain(size: size, height: 5, seed: UInt64.random(in: 1...1_000_000)) }
-                        }
-                    }
-                    Button(L("Cancel"), role: .cancel) {}
-                }
+                terrainOptions
             case .boxSelect:
                 Image(systemName: "rectangle.dashed")
                 Text(L("Draw a box with one finger to pick every part inside it."))
@@ -186,6 +146,77 @@ struct ToolOptionsBar: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background(.ultraThinMaterial, in: Capsule())
+    }
+
+    @ViewBuilder private var paintOptions: some View {
+        let document = session.document
+        let swatches: [ColorRGBA] = Array((document.recentColors + ColorRGBA.palette).prefix(12))
+        Image(systemName: document.tool.symbolName)
+        ColorPicker(L("Colour"), selection: paintBinding, supportsOpacity: false)
+            .labelsHidden()
+        ForEach(swatches.indices, id: \.self) { index in
+            swatch(swatches[index], selected: swatches[index] == document.paintColor)
+        }
+        Text(document.tool == .paint ? L("Tap or drag over parts to paint them.") : L("Tap a part to take its colour."))
+            .font(.caption)
+            .foregroundStyle(Ablox.Palette.inkMuted)
+    }
+
+    private var paintBinding: Binding<Color> {
+        Binding(
+            get: { color(session.document.paintColor) },
+            set: { session.setPaintColor(rgba($0)) }
+        )
+    }
+
+    private func swatch(_ colour: ColorRGBA, selected: Bool) -> some View {
+        ColorSwatch(color: colour, isSelected: selected, size: 24) {
+            session.setPaintColor(colour)
+        }
+    }
+
+    @ViewBuilder private var terrainOptions: some View {
+        ForEach(TerrainAction.allCases) { action in
+            terrainButton(action)
+        }
+        Stepper(L("Brush {}", session.document.terrainBrush), value: brushBinding, in: 1...4)
+            .font(.caption)
+            .fixedSize()
+        Button {
+            generating = true
+        } label: {
+            Label(L("Make hills"), systemImage: "mountain.2")
+                .font(.caption.weight(.semibold))
+        }
+        .buttonStyle(NeonButtonStyle(.secondary))
+        .confirmationDialog(L("Make rolling hills?"), isPresented: $generating, titleVisibility: .visible) {
+            ForEach([12, 20, 30], id: \.self) { size in
+                Button(L("{} × {} metres", size * 2, size * 2)) { makeHills(size: size) }
+            }
+            Button(L("Cancel"), role: .cancel) {}
+        }
+    }
+
+    private func terrainButton(_ action: TerrainAction) -> some View {
+        let chosen: Bool = session.document.terrainAction == action
+        return Button {
+            session.setTerrain(action)
+        } label: {
+            Label(action.displayName, systemImage: action.symbolName)
+                .font(.caption.weight(.semibold))
+        }
+        .buttonStyle(NeonButtonStyle(chosen ? .primary : .secondary))
+    }
+
+    private var brushBinding: Binding<Int> {
+        Binding(
+            get: { session.document.terrainBrush },
+            set: { session.setTerrain(brush: $0) }
+        )
+    }
+
+    private func makeHills(size: Int) {
+        session.edit { $0.generateTerrain(size: size, height: 5, seed: UInt64.random(in: 1...1_000_000)) }
     }
 
     private func color(_ value: ColorRGBA) -> Color {

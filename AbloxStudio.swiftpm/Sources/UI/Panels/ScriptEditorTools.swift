@@ -141,26 +141,48 @@ struct DiffSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                let lines = TextDiff.lines(from: old, to: new)
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    if !lines.contains(where: { $0.kind != .same }) {
-                        Text(L("Nothing has changed.")).foregroundStyle(Ablox.Palette.inkMuted).padding()
-                    }
-                    ForEach(lines) { line in
-                        Text((line.kind == .added ? "+ " : line.kind == .removed ? "− " : "  ") + line.text)
-                            .font(.system(.caption, design: .monospaced))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 1)
-                            .background(line.kind == .added ? Color.green.opacity(0.18) : line.kind == .removed ? Color.red.opacity(0.18) : .clear)
-                    }
-                }
+                changes(TextDiff.lines(from: old, to: new))
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { dismiss() } } }
         }
         .preferredColorScheme(.dark)
+    }
+
+    private func changes(_ lines: [DiffLine]) -> some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            if !lines.contains(where: { $0.kind != .same }) {
+                Text(L("Nothing has changed.")).foregroundStyle(Ablox.Palette.inkMuted).padding()
+            }
+            ForEach(lines) { line in
+                row(line)
+            }
+        }
+    }
+
+    // A line and its colour in plain typed steps: written inline, the
+    // nested choices made this one of the slowest views to compile.
+    private func row(_ line: DiffLine) -> some View {
+        let marker: String
+        let shade: Color
+        switch line.kind {
+        case .added:
+            marker = "+ "
+            shade = Color.green.opacity(0.18)
+        case .removed:
+            marker = "− "
+            shade = Color.red.opacity(0.18)
+        case .same:
+            marker = "  "
+            shade = .clear
+        }
+        return Text(verbatim: marker + line.text)
+            .font(.system(.caption, design: .monospaced))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 1)
+            .background(shade)
     }
 }
 
@@ -494,51 +516,67 @@ struct BlockProgramEditor: View {
         session.edit { $0.updateScript(fileID, source: program.fileSource) }
     }
 
+    // A card in parts, each type-checked on its own: as one expression it
+    // was among the slowest things in the editor to compile.
     private func cardView(_ card: Binding<BlockProgram.Card>) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label(card.wrappedValue.trigger.displayName, systemImage: card.wrappedValue.trigger.symbolName)
-                    .font(.headline)
-                Spacer()
-                Button(role: .destructive) {
-                    program.cards.removeAll { $0.id == card.wrappedValue.id }
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(Ablox.Palette.danger)
-            }
-            if let asks = card.wrappedValue.trigger.asks {
-                if card.wrappedValue.trigger == .touch {
-                    Picker(asks, selection: card.value) {
-                        Text(L("Any part")).tag("")
-                        ForEach(partNames, id: \.self) { Text($0).tag($0) }
-                    }
-                } else {
-                    AbloxTextField(asks, text: card.value)
-                        .padding(8)
-                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-                }
-            }
+            cardHeader(card)
+            cardInput(card)
             ForEach(card.steps) { $step in
                 stepView($step) {
                     card.wrappedValue.steps.removeAll { $0.id == step.id }
                 }
             }
-            Menu {
-                ForEach(BlockProgram.Action.allCases) { action in
-                    Button(action.displayName) {
-                        card.wrappedValue.steps.append(BlockProgram.Step(action: action))
-                    }
-                }
-            } label: {
-                Label(L("Add a “do”"), systemImage: "plus")
-                    .font(.subheadline.weight(.semibold))
-            }
+            addStepMenu(card)
         }
         .padding(14)
         .background(Ablox.Palette.accentDeep.opacity(0.18), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Ablox.Palette.accent.opacity(0.3)))
+    }
+
+    private func cardHeader(_ card: Binding<BlockProgram.Card>) -> some View {
+        let trigger = card.wrappedValue.trigger
+        let id = card.wrappedValue.id
+        return HStack {
+            Label(trigger.displayName, systemImage: trigger.symbolName)
+                .font(.headline)
+            Spacer()
+            Button(role: .destructive) {
+                program.cards.removeAll { $0.id == id }
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Ablox.Palette.danger)
+        }
+    }
+
+    @ViewBuilder private func cardInput(_ card: Binding<BlockProgram.Card>) -> some View {
+        if let asks = card.wrappedValue.trigger.asks {
+            if card.wrappedValue.trigger == .touch {
+                Picker(asks, selection: card.value) {
+                    Text(L("Any part")).tag("")
+                    ForEach(partNames, id: \.self) { Text($0).tag($0) }
+                }
+            } else {
+                AbloxTextField(asks, text: card.value)
+                    .padding(8)
+                    .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+
+    private func addStepMenu(_ card: Binding<BlockProgram.Card>) -> some View {
+        Menu {
+            ForEach(BlockProgram.Action.allCases) { action in
+                Button(action.displayName) {
+                    card.wrappedValue.steps.append(BlockProgram.Step(action: action))
+                }
+            }
+        } label: {
+            Label(L("Add a “do”"), systemImage: "plus")
+                .font(.subheadline.weight(.semibold))
+        }
     }
 
     private func stepView(_ step: Binding<BlockProgram.Step>, remove: @escaping () -> Void) -> some View {

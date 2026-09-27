@@ -309,28 +309,41 @@ final class ParticleField {
         let room = budget - live.count
         guard room > 0 else { return }
         for _ in 0..<min(count, room) {
-            let tint = color ?? spec.colors.randomElement() ?? ColorRGBA(r: 1, g: 1, b: 1)
-            let entity = pool.popLast() ?? ModelEntity(mesh: Self.cube, materials: [])
+            let tint: ColorRGBA = color ?? spec.colors.randomElement() ?? ColorRGBA(r: 1, g: 1, b: 1)
+            let entity: ModelEntity = pool.popLast() ?? ModelEntity(mesh: Self.cube, materials: [])
             entity.model?.materials = [material(tint, glows: spec.glows)]
             entity.isEnabled = true
             if entity.parent == nil { root.addChild(entity) }
-
-            let angle = Float.random(in: 0...(2 * .pi))
-            let tilt = Float.random(in: 0...max(0.001, spec.spread)) * .pi / 180
-            let direction = SIMD3<Float>(sin(tilt) * cos(angle), cos(tilt), sin(tilt) * sin(angle))
-            let velocity = direction * spec.speed * Float.random(in: 0.6...1.2) + SIMD3<Float>(0, spec.upward, 0)
-            let offset = SIMD3<Float>(Float.random(in: -1...1) * spread.x, Float.random(in: -1...1) * spread.y,
-                                      Float.random(in: -1...1) * spread.z)
-            entity.position = position.simd + offset
-            let base = spec.size * Float.random(in: 0.7...1.3)
-            // Rain is a streak, not a drop.
-            let size = kind == .rain ? SIMD3<Float>(base * 0.6, base * 8, base * 0.6) : SIMD3<Float>(repeating: base)
-            entity.scale = size
-            entity.orientation = kind == .rain ? simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
-                : simd_quatf(angle: Float.random(in: 0...(2 * .pi)), axis: simd_normalize(SIMD3<Float>(0.3, 1, 0.5)))
-            live.append(Particle(entity: entity, velocity: velocity, age: 0,
-                                 life: Float.random(in: spec.lifetime), size: size, shrinks: spec.shrinks, gravity: spec.gravity))
+            live.append(launch(entity, kind: kind, spec: spec, from: position, spread: spread))
         }
+    }
+
+    /// Sets one particle off: its direction, place, size and turn. In typed
+    /// steps, which the compiler checks far faster than the vector sums
+    /// written inline.
+    private func launch(_ entity: ModelEntity, kind: ParticleKind, spec: ParticleSpec, from position: Vec3, spread: Vec3) -> Particle {
+        let angle: Float = Float.random(in: 0...(2 * .pi))
+        let widest: Float = Swift.max(0.001, spec.spread)
+        let tilt: Float = Float.random(in: 0...widest) * .pi / 180
+        let direction = SIMD3<Float>(sin(tilt) * cos(angle), cos(tilt), sin(tilt) * sin(angle))
+        let push: Float = spec.speed * Float.random(in: 0.6...1.2)
+        let velocity: SIMD3<Float> = direction * push + SIMD3<Float>(0, spec.upward, 0)
+        let dx: Float = Float.random(in: -1...1) * spread.x
+        let dy: Float = Float.random(in: -1...1) * spread.y
+        let dz: Float = Float.random(in: -1...1) * spread.z
+        entity.position = position.simd + SIMD3<Float>(dx, dy, dz)
+        let base: Float = spec.size * Float.random(in: 0.7...1.3)
+        // Rain is a streak, not a drop.
+        let size: SIMD3<Float> = kind == .rain ? SIMD3<Float>(base * 0.6, base * 8, base * 0.6) : SIMD3<Float>(repeating: base)
+        entity.scale = size
+        if kind == .rain {
+            entity.orientation = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
+        } else {
+            let spin: Float = Float.random(in: 0...(2 * .pi))
+            entity.orientation = simd_quatf(angle: spin, axis: simd_normalize(SIMD3<Float>(0.3, 1, 0.5)))
+        }
+        let life: Float = Float.random(in: spec.lifetime)
+        return Particle(entity: entity, velocity: velocity, age: 0, life: life, size: size, shrinks: spec.shrinks, gravity: spec.gravity)
     }
 
     func update(dt: Float) {
