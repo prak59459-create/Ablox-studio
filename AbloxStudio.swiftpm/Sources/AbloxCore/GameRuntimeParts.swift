@@ -74,7 +74,7 @@ extension GameRuntime {
         }
         interpreter.define("leaderboard_top") { [unowned self] arguments, line in
             let name = (arguments.first ?? .null).displayText
-            let count = Int(try self.optionalNumber(arguments, 1, default: 10, line: line))
+            let count = try self.optionalNumber(arguments, 1, default: 10, line: line).scriptInt
             let rows = (self.leaderboards[name]?.rows ?? []).prefix(Swift.max(0, count))
             return .list(ScriptList(rows.map { row in
                 let map = ScriptMap()
@@ -100,14 +100,14 @@ extension GameRuntime {
             return method(name) { [unowned self] arguments, line in
                 let item = self.shortName(arguments.first ?? .null)
                 guard !item.isEmpty else { throw ScriptError(line: line, kind: .runtime, message: L("“{}” needs a name.", "give_item")) }
-                let count = Int(try self.optionalNumber(arguments, 1, default: 1, line: line))
+                let count = try self.optionalNumber(arguments, 1, default: 1, line: line).scriptInt
                 let icon = arguments.count > 2 ? String(arguments[2].displayText.prefix(40)) : ""
                 self.changeItems(state) { items in
                     if let index = items.firstIndex(where: { $0.name == item }) {
                         items[index].count = Swift.min(999_999, items[index].count + Swift.max(1, count))
                         if !icon.isEmpty { items[index].icon = icon }
                     } else if items.count < InventoryItem.maximumItems {
-                        items.append(InventoryItem(name: item, icon: icon, count: Swift.max(1, count)))
+                        items.append(InventoryItem(name: item, icon: icon, count: Swift.min(999_999, Swift.max(1, count))))
                     }
                 }
                 return .null
@@ -115,7 +115,7 @@ extension GameRuntime {
         case "take_item":
             return method(name) { [unowned self] arguments, line in
                 let item = self.shortName(arguments.first ?? .null)
-                let count = Int(try self.optionalNumber(arguments, 1, default: 1, line: line))
+                let count = try self.optionalNumber(arguments, 1, default: 1, line: line).scriptInt
                 guard let have = state.items.first(where: { $0.name == item }), have.count >= count else { return .bool(false) }
                 self.changeItems(state) { items in
                     guard let index = items.firstIndex(where: { $0.name == item }) else { return }
@@ -127,7 +127,7 @@ extension GameRuntime {
         case "has_item":
             return method(name) { [unowned self] arguments, line in
                 let item = self.shortName(arguments.first ?? .null)
-                let count = Int(try self.optionalNumber(arguments, 1, default: 1, line: line))
+                let count = try self.optionalNumber(arguments, 1, default: 1, line: line).scriptInt
                 return .bool((state.items.first { $0.name == item }?.count ?? 0) >= count)
             }
         case "clear_items":
@@ -244,7 +244,7 @@ extension GameRuntime {
             let map = try optionsMap(entry, line: line)
             let name = (map["name"] ?? .null).displayText
             guard !name.isEmpty else { continue }
-            let price = Int(try optionalNumber([map["price"] ?? .null], 0, default: 0, line: line))
+            let price = try optionalNumber([map["price"] ?? .null], 0, default: 0, line: line).scriptInt
             offers.append(ShopOffer(name: name, price: price, icon: (map["icon"] ?? .null).isNull ? "" : (map["icon"] ?? .null).displayText))
         }
         let options = try optionsMap(arguments.count > 2 ? arguments[2] : .null, line: line)
@@ -260,7 +260,7 @@ extension GameRuntime {
     /// (`p.coins = 100`), or their score for "score".
     private func balance(of state: PlayerState, in currency: String) -> Int {
         if currency == "score" { return snapshot(of: state)?.score ?? 0 }
-        if case let .number(value) = state.custom[currency] ?? .null, value.isFinite { return Int(value) }
+        if case let .number(value) = state.custom[currency] ?? .null, value.isFinite { return value.scriptInt }
         return 0
     }
 

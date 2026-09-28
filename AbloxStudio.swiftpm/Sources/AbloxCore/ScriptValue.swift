@@ -298,6 +298,17 @@ public struct ScriptVector: Equatable, Sendable {
     public static func * (a: ScriptVector, n: Double) -> ScriptVector { ScriptVector(a.x * n, a.y * n, a.z * n) }
 }
 
+extension Double {
+    /// This number as a whole number for a position, a count or a number of
+    /// digits: nan is 0 and anything past ±10¹⁵ stops there. A script can
+    /// make both (`sqrt(-1)`, `exp(700) * exp(700)`), and `Int(_:)` of either
+    /// would stop the whole app rather than the script.
+    var scriptInt: Int {
+        guard !isNaN else { return 0 }
+        return Int(Swift.min(Swift.max(self, -1e15), 1e15))
+    }
+}
+
 public extension ScriptValue {
     var isNull: Bool {
         if case .null = self { return true }

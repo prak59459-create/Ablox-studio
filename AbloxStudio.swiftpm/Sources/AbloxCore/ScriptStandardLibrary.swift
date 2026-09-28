@@ -52,7 +52,7 @@ extension ScriptInterpreter {
         define("round") { [unowned self] arguments, line in
             let value = try self.number(arguments.first ?? .null, what: "round", line: line)
             guard arguments.count > 1 else { return .number(value.rounded()) }
-            let digits = Swift.min(Swift.max(Int(try self.number(arguments[1], what: "round", line: line)), 0), 10)
+            let digits = Swift.min(Swift.max((try self.number(arguments[1], what: "round", line: line)).scriptInt, 0), 10)
             let scale = Foundation.pow(10, Double(digits))
             return .number((value * scale).rounded() / scale)
         }
@@ -83,8 +83,8 @@ extension ScriptInterpreter {
         /// included — a dice roll, which is how it will be used.
         define("random") { [unowned self] arguments, line in
             if arguments.count >= 2 {
-                let low = Int(try self.number(arguments[0], what: "random", line: line).rounded())
-                let high = Int(try self.number(arguments[1], what: "random", line: line).rounded())
+                let low = try self.number(arguments[0], what: "random", line: line).rounded().scriptInt
+                let high = try self.number(arguments[1], what: "random", line: line).rounded().scriptInt
                 return .number(Double(self.random.integer(Swift.min(low, high), Swift.max(low, high))))
             }
             if case let .list(list) = arguments.first ?? .null {
@@ -125,7 +125,7 @@ extension ScriptInterpreter {
             }
             guard !list.items.isEmpty else { return .null }
             // Without a position, the last item — the one `append` added.
-            let position = arguments.count > 1 ? Int(try self.number(arguments[1], what: "remove", line: line)) : list.items.count
+            let position = arguments.count > 1 ? (try self.number(arguments[1], what: "remove", line: line)).scriptInt : list.items.count
             guard position >= 1, position <= list.items.count else { return .null }
             return list.items.remove(at: position - 1)
         }
@@ -247,15 +247,17 @@ extension ScriptInterpreter {
             let to = arguments.count > 1 ? try self.number(arguments[1], what: "range", line: line) : from
             let start = arguments.count > 1 ? from : 1
             let step: Double = start <= to ? 1 : -1
-            let count = Int((Swift.abs(to - start)).rounded(.down)) + 1
-            try self.checkSize(count, line: line)
+            // Checked as a number first: range(1, 1e300) is too big, not a crash.
+            let span = Swift.abs(to - start).rounded(.down)
+            try self.checkSize(span.isFinite ? (span + 1).scriptInt : Int.max, line: line)
+            let count = Int(span) + 1
             return .list(ScriptList((0..<count).map { .number(start + Double($0) * step) }))
         }
         define("insert") { [unowned self] arguments, line in
             guard arguments.count >= 3, case let .list(list) = arguments[0] else {
                 throw ScriptError(line: line, kind: .runtime, message: L("“{}” needs a list first.", "insert"))
             }
-            let position = Int(try self.number(arguments[1], what: "insert", line: line))
+            let position = (try self.number(arguments[1], what: "insert", line: line)).scriptInt
             list.items.insert(arguments[2], at: Swift.min(Swift.max(position - 1, 0), list.items.count))
             try self.checkSize(list.items.count, line: line)
             return .list(list)
@@ -273,15 +275,15 @@ extension ScriptInterpreter {
             }
         }
         define("slice") { [unowned self] arguments, line in
-            let from = Int(try self.number(arguments.count > 1 ? arguments[1] : .number(1), what: "slice", line: line))
+            let from = (try self.number(arguments.count > 1 ? arguments[1] : .number(1), what: "slice", line: line)).scriptInt
             switch arguments.first ?? .null {
             case let .list(list):
-                let to = arguments.count > 2 ? Int(try self.number(arguments[2], what: "slice", line: line)) : list.items.count
+                let to = arguments.count > 2 ? (try self.number(arguments[2], what: "slice", line: line)).scriptInt : list.items.count
                 let low = Swift.max(from, 1), high = Swift.min(to, list.items.count)
                 return .list(ScriptList(low <= high ? Array(list.items[(low - 1)..<high]) : []))
             case let .string(text):
                 let characters = Array(text)
-                let to = arguments.count > 2 ? Int(try self.number(arguments[2], what: "slice", line: line)) : characters.count
+                let to = arguments.count > 2 ? (try self.number(arguments[2], what: "slice", line: line)).scriptInt : characters.count
                 let low = Swift.max(from, 1), high = Swift.min(to, characters.count)
                 return .string(low <= high ? String(characters[(low - 1)..<high]) : "")
             default:
@@ -360,7 +362,7 @@ extension ScriptInterpreter {
         /// A number with a fixed count of decimals: `fixed(3.14159, 2)` is "3.14".
         define("fixed") { [unowned self] arguments, line in
             let value = try self.number(arguments.first ?? .null, what: "fixed", line: line)
-            let digits = arguments.count > 1 ? Int(try self.number(arguments[1], what: "fixed", line: line)) : 0
+            let digits = arguments.count > 1 ? (try self.number(arguments[1], what: "fixed", line: line)).scriptInt : 0
             return .string(String(format: "%.\(Swift.min(Swift.max(digits, 0), 10))f", value))
         }
 
@@ -378,6 +380,8 @@ extension ScriptInterpreter {
             try self.checkSize(parts.count, line: line)
             return .list(ScriptList(parts))
         }
+
+        installMoreStandardLibrary()
     }
 
     /// Every name the standard library defines, for Studio's reference and
@@ -390,7 +394,7 @@ extension ScriptInterpreter {
         "len", "append", "remove", "insert", "contains", "index_of", "keys", "join", "shuffle",
         "range", "slice", "reverse", "copy", "sum", "sort", "map", "filter",
         "upper", "lower", "trim", "split", "replace", "starts_with", "ends_with", "fixed"
-    ]
+    ] + moreStandardLibraryNames
 
     /// A stable sort that lets the comparison throw — a script comparator
     /// can fail, or run out of budget, and that must surface as its error.

@@ -437,7 +437,7 @@ public final class ScriptInterpreter {
                 // Reading past the end gives nil rather than an error, so a
                 // loop can test `if list[i] == nil`. Writing past the end is
                 // an error — see `assign`.
-                guard position == position.rounded(), position >= 1, Int(position) <= list.items.count else {
+                guard position == position.rounded(), position >= 1, position <= Double(list.items.count) else {
                     return .null
                 }
                 return list.items[Int(position) - 1]
@@ -447,7 +447,7 @@ public final class ScriptInterpreter {
                 guard let resolver else { return .null }
                 return try resolver.member(of: object, named: name, line: line)
             case let (.string(text), .number(position)):
-                guard position == position.rounded(), position >= 1, Int(position) <= text.count else { return .null }
+                guard position == position.rounded(), position >= 1, position <= Double(text.count) else { return .null }
                 return .string(String(text[text.index(text.startIndex, offsetBy: Int(position) - 1)]))
             default:
                 throw ScriptError(line: line, kind: .runtime,
@@ -594,7 +594,7 @@ public final class ScriptInterpreter {
     }
 
     private func listOffset(_ position: Double, count: Int, line: Int) throws -> Int {
-        guard position == position.rounded(), position >= 1, Int(position) <= count else {
+        guard position == position.rounded(), position >= 1, position <= Double(count) else {
             throw ScriptError(line: line, kind: .runtime,
                               message: L("There is no item {} — the list has {}. Use append() to add one.",
                                          ScriptValue.format(position), count))

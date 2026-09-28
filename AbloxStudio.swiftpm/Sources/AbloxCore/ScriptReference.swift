@@ -27,7 +27,7 @@ public enum ScriptReference {
     }
 
     public static var sections: [Section] {
-        [basics, events, everyone, players, npcs, screen, parts, blocks, extras]
+        [basics, events, everyone, players, npcs, screen, parts, blocks, extras, helpers]
     }
 
     public static var basics: Section {
@@ -210,6 +210,39 @@ public enum ScriptReference {
             Entry("floor  ceil  round  abs  sqrt  pow  sin  cos  tan  asin  acos  atan  atan2  log  exp  sign  min  max  clamp  pi",
                   L("Maths. Angles are in degrees.")),
             Entry("upper  lower  trim  shuffle", L("More text and list helpers."))
+        ])
+    }
+    public static var helpers: Section {
+        Section(title: L("More helpers"), symbolName: "sparkles", entries: [
+            Entry("nearest_player(p)  players_near(b, 10)  random_player()  alive_players()",
+                  L("Finding players: the closest (not counting itself), those within a distance, one at random, and those still in.")),
+            Entry("team_players(\"red\")  ranking()", L("Players on a team, and everyone by score, highest first.")),
+            Entry("nearest_block(p, \"coin\")  blocks_near(p, 5, \"coin\")",
+                  L("The closest block, or the blocks within a distance, with a tag if you give one.")),
+            Entry("int(3.9)  average(list)  median(list)  gcd(12, 18)",
+                  L("The whole part of a number, the average and middle of a list, and the biggest number that divides both.")),
+            Entry("smoothstep(0, 10, x)  inverse_lerp(a, b, v)  remap(v, 0, 100, 0, 1)",
+                  L("A smooth start and stop, where a value sits between two others, and a value moved from one range to another.")),
+            Entry("approach(x, target, 2)  wrap(370, 0, 360)  snap(7.3, 2)  angle_diff(350, 10)",
+                  L("Towards a target without passing it, round like a clock, to the nearest step, and the shortest turn between two angles.")),
+            Entry("chance(25)  random_float(1, 2)  pick_weighted({common: 70, rare: 25, epic: 5})",
+                  L("True 25 times in 100, a random number with decimals, and a pick where some choices come up more often.")),
+            Entry("unique(list)  flatten(list)  zip(a, b)  first(list)  last(list)  chunk(list, 3)  repeat(\"ab\", 3)",
+                  L("Tidying lists: no repeats, lists opened out, pairs, the ends, groups of a size, and the same thing again.")),
+            Entry("find(list, f)  any(list, f)  all(list, f)  count(list, x)  reduce(list, f, 0)",
+                  L("Questions for a list, with a function: the first match, whether any or all match, how many, and everything added up.")),
+            Entry("min_by(list, f)  max_by(list, f)  sort_by(list, f)  group_by(list, f)",
+                  L("The smallest or largest by a function, sorted by it, or sorted into groups.")),
+            Entry("values(map)  entries(map)  merge(a, b)  get(p.saved, \"coins\", 0)",
+                  L("A map's values, its pairs, two maps in one, and a value with a default for when it is missing.")),
+            Entry("pad_left(7, 3, \"0\")  pad_right(text, 10)  capitalize(text)  words(text)  lines(text)",
+                  L("Text lined up, a capital first letter, and text split into words or lines.")),
+            Entry("format(\"{} has {} coins\", p.name, 5)  comma(1234567)  short_number(1500)  time_text(65)",
+                  L("Filling in text, and numbers the way games show them: 1,234,567, 1.5K and 1:05.")),
+            Entry("direction(p, b)  forward(p.yaw)  yaw_to(n, p)  rotate_y(v, 90)  angle_between(a, b)",
+                  L("Directions: from one thing to another, the way a yaw faces, the yaw that faces something, turning, and the angle between two.")),
+            Entry("rgb(255, 128, 0)  hsv(120, 1, 1)  mix_color(\"red\", \"blue\", 0.5)  random_color()",
+                  L("Colours from numbers, round the rainbow, part way between two, or at random."))
         ])
     }
 }

@@ -16,7 +16,7 @@ extension GameRuntime: ScriptObjectResolver {
         "distance", "raycast", "time", "after", "every", "cancel",
         "announce", "sound", "chat", "fade", "shake", "end_round", "restart_round", "weapon",
         "ui_text", "ui_button", "ui_panel", "ui_image", "ui_bar", "ui_input", "ui_set", "ui_remove", "ui_clear"
-    ] + partsAPINames
+    ] + partsAPINames + helperAPINames
 
     /// Members every character has, player or NPC.
     public static let characterMemberNames: [String] = [
@@ -121,7 +121,7 @@ extension GameRuntime: ScriptObjectResolver {
         interpreter.define("cancel") { [unowned self] arguments, _ in
             guard case let .number(id) = arguments.first ?? .null else { return .bool(false) }
             let before = self.timers.count
-            self.timers.removeAll { $0.id == Int(id) }
+            self.timers.removeAll { $0.id == id.scriptInt }
             return .bool(self.timers.count < before)
         }
 
@@ -188,6 +188,7 @@ extension GameRuntime: ScriptObjectResolver {
         }
 
         installPartsAPI(on: interpreter)
+        installHelperAPI(on: interpreter)
     }
 
     // MARK: Members
@@ -569,7 +570,7 @@ extension GameRuntime: ScriptObjectResolver {
             send(state, .script(.interface(controls: state.showsControls, defaultUI: state.showsDefaultUI)))
         case "ammo":
             guard var armed = state.armed else { return }
-            armed.ammo = Swift.min(Swift.max(Int(try number(value, name, line)), 0), armed.weapon.magazine)
+            armed.ammo = Swift.min(Swift.max(try number(value, name, line).scriptInt, 0), armed.weapon.magazine)
             armed.reloadEnds = nil
             state.armed = armed
             sendAmmo(state)
@@ -1292,7 +1293,7 @@ extension GameRuntime: ScriptObjectResolver {
             case "damage": spec.damage = try number(value, "damage", line)
             case "rate": spec.fireRate = try number(value, "rate", line)
             case "range": spec.range = Float(try number(value, "range", line))
-            case "ammo": spec.magazine = Int(try number(value, "ammo", line))
+            case "ammo": spec.magazine = try number(value, "ammo", line).scriptInt
             case "reload": spec.reloadTime = try number(value, "reload", line)
             case "spread": spec.spread = Float(try number(value, "spread", line))
             case "model": break

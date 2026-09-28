@@ -113,12 +113,19 @@ public struct BreakpointHit: Hashable, Sendable {
         var seen: Set<String> = []
         var current: ScriptScope? = scope
         while let level = current, found.count < 40 {
-            for name in level.values.keys.sorted() where !seen.contains(name) && !hidden.contains(name) {
+            for name in level.values.keys.sorted() where !seen.contains(name) {
                 seen.insert(name)
                 guard let value = level.values[name] else { continue }
                 if level.parent == nil {
                     if case .function = value { continue }
                     if case .native = value { continue }
+                    // The game's own values (game, world, pi) — but a
+                    // script's own `let count = 0` is shown, even though
+                    // `count` is also a function's name.
+                    if hidden.contains(name) {
+                        if case .object = value { continue }
+                        if name == "pi" { continue }
+                    }
                 }
                 found.append(Variable(name: name, value: String(value.displayText.prefix(80))))
             }
