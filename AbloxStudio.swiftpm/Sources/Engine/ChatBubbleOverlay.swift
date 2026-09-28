@@ -54,6 +54,9 @@ final class ChatBubbleOverlay: UIView {
         fatalError("init(coder:) is not used")
     }
 
+    /// Times the usual size (Chat options).
+    var sizeFactor: CGFloat = 1
+
     /// Shows exactly these speakers; anyone not listed has their bubbles
     /// taken down.
     func update(_ speakers: [Speaker]) {
@@ -70,7 +73,7 @@ final class ChatBubbleOverlay: UIView {
                 stacks[speaker.id] = stack
             }
             stack.show(speaker.messages, style: speaker.style)
-            stack.place(at: speaker.anchor, scale: Self.scale(forDistance: speaker.distance))
+            stack.place(at: speaker.anchor, scale: Self.scale(forDistance: speaker.distance) * sizeFactor)
             bringSubviewToFront(stack)
         }
         for (id, stack) in stacks where !seen.contains(id) {

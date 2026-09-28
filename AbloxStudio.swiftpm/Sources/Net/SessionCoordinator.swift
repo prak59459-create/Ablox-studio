@@ -107,6 +107,10 @@ public final class SessionCoordinator: ObservableObject {
     /// opt its own messages out of your filter.
     public var moderator = ChatModerator()
 
+    /// How lines are tidied as they arrive: personal details hidden,
+    /// shouting softened, long runs of one letter cut (Chat options).
+    public var chatOptions = ChatOptions()
+
     /// False when Settings → Family has chat off: other players' lines are
     /// neither shown nor sent. The game's own lines and NPCs still speak.
     public var allowsPlayerChat = true
@@ -646,7 +650,7 @@ public final class SessionCoordinator: ObservableObject {
     private func receiveWhisper(from sender: PeerID, name: String, text: String) {
         guard allowsPlayerChat, allowsWhispers, muteList.allows(sender, localPeerID: localPeerID) else { return }
         let filtered = moderator.filter(text)
-        chatLog.append(ChatEntry(senderID: sender, senderName: name, text: filtered.text,
+        chatLog.append(ChatEntry(senderID: sender, senderName: name, text: ChatTidy.tidy(filtered.text, options: chatOptions),
                                  wasFiltered: filtered.wasFiltered, privateWith: name))
         if chatLog.count > 100 { chatLog.removeFirst(chatLog.count - 100) }
     }
@@ -871,6 +875,11 @@ public final class SessionCoordinator: ObservableObject {
         scriptLog = []
     }
 
+    /// Empties this iPad's chat window; nobody else's changes.
+    public func clearChat() {
+        chatLog = []
+    }
+
     public func sendChat(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, allowsPlayerChat, !isQuietedByHost else { return }
@@ -1009,10 +1018,12 @@ public final class SessionCoordinator: ObservableObject {
             return
         }
         let filtered = moderator.filter(payload.text)
+        // The game's own lines are left as the game wrote them.
+        let text = sender == SessionCoordinator.gamePeerID ? filtered.text : ChatTidy.tidy(filtered.text, options: chatOptions)
         chatLog.append(ChatEntry(
             senderID: sender,
             senderName: payload.senderName,
-            text: filtered.text,
+            text: text,
             wasFiltered: filtered.wasFiltered
         ))
         // The overlay only shows the last handful; keeping every message of a

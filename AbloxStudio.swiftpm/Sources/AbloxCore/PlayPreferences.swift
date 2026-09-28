@@ -115,6 +115,8 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
     public var crosshairColor: CrosshairColor = .white
     /// The play screen's chips, buttons, stick and camera habits.
     public var hud = HUDOptions()
+    /// How chat, bubbles and names look and behave.
+    public var chat = ChatOptions()
 
     public struct PointOffset: Codable, Hashable, Sendable {
         public var x: Double = 0
@@ -157,6 +159,7 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
         crosshair = (try? c.decodeIfPresent(CrosshairStyle.self, forKey: .crosshair)) ?? d.crosshair
         crosshairColor = (try? c.decodeIfPresent(CrosshairColor.self, forKey: .crosshairColor)) ?? d.crosshairColor
         hud = (try? c.decodeIfPresent(HUDOptions.self, forKey: .hud)) ?? d.hud
+        chat = (try? c.decodeIfPresent(ChatOptions.self, forKey: .chat)) ?? d.chat
         clamp()
     }
 

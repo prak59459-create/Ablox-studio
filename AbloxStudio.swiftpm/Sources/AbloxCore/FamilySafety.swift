@@ -89,6 +89,30 @@ public struct ParentalControls: Codable, Hashable, Sendable {
     public var dailyCoinLimit: Int?
     /// Games tagged "horror" are left out of the lists.
     public var hideScaryGames = false
+    /// More words hidden in chat: teasing as well as rude words. Optional
+    /// so settings saved before it existed still load.
+    public var strictChatFilter: Bool?
+    /// Words of the family's own to hide in chat.
+    public var extraBlockedWords: [String]?
+
+    public static let maximumExtraWords = 50
+
+    /// Adds a word of the family's own to hide; false for an empty word, a
+    /// duplicate or a full list.
+    @discardableResult
+    public mutating func addBlockedWord(_ word: String) -> Bool {
+        let trimmed = String(word.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().prefix(30))
+        var words = extraBlockedWords ?? []
+        guard !trimmed.isEmpty, !words.contains(trimmed), words.count < Self.maximumExtraWords else { return false }
+        words.append(trimmed)
+        extraBlockedWords = words
+        return true
+    }
+
+    public mutating func removeBlockedWord(_ word: String) {
+        extraBlockedWords?.removeAll { $0 == word }
+        if extraBlockedWords?.isEmpty ?? false { extraBlockedWords = nil }
+    }
 
     public init() {}
 

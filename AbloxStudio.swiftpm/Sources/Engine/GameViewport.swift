@@ -62,6 +62,9 @@ public struct GameViewport: UIViewRepresentable {
     /// Photo mode: no names or bubbles, and the camera may go further out.
     var photoMode: Bool
     var link: ViewportLink?
+    /// Friends in the room: a star by their names, and the only names shown
+    /// when the player asked for friends' names only.
+    var friends: Set<PeerID>
 
     public init(
         session: SessionCoordinator,
@@ -78,6 +81,7 @@ public struct GameViewport: UIViewRepresentable {
         preferFirstPerson: Bool = false,
         photoMode: Bool = false,
         link: ViewportLink? = nil,
+        friends: Set<PeerID> = [],
         onBlockTapped: ((UUID) -> Void)? = nil
     ) {
         self.session = session
@@ -94,6 +98,7 @@ public struct GameViewport: UIViewRepresentable {
         self.preferFirstPerson = preferFirstPerson
         self.photoMode = photoMode
         self.link = link
+        self.friends = friends
         self.onBlockTapped = onBlockTapped
     }
 
@@ -1032,6 +1037,7 @@ public struct GameViewport: UIViewRepresentable {
         private func updateNameTags() {
             guard let view, let overlay = nameTags else { return }
             let session = parent.session
+            let chat = preferences.chat
             let eye = Vec3(camera.position(relativeTo: nil))
             var people: [PeerID: PlayerSnapshot] = [:]
             for player in session.roster { people[player.peerID] = player }
@@ -1048,14 +1054,19 @@ public struct GameViewport: UIViewRepresentable {
                       let point = view.project(top.simd) else { continue }
                 let player = people[peer]
                 let isLocal = peer == session.localPeerID
+                let isFriend = parent.friends.contains(peer)
+                // Chat options: whose names show, and a star by a friend's.
+                let shown = !isLocal && chat.showsName(isFriend: isFriend)
+                let name = player?.profile.displayName ?? avatar.profile.displayName
                 tags.append(NameTagOverlay.Tag(
                     id: peer,
-                    name: isLocal ? "" : (player?.profile.displayName ?? avatar.profile.displayName),
-                    title: isLocal ? "" : (player?.profile.title ?? ""),
+                    name: shown ? (isFriend && chat.markFriends ? "★ " + name : name) : "",
+                    title: shown ? (player?.profile.title ?? "") : "",
                     anchor: point, distance: distance, isNPC: player?.isNPC ?? false,
                     plate: player?.profile.nameplate ?? avatar.profile.nameplate
                 ))
             }
+            overlay.sizeFactor = CGFloat(chat.nameSize.scale)
             overlay.update(tags, showNames: !parent.photoMode)
         }
 
@@ -1069,12 +1080,16 @@ public struct GameViewport: UIViewRepresentable {
             guard let view, let overlay = chatBubbles else { return }
             let session = parent.session
             let now = Date()
+            // Chat options: bubbles off, their size and how long they stay.
+            let chat = preferences.chat
+            overlay.sizeFactor = CGFloat(chat.bubbleSize.scale)
 
             var lines: [PeerID: [ChatBubbleOverlay.Message]] = [:]
-            for entry in session.chatLog.reversed() {
-                let age = now.timeIntervalSince(entry.timestamp)
+            for entry in session.chatLog.reversed() where chat.showBubbles || entry.senderID == session.localPeerID {
+                let seconds = now.timeIntervalSince(entry.timestamp)
                 // The log is in order, so everything before this is older.
-                if age > ChatBubbleOverlay.lifetime { break }
+                if seconds > chat.bubbleTime.seconds { break }
+                let age = chat.bubbleAge(seconds)
                 // The game's own lines have no head to sit over.
                 // Nor do whispers: they are not said out loud.
                 guard entry.senderID != SessionCoordinator.gamePeerID, !entry.isPrivate,

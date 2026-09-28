@@ -43,13 +43,16 @@ final class NameTagOverlay: UIView {
         stamps[peer] = (emoji, Date())
     }
 
+    /// Times the usual size (Chat options).
+    var sizeFactor: CGFloat = 1
+
     /// Exactly these tags this frame; stamps float over the same anchors.
     func update(_ tags: [Tag], showNames: Bool) {
         var seen = Set<PeerID>()
         let now = Date()
         for tag in tags.sorted(by: { $0.distance > $1.distance }) {
             seen.insert(tag.id)
-            let scale = CGFloat(max(0.55, min(1.1, 14 / max(tag.distance, 1))))
+            let scale = CGFloat(max(0.55, min(1.1, 14 / max(tag.distance, 1)))) * sizeFactor
             // NPCs are named only up close; players to a good distance.
             let nameVisible = showNames && !tag.name.isEmpty && tag.distance < (tag.isNPC ? 18 : 45)
             if nameVisible {

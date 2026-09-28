@@ -35,18 +35,31 @@ public struct ChatModerator: Sendable {
         "死ね", "殺す", "ころす", "きもい", "キモい", "キモイ", "うざい", "ウザい", "ウザイ", "ブス", "アホ", "バーカ"
     ]
 
+    /// Teasing that stops short of rude, hidden too when a grown-up asks
+    /// for the strict filter. Again only words with no innocent longer word
+    /// around them (not バカ, which is in バカンス).
+    public static let strictTerms: [String] = [
+        "noob", "cringe", "weirdo", "you suck", "nobody likes you", "crybaby",
+        // Not くそ, which is in やくそく ("a promise").
+        "へたくそ", "下手くそ", "ヘタクソ", "雑魚", "ザコ", "消えろ", "きえろ", "クソ"
+    ]
+
     /// Extra terms a host adds for their own group.
     public var additionalTerms: [String]
+
+    /// Whether the strict list is on as well.
+    public let isStrict: Bool
 
     /// Whether filtering is applied at all. Off still leaves muting available.
     public var isFilterEnabled: Bool
 
     private let blockedTerms: [String]
 
-    public init(additionalTerms: [String] = [], isFilterEnabled: Bool = true) {
+    public init(additionalTerms: [String] = [], isFilterEnabled: Bool = true, strict: Bool = false) {
         self.additionalTerms = additionalTerms
         self.isFilterEnabled = isFilterEnabled
-        self.blockedTerms = (ChatModerator.defaultBlockedTerms + additionalTerms)
+        self.isStrict = strict
+        self.blockedTerms = (ChatModerator.defaultBlockedTerms + (strict ? ChatModerator.strictTerms : []) + additionalTerms)
             .map { $0.lowercased() }
             .filter { !$0.isEmpty }
             // Longest first, so "shut up" is masked as one phrase rather than

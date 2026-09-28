@@ -17,6 +17,15 @@ public struct PlayerContact: Codable, Hashable, Sendable, Identifiable {
     /// What this player calls them ("Taro from school"). Only on this iPad;
     /// their own name still shows beside it.
     public var nickname: String?
+    /// Pinned to the top of the list.
+    public var favourite: Bool?
+    /// A few words to remember them by.
+    public var note: String?
+    /// A `FriendGroup` by name; kept as text so a group from a newer
+    /// version never makes the whole list unreadable.
+    public var groupName: String?
+    /// When they became a friend.
+    public var friendSince: Date?
 
     /// The nickname when there is one, otherwise their own name.
     public var shownName: String {
@@ -87,8 +96,9 @@ public struct SocialBook: Codable, Hashable, Sendable {
     public mutating func addFriend(_ id: PeerID, name: String, at date: Date = Date()) -> Bool {
         guard !isBlocked(id), friends.count < Self.maximumFriends else { return false }
         guard !isFriend(id) else { return true }
-        let known = recent.first { $0.id == id }
-        friends.append(known ?? PlayerContact(id: id, name: name, lastSeen: date))
+        var friend = recent.first { $0.id == id } ?? PlayerContact(id: id, name: name, lastSeen: date)
+        friend.friendSince = date
+        friends.append(friend)
         friends.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         return true
     }
@@ -105,6 +115,25 @@ public struct SocialBook: Codable, Hashable, Sendable {
         guard let index = friends.firstIndex(where: { $0.id == id }) else { return }
         let trimmed = String(nickname.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maximumNicknameLength))
         friends[index].nickname = trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// Pins a friend to the top of the list, or unpins them.
+    public mutating func setFavourite(_ favourite: Bool, for id: PeerID) {
+        guard let index = friends.firstIndex(where: { $0.id == id }) else { return }
+        friends[index].favourite = favourite ? true : nil
+    }
+
+    /// A note about a friend; empty clears it.
+    public mutating func setNote(_ note: String, for id: PeerID) {
+        guard let index = friends.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = String(note.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maximumNoteLength))
+        friends[index].note = trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// Which group a friend is in, or none.
+    public mutating func setGroup(_ group: FriendGroup?, for id: PeerID) {
+        guard let index = friends.firstIndex(where: { $0.id == id }) else { return }
+        friends[index].group = group
     }
 
     /// Blocking also ends a friendship: the two do not go together.
