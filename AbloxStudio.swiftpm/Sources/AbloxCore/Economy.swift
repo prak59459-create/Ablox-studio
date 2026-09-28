@@ -243,15 +243,47 @@ public struct PlayerWallet: Codable, Hashable, Sendable {
         lifetimeEarned += amount
     }
 
+    /// Buys an item, at its price or at `price` (a deal or a sale).
     @discardableResult
-    public mutating func purchase(_ itemID: String) -> PurchaseResult {
+    public mutating func purchase(_ itemID: String, price: Int? = nil) -> PurchaseResult {
         guard let item = ShopCatalogue.item(id: itemID) else { return .unknownItem }
         guard !owns(item) else { return .alreadyOwned }
-        guard canAfford(item) else { return .notEnoughCoins(shortfall: item.price - coins) }
+        let cost = Swift.max(0, Swift.min(item.price, price ?? item.price))
+        guard coins >= cost else { return .notEnoughCoins(shortfall: cost - coins) }
 
-        coins -= item.price
+        coins -= cost
         ownedItemIDs.insert(item.id)
         return .purchased(item)
+    }
+
+    /// Coins moved out to the coin jar; false when there are not enough.
+    public mutating func setAside(_ amount: Int) -> Bool {
+        guard amount > 0, coins >= amount else { return false }
+        coins -= amount
+        return true
+    }
+
+    /// Coins back from the coin jar: the player's own, not new earnings.
+    public mutating func takeBack(_ amount: Int) {
+        guard amount > 0 else { return }
+        coins += amount
+    }
+
+    /// Coins earned somewhere else (the jar's growth), for the lifetime
+    /// total only.
+    public mutating func countEarned(_ amount: Int) {
+        guard amount > 0 else { return }
+        lifetimeEarned += amount
+    }
+
+    /// Gives a purchase back: the item goes and its coins return (not as
+    /// earnings). False for something free or not owned.
+    @discardableResult
+    public mutating func refund(_ itemID: String, coins paid: Int) -> Bool {
+        guard let item = ShopCatalogue.item(id: itemID), !item.isFree, owns(item), paid > 0 else { return false }
+        ownedItemIDs.remove(item.id)
+        coins += paid
+        return true
     }
 
     /// Everything owned of a given kind, in catalogue order.

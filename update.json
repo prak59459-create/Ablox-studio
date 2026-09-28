@@ -1,22 +1,20 @@
 {
   "app": "Ablox Studio",
-  "version": "1.1",
-  "build": 2,
+  "version": "1.2",
+  "build": 3,
   "protocol": 8,
-  "date": "2026-09-26",
+  "date": "2026-09-28",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Updates itself: new versions are found, downloaded and handed to Swift Playgrounds for you",
-      "Worlds keep their earlier versions, and deleted worlds can be brought back for 30 days",
-      "Safer co-editing: a stronger room key, and the host ignores floods and fake messages",
-      "Faster play-testing: creating and moving parts costs far less"
+      "Play-tests show the new looks: hats, faces, pets, trails, auras, name cards and chat bubbles",
+      "Play-tests use the new chat tidying, camera follow and bubble and name options",
+      "More Japanese translations, shared with Ablox"
     ],
     "ja": [
-      "自動アップデート: 新しいバージョンを見つけて、ダウンロードして、Swift Playgrounds にわたします",
-      "ワールドの前のバージョンにもどせる・消したワールドを30日以内なら復活できる",
-      "共同編集がより安全に: 強いルームキー、ホストは大量送信やなりすましを無視",
-      "テストプレイが軽く: パーツを出したり動かしたりする負担を大きく削減"
+      "テストプレイで新しい見た目を表示: ぼうし・顔・ペット・トレイル・オーラ・ネームカード・チャットのふきだし",
+      "テストプレイにチャットの整え機能、ついてくるカメラ、ふきだしと名前の設定を反映",
+      "Ablox と共通の日本語訳を追加"
     ]
   }
 }

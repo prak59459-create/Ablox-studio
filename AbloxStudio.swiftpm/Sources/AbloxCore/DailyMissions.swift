@@ -23,6 +23,19 @@ public enum MissionKind: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// How to do it, for a small child.
+    public var hint: String {
+        switch self {
+        case .playMinutes: return L("Any game counts, alone or with friends.")
+        case .differentGames: return L("Try something new from the Games tab.")
+        case .earnCoins: return L("Score points and finish rounds.")
+        case .takePicture: return L("Tap the camera button while playing.")
+        case .useEmote: return L("Tap the smiley face while playing.")
+        case .playWithOthers: return L("Host a room or join a friend's.")
+        case .finishRound: return L("Reach the end of a game's round.")
+        }
+    }
+
     public var symbolName: String {
         switch self {
         case .playMinutes: return "clock.fill"
@@ -58,8 +71,13 @@ public struct MissionBook: Codable, Hashable, Sendable {
     /// Games played today, for "different games".
     public private(set) var games: [String] = []
     public private(set) var claimed: Set<String> = []
+    /// Today's swap, if one was made: the kind given up and the kind taken
+    /// on. Optional so books saved before swapping existed still load.
+    public private(set) var swapped: [String: String]?
 
     public static let missionsPerDay = 3
+    /// For finishing all of a day's missions.
+    public static let allDoneBonus = 40
 
     public init() {}
 
@@ -103,7 +121,63 @@ public struct MissionBook: Codable, Hashable, Sendable {
         return hash
     }
 
-    public func missions(on day: String) -> [Mission] { Self.missions(for: day) }
+    public func missions(on day: String) -> [Mission] {
+        let base = Self.missions(for: day)
+        guard day == self.day, let swapped, !swapped.isEmpty else { return base }
+        return base.map { mission in
+            guard let raw = swapped[mission.kind.rawValue], let kind = MissionKind(rawValue: raw) else { return mission }
+            return Self.standard(kind)
+        }
+    }
+
+    /// A mission of a kind at its usual size, for a swap.
+    public static func standard(_ kind: MissionKind) -> Mission {
+        switch kind {
+        case .playMinutes: return Mission(kind: kind, target: 10, reward: 20)
+        case .differentGames: return Mission(kind: kind, target: 2, reward: 26)
+        case .earnCoins: return Mission(kind: kind, target: 50, reward: 20)
+        case .takePicture: return Mission(kind: kind, target: 1, reward: 15)
+        case .useEmote: return Mission(kind: kind, target: 3, reward: 15)
+        case .playWithOthers: return Mission(kind: kind, target: 1, reward: 30)
+        case .finishRound: return Mission(kind: kind, target: 1, reward: 20)
+        }
+    }
+
+    /// One swap a day, for a mission not already done or taken.
+    public func canSwap(_ mission: Mission, on day: String) -> Bool {
+        let unused = day != self.day || (swapped?.isEmpty ?? true)
+        return unused && mission.kind != .playMinutes && !isDone(mission, on: day) && !isClaimed(mission, on: day)
+    }
+
+    /// Swaps a mission for another kind not already among today's; nil
+    /// when it cannot be swapped.
+    @discardableResult
+    public mutating func swap(_ mission: Mission, on day: String) -> Mission? {
+        roll(to: day)
+        guard canSwap(mission, on: day) else { return nil }
+        let current = Set(missions(on: day).map(\.kind))
+        let choices = MissionKind.allCases.filter { !current.contains($0) && $0 != .playMinutes }
+        guard !choices.isEmpty else { return nil }
+        let kind = choices[Int(Self.stableHash("swap:" + day + mission.kind.rawValue) % UInt64(choices.count))]
+        swapped = [mission.kind.rawValue: kind.rawValue]
+        return Self.standard(kind)
+    }
+
+    public func allDone(on day: String) -> Bool {
+        missions(on: day).allSatisfy { isDone($0, on: day) }
+    }
+
+    public func isAllDoneBonusWaiting(on day: String) -> Bool {
+        allDone(on: day) && !(day == self.day && claimed.contains("all"))
+    }
+
+    /// The bonus for finishing every mission today, once.
+    public mutating func claimAllDoneBonus(on day: String) -> Int? {
+        roll(to: day)
+        guard allDone(on: day), !claimed.contains("all") else { return nil }
+        claimed.insert("all")
+        return Self.allDoneBonus
+    }
 
     /// Clears yesterday's progress when the day has changed.
     public mutating func roll(to day: String) {
@@ -112,6 +186,7 @@ public struct MissionBook: Codable, Hashable, Sendable {
         counts = [:]
         games = []
         claimed = []
+        swapped = nil
     }
 
     public mutating func record(_ kind: MissionKind, amount: Int = 1, on day: String) {
@@ -225,6 +300,14 @@ public enum SavingsGoal {
     /// Coins still needed; 0 once there are enough.
     public static func remaining(balance: Int, price: Int) -> Int {
         Swift.max(0, price - balance)
+    }
+
+    /// Roughly how many more days, earning `perDay` a day.
+    public static func daysToGo(balance: Int, price: Int, perDay: Double) -> Int? {
+        let left = remaining(balance: balance, price: price)
+        guard left > 0 else { return 0 }
+        guard perDay >= 1 else { return nil }
+        return Int((Double(left) / perDay).rounded(.up))
     }
 
     /// Roughly how many more rounds, at what the last ones paid on average.

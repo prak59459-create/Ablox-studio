@@ -11,6 +11,12 @@ import Foundation
 public struct DailyBonus: Codable, Hashable, Sendable {
     public private(set) var lastDay: String?
     public private(set) var streak = 0
+    /// Days that may be missed without losing the streak: one earned for
+    /// every seven days in a row, two at most. Optional so bonuses saved
+    /// before it existed still load.
+    public private(set) var freezes: Int?
+
+    public static let maximumFreezes = 2
 
     public static let base = 10
     public static let perDay = 5
@@ -24,7 +30,17 @@ public struct DailyBonus: Codable, Hashable, Sendable {
         let today = PlaytimeLog.dayKey(date, calendar: calendar)
         guard today != lastDay else { return nil }
         let yesterday = calendar.date(byAdding: .day, value: -1, to: date).map { PlaytimeLog.dayKey($0, calendar: calendar) }
-        streak = (lastDay != nil && lastDay == yesterday) ? streak + 1 : 1
+        let dayBefore = calendar.date(byAdding: .day, value: -2, to: date).map { PlaytimeLog.dayKey($0, calendar: calendar) }
+        if lastDay != nil, lastDay == yesterday {
+            streak += 1
+        } else if lastDay != nil, lastDay == dayBefore, (freezes ?? 0) > 0 {
+            // One day missed, and a freeze to cover it.
+            freezes = (freezes ?? 0) - 1
+            streak += 1
+        } else {
+            streak = 1
+        }
+        if streak % 7 == 0 { freezes = Swift.min(Self.maximumFreezes, (freezes ?? 0) + 1) }
         lastDay = today
         return min(Self.maximum, Self.base + Self.perDay * (streak - 1))
     }
