@@ -24,7 +24,9 @@ public final class AvatarEntity: Entity {
     private let rightArm = ModelEntity()
     private let leftLeg = ModelEntity()
     private let rightLeg = ModelEntity()
-    private var hatEntity: ModelEntity?
+    private var hatEntity: Entity?
+    /// A part of the hat that turns by itself (a propeller).
+    private var spinningHatPart: Entity?
     private var faceEntity: Entity?
     private var appliedFace: AvatarProfile.Face?
     private var appliedFaceHeadColor: ColorRGBA?
@@ -158,6 +160,11 @@ public final class AvatarEntity: Entity {
             part(w, h, -0.1, 0.05)
             part(w, h, 0.1, 0.05)
         }
+        if let newer = AvatarWardrobe.face(face) {
+            head.addChild(newer)
+            faceEntity = newer
+            return
+        }
         switch face {
         case .smile:
             eyes()
@@ -204,6 +211,8 @@ public final class AvatarEntity: Entity {
                 part(0.06, 0.05, x, 0.035, pink)
             }
             part(0.16, 0.035, 0, -0.09)
+        default:
+            break
         }
         head.addChild(group)
         faceEntity = group
@@ -220,8 +229,14 @@ public final class AvatarEntity: Entity {
         petEntity?.removeFromParent()
         petEntity = nil
         guard pet != .none else { return }
-        let root = Entity()
         let skin = material(color)
+        if let newer = AvatarWardrobe.pet(pet, skin: skin) {
+            newer.position = petHome
+            addChild(newer)
+            petEntity = newer
+            return
+        }
+        let root = Entity()
         let dark = UnlitMaterial(color: UIColor(red: 0.1, green: 0.11, blue: 0.14, alpha: 1))
         func box(_ size: SIMD3<Float>, _ at: SIMD3<Float>, _ m: RealityKit.Material? = nil, tilt: Float = 0) {
             let part = ModelEntity(mesh: .generateBox(size: size, cornerRadius: min(size.x, size.y, size.z) * 0.2), materials: [m ?? skin])
@@ -283,6 +298,8 @@ public final class AvatarEntity: Entity {
             box(SIMD3<Float>(0.05, 0.05, 0.22), SIMD3<Float>(0, -0.02, 0.24))
             box(SIMD3<Float>(0.03, 0.03, 0.01), SIMD3<Float>(-0.04, 0.13, -0.285), UnlitMaterial(color: .yellow))
             box(SIMD3<Float>(0.03, 0.03, 0.01), SIMD3<Float>(0.04, 0.13, -0.285), UnlitMaterial(color: .yellow))
+        default:
+            break
         }
         root.name = "ablox.avatar.pet"
         root.position = petHome
@@ -308,7 +325,14 @@ public final class AvatarEntity: Entity {
     private func applyHat(_ hat: AvatarProfile.HatStyle, material: RealityKit.Material) {
         hatEntity?.removeFromParent()
         hatEntity = nil
+        spinningHatPart = nil
         guard hat != .none else { return }
+        if let newer = AvatarWardrobe.hat(hat, main: material) {
+            rig.addChild(newer)
+            hatEntity = newer
+            spinningHatPart = newer.findEntity(named: AvatarWardrobe.spinningPart)
+            return
+        }
 
         let mesh: MeshResource
         let offset: SIMD3<Float>
@@ -327,6 +351,8 @@ public final class AvatarEntity: Entity {
         case .halo:
             mesh = .abloxCylinder(height: 0.04, radius: 0.32)
             offset = SIMD3<Float>(0, 2.05, 0)
+        default:
+            return
         }
 
         let entity = ModelEntity(mesh: mesh, materials: [material])
@@ -510,6 +536,9 @@ public final class AvatarEntity: Entity {
     /// which is moved directly rather than eased.
     public func animate(travelled: Float, deltaTime: Float) {
         strideDistance += travelled
+        if let spinningHatPart {
+            spinningHatPart.orientation = simd_quatf(angle: deltaTime * 9, axis: SIMD3<Float>(0, 1, 0)) * spinningHatPart.orientation
+        }
         if let petEntity {
             // A small bob, faster while walking; fliers hover.
             petPhase += deltaTime * (travelled > 0.01 ? 12 : 3)

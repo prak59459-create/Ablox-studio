@@ -122,10 +122,80 @@ final class PlayerProgressTests: XCTestCase {
     }
 
     func testAFaceFromANewerIPadFallsBackToASmile() throws {
-        let newer = #"{"displayName":"New","bodyColor":{"r":1,"g":1,"b":1,"a":1},"headColor":{"r":1,"g":1,"b":1,"a":1},"accentColor":{"r":1,"g":1,"b":1,"a":1},"hat":"none","height":1,"face":"alien","pet":"unicorn"}"#
+        let newer = #"{"displayName":"New","bodyColor":{"r":1,"g":1,"b":1,"a":1},"headColor":{"r":1,"g":1,"b":1,"a":1},"accentColor":{"r":1,"g":1,"b":1,"a":1},"hat":"space_helmet","height":1,"face":"robot_eyes_v2","pet":"phoenix","hatNew":"jetpack_hat","faceNew":"laser","petNew":"griffin"}"#
         let loaded = try JSONDecoder().decode(AvatarProfile.self, from: Data(newer.utf8))
         XCTAssertEqual(loaded.face, .smile)
         XCTAssertEqual(loaded.pet, AvatarProfile.Pet.none)
+        XCTAssertEqual(loaded.hat, .none)
+    }
+
+    /// Newer hats, faces and pets travel under keys of their own: an iPad
+    /// that has not updated reads the old keys and sees something it knows.
+    func testNewerLooksStayReadableByOlderIPads() throws {
+        var profile = AvatarProfile(displayName: "Mia")
+        profile.hat = .wizard
+        profile.face = .starEyes
+        profile.pet = .unicorn
+        let data = try JSONEncoder().encode(profile)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(json["hat"] as? String, "none", "an older iPad sees no hat")
+        XCTAssertEqual(json["hatNew"] as? String, "wizard")
+        XCTAssertNil(json["face"], "an older iPad sees a smile")
+        XCTAssertEqual(json["faceNew"] as? String, "star_eyes")
+        XCTAssertNil(json["pet"], "an older iPad sees no pet")
+        XCTAssertEqual(json["petNew"] as? String, "unicorn")
+        XCTAssertEqual(try JSONDecoder().decode(AvatarProfile.self, from: data), profile)
+
+        // The old looks are written exactly as before.
+        var classic = AvatarProfile(displayName: "Old")
+        classic.hat = .crown
+        classic.face = .cat
+        classic.pet = .dog
+        let old = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(classic)) as? [String: Any])
+        XCTAssertEqual(old["hat"] as? String, "crown")
+        XCTAssertEqual(old["face"] as? String, "cat")
+        XCTAssertEqual(old["pet"] as? String, "dog")
+        XCTAssertNil(old["hatNew"])
+    }
+
+    func testEveryLookIsInTheShopWithAPrice() {
+        for hat in AvatarProfile.HatStyle.allCases {
+            XCTAssertNotNil(ShopCatalogue.item(id: "hat.\(hat.rawValue)"), hat.rawValue)
+        }
+        for face in AvatarProfile.Face.allCases {
+            XCTAssertNotNil(ShopCatalogue.item(id: "face.\(face.rawValue)"), face.rawValue)
+        }
+        for pet in AvatarProfile.Pet.allCases {
+            XCTAssertNotNil(ShopCatalogue.item(id: "pet.\(pet.rawValue)"), pet.rawValue)
+        }
+        XCTAssertEqual(AvatarProfile.HatStyle.allCases.count, 25)
+        XCTAssertEqual(AvatarProfile.Face.allCases.count, 24)
+        XCTAssertEqual(AvatarProfile.Pet.allCases.count, 18)
+        // What was bought before costs what it cost.
+        XCTAssertEqual(ShopCatalogue.item(id: "hat.crown")?.price, 75)
+        XCTAssertEqual(ShopCatalogue.item(id: "face.heart")?.price, 160)
+        XCTAssertEqual(ShopCatalogue.item(id: "pet.dragon")?.price, 600)
+        XCTAssertEqual(ShopCatalogue.items(of: .bodyColor).count, ColorRGBA.palette.count)
+    }
+
+    /// Scripts name hats in lower case with underscores, as they are stored.
+    func testNewNamesAreScriptFriendly() {
+        let names = AvatarProfile.HatStyle.allCases.map(\.rawValue) + AvatarProfile.Face.allCases.map(\.rawValue)
+            + AvatarProfile.Pet.allCases.map(\.rawValue)
+        for name in names {
+            XCTAssertEqual(name, name.lowercased(), name)
+            XCTAssertFalse(name.contains(" "), name)
+        }
+    }
+
+    /// A player who never opened the avatar screen looks the same on every
+    /// version, however many hats and colours are added.
+    func testAGeneratedLookUsesOnlyTheOriginals() {
+        for _ in 0..<50 {
+            let look = AvatarProfile.generated(for: PeerID(), name: "x")
+            XCTAssertTrue(AvatarProfile.HatStyle.legacy.contains(look.hat))
+            XCTAssertTrue(ColorRGBA.originalPalette.contains(look.bodyColor))
+        }
     }
 
     // MARK: Catalogue shelves

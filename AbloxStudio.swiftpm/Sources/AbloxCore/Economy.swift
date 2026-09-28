@@ -92,7 +92,8 @@ public enum ShopCatalogue {
         // have earned a single coin.
         let colourNames = [
             "coral", "amber", "sun", "mint", "cyan", "blue",
-            "violet", "pink", "chalk", "concrete", "slate", "graphite"
+            "violet", "pink", "chalk", "concrete", "slate", "graphite",
+            "lime", "teal", "lavender", "peach", "chocolate"
         ]
         for (index, colour) in ColorRGBA.palette.enumerated() {
             let name = index < colourNames.count ? colourNames[index] : "colour\(index)"
@@ -111,29 +112,13 @@ public enum ShopCatalogue {
         }
 
         for hat in AvatarProfile.HatStyle.allCases {
-            result.append(ShopItem(
-                id: "hat.\(hat.rawValue)",
-                name: hat.displayName,
-                kind: .hat,
-                price: hat == .none ? 0 : 75,
-                hat: hat
-            ))
+            result.append(ShopItem(id: "hat.\(hat.rawValue)", name: hat.englishName, kind: .hat, price: hat.price, hat: hat))
         }
-
-        let facePrices: [AvatarProfile.Face: Int] = [.smile: 0, .grin: 0, .wink: 30, .surprised: 40, .sleepy: 40, .cool: 80,
-                                                     .cat: 120, .robot: 120, .heart: 160]
         for face in AvatarProfile.Face.allCases {
-            let faceNames: [AvatarProfile.Face: String] = [.smile: "Smile", .grin: "Grin", .wink: "Wink", .cool: "Sunglasses",
-                                                           .surprised: "Surprised", .sleepy: "Sleepy", .cat: "Cat", .robot: "Robot",
-                                                           .heart: "Heart eyes"]
-            result.append(ShopItem(id: "face.\(face.rawValue)", name: faceNames[face] ?? face.rawValue, kind: .face,
-                                   price: facePrices[face] ?? 50, face: face))
+            result.append(ShopItem(id: "face.\(face.rawValue)", name: face.englishName, kind: .face, price: face.price, face: face))
         }
-        let petPrices: [AvatarProfile.Pet: Int] = [.none: 0, .cat: 150, .dog: 150, .bunny: 200, .bird: 250, .slime: 300,
-                                                   .robot: 400, .dragon: 600]
         for pet in AvatarProfile.Pet.allCases {
-            result.append(ShopItem(id: "pet.\(pet.rawValue)", name: pet.rawValue.capitalized, kind: .pet,
-                                   price: petPrices[pet] ?? 200, pet: pet))
+            result.append(ShopItem(id: "pet.\(pet.rawValue)", name: pet.englishName, kind: .pet, price: pet.price, pet: pet))
         }
 
         return result

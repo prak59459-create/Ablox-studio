@@ -104,8 +104,19 @@ public extension ColorRGBA {
         ColorRGBA(hex: "#F5F5F5")!, // chalk
         ColorRGBA(hex: "#9CA3AF")!, // concrete
         ColorRGBA(hex: "#4B5563")!, // slate
-        ColorRGBA(hex: "#1F2937")!  // graphite
+        ColorRGBA(hex: "#1F2937")!, // graphite
+        // Added later: at the end, so a colour's place in the list (which
+        // look codes and saved choices use) never moves.
+        ColorRGBA(hex: "#A3E635")!, // lime
+        ColorRGBA(hex: "#14B8A6")!, // teal
+        ColorRGBA(hex: "#C4B5FD")!, // lavender
+        ColorRGBA(hex: "#FDBA74")!, // peach
+        ColorRGBA(hex: "#7C4A2D")!  // chocolate
     ]
+
+    /// The palette as it first was, for anything that must look the same on
+    /// every version (a generated avatar).
+    static var originalPalette: ArraySlice<ColorRGBA> { palette.prefix(12) }
 
     static let defaultBlock = ColorRGBA(hex: "#9CA3AF")!
     static let defaultGround = ColorRGBA(hex: "#2F4F3E")!

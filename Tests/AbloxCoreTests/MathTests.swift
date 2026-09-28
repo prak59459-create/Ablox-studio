@@ -222,7 +222,8 @@ final class MathTests: XCTestCase {
     }
 
     func testPaletteEntriesAllParsed() {
-        XCTAssertEqual(ColorRGBA.palette.count, 12)
+        XCTAssertEqual(ColorRGBA.palette.count, 17)
+        XCTAssertEqual(ColorRGBA.originalPalette.count, 12)
         XCTAssertTrue(ColorRGBA.palette.allSatisfy { $0.isOpaque })
     }
 }

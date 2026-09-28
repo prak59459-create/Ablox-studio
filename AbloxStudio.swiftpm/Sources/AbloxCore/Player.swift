@@ -119,6 +119,7 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case displayName, bodyColor, headColor, accentColor, hat, height, ride, rideColor, title, face, hatColor, pet, petColor
+        case hatNew, faceNew, petNew
     }
 
     // Written by hand so a profile saved before rides existed — on this
@@ -129,14 +130,14 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         bodyColor = try c.decode(ColorRGBA.self, forKey: .bodyColor)
         headColor = try c.decode(ColorRGBA.self, forKey: .headColor)
         accentColor = try c.decode(ColorRGBA.self, forKey: .accentColor)
-        hat = try c.decode(HatStyle.self, forKey: .hat)
+        hat = (try? c.decodeIfPresent(HatStyle.self, forKey: .hatNew)) ?? (try? c.decode(HatStyle.self, forKey: .hat)) ?? HatStyle.none
         height = try c.decode(Float.self, forKey: .height)
         ride = (try? c.decodeIfPresent(Ride.self, forKey: .ride)) ?? Ride.none
         rideColor = (try? c.decodeIfPresent(ColorRGBA.self, forKey: .rideColor)) ?? ColorRGBA(hex: "#EF4444")!
         title = (try? c.decodeIfPresent(String.self, forKey: .title)) ?? ""
-        face = (try? c.decodeIfPresent(Face.self, forKey: .face)) ?? .smile
+        face = (try? c.decodeIfPresent(Face.self, forKey: .faceNew)) ?? (try? c.decodeIfPresent(Face.self, forKey: .face)) ?? .smile
         hatColor = try? c.decodeIfPresent(ColorRGBA.self, forKey: .hatColor)
-        pet = (try? c.decodeIfPresent(Pet.self, forKey: .pet)) ?? Pet.none
+        pet = (try? c.decodeIfPresent(Pet.self, forKey: .petNew)) ?? (try? c.decodeIfPresent(Pet.self, forKey: .pet)) ?? Pet.none
         petColor = (try? c.decodeIfPresent(ColorRGBA.self, forKey: .petColor)) ?? ColorRGBA(hex: "#F59E0B")!
     }
 
@@ -146,17 +147,29 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         try c.encode(bodyColor, forKey: .bodyColor)
         try c.encode(headColor, forKey: .headColor)
         try c.encode(accentColor, forKey: .accentColor)
-        try c.encode(hat, forKey: .hat)
+        if HatStyle.legacy.contains(hat) {
+            try c.encode(hat, forKey: .hat)
+        } else {
+            try c.encode(HatStyle.none, forKey: .hat)
+            try c.encode(hat, forKey: .hatNew)
+        }
         try c.encode(height, forKey: .height)
         try c.encode(ride, forKey: .ride)
         try c.encode(rideColor, forKey: .rideColor)
         if !title.isEmpty { try c.encode(title, forKey: .title) }
         // Left out at their defaults, so an older iPad reads the profile as it
         // always did.
-        if face != .smile { try c.encode(face, forKey: .face) }
+        // Newer hats, faces and pets go under keys of their own; the old
+        // keys keep something every version knows, so an iPad that has not
+        // updated reads the profile (and sees no hat) instead of failing.
+        if Face.legacy.contains(face) {
+            if face != .smile { try c.encode(face, forKey: .face) }
+        } else {
+            try c.encode(face, forKey: .faceNew)
+        }
         try c.encodeIfPresent(hatColor, forKey: .hatColor)
         if pet != .none {
-            try c.encode(pet, forKey: .pet)
+            if Pet.legacy.contains(pet) { try c.encode(pet, forKey: .pet) } else { try c.encode(pet, forKey: .petNew) }
             try c.encode(petColor, forKey: .petColor)
         }
     }
@@ -164,20 +177,47 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
     /// Eyes and mouth, drawn on the front of the head.
     public enum Face: String, Codable, CaseIterable, Sendable {
         case smile, grin, wink, cool, surprised, sleepy, cat, robot, heart
+        // Added later; see `legacy`.
+        case angry, sad, tongue
+        case starEyes = "star_eyes"
+        case dizzy, glasses, monocle, blush, alien, eyepatch, ninja, joy, mustache, fangs, happy
 
-        public var displayName: String {
+        /// The faces every version of Ablox knows. Others travel under their
+        /// own key, so an iPad that has not updated still reads the profile.
+        public static let legacy: Set<Face> = [.smile, .grin, .wink, .cool, .surprised, .sleepy, .cat, .robot, .heart]
+
+        /// The English name, kept as the original for the shop and
+        /// translated when shown.
+        public var englishName: String {
             switch self {
-            case .smile: return L("Smile")
-            case .grin: return L("Grin")
-            case .wink: return L("Wink")
-            case .cool: return L("Sunglasses")
-            case .surprised: return L("Surprised")
-            case .sleepy: return L("Sleepy")
-            case .cat: return L("Cat")
-            case .robot: return L("Robot")
-            case .heart: return L("Heart eyes")
+            case .smile: return "Smile"
+            case .grin: return "Grin"
+            case .wink: return "Wink"
+            case .cool: return "Sunglasses"
+            case .surprised: return "Surprised"
+            case .sleepy: return "Sleepy"
+            case .cat: return "Cat"
+            case .robot: return "Robot"
+            case .heart: return "Heart eyes"
+            case .angry: return "Angry"
+            case .sad: return "Sad"
+            case .tongue: return "Tongue out"
+            case .starEyes: return "Star eyes"
+            case .dizzy: return "Dizzy"
+            case .glasses: return "Round glasses"
+            case .monocle: return "Monocle"
+            case .blush: return "Blushing"
+            case .alien: return "Alien"
+            case .eyepatch: return "Eyepatch"
+            case .ninja: return "Ninja mask"
+            case .joy: return "Tears of joy"
+            case .mustache: return "Moustache"
+            case .fangs: return "Fangs"
+            case .happy: return "Happy"
             }
         }
+
+        public var displayName: String { L(englishName) }
 
         public var symbolName: String {
             switch self {
@@ -190,6 +230,35 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
             case .cat: return "cat"
             case .robot: return "cpu"
             case .heart: return "heart.circle"
+            case .angry: return "flame"
+            case .sad: return "cloud.rain"
+            case .tongue: return "mouth"
+            case .starEyes: return "star.circle"
+            case .dizzy: return "tornado"
+            case .glasses: return "eyeglasses"
+            case .monocle: return "circle.dashed"
+            case .blush: return "heart.text.square"
+            case .alien: return "sparkles"
+            case .eyepatch: return "eye.slash"
+            case .ninja: return "theatermasks"
+            case .joy: return "drop"
+            case .mustache: return "mustache"
+            case .fangs: return "moon.stars"
+            case .happy: return "sun.max"
+            }
+        }
+
+        public var price: Int {
+            switch self {
+            case .smile, .grin: return 0
+            case .wink, .happy: return 30
+            case .surprised, .sleepy, .sad, .tongue, .blush: return 40
+            case .angry, .glasses, .dizzy: return 60
+            case .cool, .mustache, .eyepatch: return 80
+            case .monocle, .joy, .fangs: return 100
+            case .cat, .robot, .ninja: return 120
+            case .alien, .starEyes: return 140
+            case .heart: return 160
             }
         }
     }
@@ -197,6 +266,18 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
     /// A small friend that follows along.
     public enum Pet: String, Codable, CaseIterable, Sendable {
         case none, cat, dog, bunny, bird, slime, robot, dragon
+        // Added later; see `legacy`.
+        case fox, panda, penguin, frog, turtle, duck, bee, ghost, unicorn, owl
+
+        /// The pets every version of Ablox knows.
+        public static let legacy: Set<Pet> = [.none, .cat, .dog, .bunny, .bird, .slime, .robot, .dragon]
+
+        public var englishName: String {
+            switch self {
+            case .none: return "None"
+            default: return rawValue.prefix(1).uppercased() + rawValue.dropFirst()
+            }
+        }
 
         public var displayName: String {
             switch self {
@@ -208,6 +289,16 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
             case .slime: return L("Slime")
             case .robot: return L("Robot")
             case .dragon: return L("Dragon")
+            case .fox: return L("Fox")
+            case .panda: return L("Panda")
+            case .penguin: return L("Penguin")
+            case .frog: return L("Frog")
+            case .turtle: return L("Turtle")
+            case .duck: return L("Duck")
+            case .bee: return L("Bee")
+            case .ghost: return L("Ghost")
+            case .unicorn: return L("Unicorn")
+            case .owl: return L("Owl")
             }
         }
 
@@ -221,11 +312,33 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
             case .slime: return "drop.fill"
             case .robot: return "cpu.fill"
             case .dragon: return "flame.fill"
+            case .fox: return "pawprint.fill"
+            case .panda: return "circle.hexagongrid.fill"
+            case .penguin: return "snowflake"
+            case .frog: return "leaf.fill"
+            case .turtle: return "tortoise.fill"
+            case .duck: return "drop.halffull"
+            case .bee: return "ant.fill"
+            case .ghost: return "cloud.fill"
+            case .unicorn: return "sparkles"
+            case .owl: return "moon.fill"
             }
         }
 
         /// Flying pets sit by the shoulder rather than at the feet.
-        public var flies: Bool { self == .bird || self == .dragon }
+        public var flies: Bool { [.bird, .dragon, .bee, .ghost, .owl].contains(self) }
+
+        public var price: Int {
+            switch self {
+            case .none: return 0
+            case .cat, .dog, .frog, .duck: return 150
+            case .bunny, .turtle, .penguin: return 200
+            case .bird, .fox, .bee: return 250
+            case .slime, .panda, .owl: return 300
+            case .robot, .ghost: return 400
+            case .dragon, .unicorn: return 600
+            }
+        }
     }
 
     /// Something a character rides, drawn around the avatar.
@@ -243,16 +356,46 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
 
     public enum HatStyle: String, Codable, CaseIterable, Sendable {
         case none, cap, crown, antenna, halo
+        // Added later; see `legacy`.
+        case topHat = "top_hat", beanie, cowboy, wizard, pirate, chef, party, headphones
+        case bunnyEars = "bunny_ears", horns
+        case flowerCrown = "flower_crown", bow, helmet, viking, beret, propeller, graduate, santa, witch, headband
 
-        public var displayName: String {
+        /// The hats every version of Ablox knows. Others travel under their
+        /// own key, so an iPad that has not updated still reads the profile.
+        public static let legacy: [HatStyle] = [.none, .cap, .crown, .antenna, .halo]
+
+        public var englishName: String {
             switch self {
-            case .none: return L("None")
-            case .cap: return L("Cap")
-            case .crown: return L("Crown")
-            case .antenna: return L("Antenna")
-            case .halo: return L("Halo")
+            case .none: return "None"
+            case .cap: return "Cap"
+            case .crown: return "Crown"
+            case .antenna: return "Antenna"
+            case .halo: return "Halo"
+            case .topHat: return "Top hat"
+            case .beanie: return "Beanie"
+            case .cowboy: return "Cowboy hat"
+            case .wizard: return "Wizard hat"
+            case .pirate: return "Pirate hat"
+            case .chef: return "Chef's hat"
+            case .party: return "Party hat"
+            case .headphones: return "Headphones"
+            case .bunnyEars: return "Bunny ears"
+            case .horns: return "Horns"
+            case .flowerCrown: return "Flower crown"
+            case .bow: return "Ribbon bow"
+            case .helmet: return "Helmet"
+            case .viking: return "Viking helmet"
+            case .beret: return "Beret"
+            case .propeller: return "Propeller cap"
+            case .graduate: return "Graduation cap"
+            case .santa: return "Santa hat"
+            case .witch: return "Witch hat"
+            case .headband: return "Headband"
             }
         }
+
+        public var displayName: String { L(englishName) }
 
         public var symbolName: String {
             switch self {
@@ -261,6 +404,34 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
             case .crown: return "crown.fill"
             case .antenna: return "antenna.radiowaves.left.and.right"
             case .halo: return "circle.circle"
+            case .topHat, .cowboy, .beret, .santa: return "hat.widebrim.fill"
+            case .beanie, .headband: return "circle.bottomhalf.filled"
+            case .wizard, .witch, .party: return "triangle.fill"
+            case .pirate: return "flag.fill"
+            case .chef: return "fork.knife"
+            case .headphones: return "headphones"
+            case .bunnyEars: return "hare"
+            case .horns: return "bolt.fill"
+            case .flowerCrown: return "camera.macro"
+            case .bow: return "gift.fill"
+            case .helmet, .viking: return "shield.fill"
+            case .propeller: return "fan.fill"
+            case .graduate: return "graduationcap.fill"
+            }
+        }
+
+        public var price: Int {
+            switch self {
+            case .none: return 0
+            // The first four kept their price.
+            case .cap, .crown, .antenna, .halo: return 75
+            case .beanie, .headband: return 60
+            case .bow, .party, .beret: return 75
+            case .headphones, .bunnyEars, .chef: return 100
+            case .cowboy, .pirate, .propeller, .flowerCrown: return 120
+            case .topHat, .helmet, .graduate, .santa: return 150
+            case .wizard, .witch, .horns: return 180
+            case .viking: return 250
             }
         }
     }
@@ -279,8 +450,9 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
     /// `Hasher` is deliberately not used: it is randomly seeded per process,
     /// so the same peer would look different on every iPad.
     public static func generated(for peer: PeerID, name: String) -> AvatarProfile {
-        let palette = ColorRGBA.palette
-        let hats = HatStyle.allCases
+        let palette = Array(ColorRGBA.originalPalette)
+        // The original hats only, so every version draws the same look.
+        let hats = HatStyle.legacy
         return AvatarProfile(
             displayName: name,
             bodyColor: palette[Int(peer.stableHash(seed: 0x9E37) % UInt64(palette.count))],
