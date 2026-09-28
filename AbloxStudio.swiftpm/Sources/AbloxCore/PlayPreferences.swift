@@ -117,6 +117,8 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
     public var hud = HUDOptions()
     /// How chat, bubbles and names look and behave.
     public var chat = ChatOptions()
+    /// Bold text, less motion, sound captions, slower movement…
+    public var access = AccessOptions()
 
     public struct PointOffset: Codable, Hashable, Sendable {
         public var x: Double = 0
@@ -160,6 +162,7 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
         crosshairColor = (try? c.decodeIfPresent(CrosshairColor.self, forKey: .crosshairColor)) ?? d.crosshairColor
         hud = (try? c.decodeIfPresent(HUDOptions.self, forKey: .hud)) ?? d.hud
         chat = (try? c.decodeIfPresent(ChatOptions.self, forKey: .chat)) ?? d.chat
+        access = (try? c.decodeIfPresent(AccessOptions.self, forKey: .access)) ?? d.access
         clamp()
     }
 

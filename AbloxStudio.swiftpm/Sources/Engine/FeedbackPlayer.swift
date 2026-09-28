@@ -25,6 +25,8 @@ import AbloxCore
 public final class FeedbackPlayer {
 
     public var isSoundEnabled: Bool = true
+    /// Told of every cue played, for sound captions.
+    public var onPlayed: ((SoundCue) -> Void)?
     public var isHapticsEnabled: Bool = true
     /// Settings → Comfort → Vibration strength, 0 to 1.
     public var hapticIntensity: Double = 1
@@ -72,6 +74,7 @@ public final class FeedbackPlayer {
     public func play(_ cue: SoundCue, volume: Float = 1, pitch: Float = 1) {
         let now = Date().timeIntervalSince(startedAt)
         guard throttle.shouldPlay(cue, at: now) else { return }
+        onPlayed?(cue)
 
         if isSoundEnabled, !SoundSynth.shared.play(cue, volume: volume, pitch: pitch) {
             AudioServicesPlaySystemSound(systemSoundID(for: cue))

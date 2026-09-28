@@ -1,19 +1,19 @@
 {
   "app": "Ablox Studio",
-  "version": "1.2",
-  "build": 3,
+  "version": "1.3",
+  "build": 4,
   "protocol": 8,
   "date": "2026-09-28",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Play-tests show the new looks: hats, faces, pets, trails, auras, name cards and chat bubbles",
-      "Play-tests use the new chat tidying, camera follow and bubble and name options",
+      "The shared play engine is updated to match Ablox 1.4: sound hooks for captions, a walking-pace option and a friends-only chat filter",
+      "Shared rules for family settings, access options and moving settings, kept the same as Ablox",
       "More Japanese translations, shared with Ablox"
     ],
     "ja": [
-      "テストプレイで新しい見た目を表示: ぼうし・顔・ペット・トレイル・オーラ・ネームカード・チャットのふきだし",
-      "テストプレイにチャットの整え機能、ついてくるカメラ、ふきだしと名前の設定を反映",
+      "共通のプレイエンジンを Ablox 1.4 と同じに更新: 音の文字表示のしくみ、歩く速さの設定、フレンドだけのチャットフィルター",
+      "家族の設定・見る/聞くの設定・設定の引っこしのルールを Ablox と共通化",
       "Ablox と共通の日本語訳を追加"
     ]
   }

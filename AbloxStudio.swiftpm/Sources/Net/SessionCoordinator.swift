@@ -107,6 +107,10 @@ public final class SessionCoordinator: ObservableObject {
     /// opt its own messages out of your filter.
     public var moderator = ChatModerator()
 
+    /// Family: only these people's lines are kept (friends only); nil for
+    /// everyone. The game's own lines and this player's always are.
+    public var chatOnlyFrom: Set<PeerID>?
+
     /// How lines are tidied as they arrive: personal details hidden,
     /// shouting softened, long runs of one letter cut (Chat options).
     public var chatOptions = ChatOptions()
@@ -649,6 +653,7 @@ public final class SessionCoordinator: ObservableObject {
 
     private func receiveWhisper(from sender: PeerID, name: String, text: String) {
         guard allowsPlayerChat, allowsWhispers, muteList.allows(sender, localPeerID: localPeerID) else { return }
+        if let only = chatOnlyFrom, !only.contains(sender) { return }
         let filtered = moderator.filter(text)
         chatLog.append(ChatEntry(senderID: sender, senderName: name, text: ChatTidy.tidy(filtered.text, options: chatOptions),
                                  wasFiltered: filtered.wasFiltered, privateWith: name))
@@ -1013,8 +1018,11 @@ public final class SessionCoordinator: ObservableObject {
     }
 
     private func appendChat(_ payload: ChatPayload, from sender: PeerID) {
-        if !allowsPlayerChat, sender != SessionCoordinator.gamePeerID,
-           !(roster.first { $0.peerID == sender }?.isNPC ?? false) {
+        let isPerson = sender != SessionCoordinator.gamePeerID && !(roster.first { $0.peerID == sender }?.isNPC ?? false)
+        if !allowsPlayerChat, isPerson {
+            return
+        }
+        if isPerson, sender != localPeerID, let only = chatOnlyFrom, !only.contains(sender) {
             return
         }
         let filtered = moderator.filter(payload.text)

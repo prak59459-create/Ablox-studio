@@ -94,6 +94,9 @@ public struct ParentalControls: Codable, Hashable, Sendable {
     public var strictChatFilter: Bool?
     /// Words of the family's own to hide in chat.
     public var extraBlockedWords: [String]?
+    /// Weekend limit, days off, extra time, chosen games and more (see
+    /// FamilyExtras.swift); read through `family`.
+    public var extras: FamilyExtras?
 
     public static let maximumExtraWords = 50
 
@@ -240,25 +243,46 @@ public enum PlayGate {
         case dailyLimitReached(minutes: Int)
         /// Bedtime or school time, until the given clock time.
         case quietHours(until: String)
+        /// A day with no play.
+        case dayOff
+        /// A grown-up has paused all play for now.
+        case paused
     }
 
     public static func verdict(_ controls: ParentalControls, log: PlaytimeLog, now: Date = Date(),
                                calendar: Calendar = .current) -> Verdict {
         let parts = calendar.dateComponents([.hour, .minute], from: now)
         let minute = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
-        if let quiet = controls.quietHours, quiet.contains(minuteOfDay: minute) {
+        if controls.family.pausedNow {
+            return .paused
+        }
+        if controls.isDayOff(now, calendar: calendar) {
+            return .dayOff
+        }
+        if let quiet = controls.quietHours, controls.quietHoursApply(on: now, calendar: calendar), quiet.contains(minuteOfDay: minute) {
             return .quietHours(until: QuietHours.clock(quiet.end))
         }
-        if let limit = controls.dailyLimitMinutes, log.seconds(on: now, calendar: calendar) >= Double(limit * 60) {
+        // The weekend's own limit, and extra time given for today.
+        if let limit = controls.limit(on: now, calendar: calendar), log.seconds(on: now, calendar: calendar) >= Double(limit * 60) {
             return .dailyLimitReached(minutes: limit)
         }
         return .allowed
     }
 
+    /// Minutes until quiet hours begin today, or nil when they do not.
+    public static func minutesUntilQuiet(_ controls: ParentalControls, now: Date = Date(), calendar: Calendar = .current) -> Int? {
+        guard let quiet = controls.quietHours, controls.quietHoursApply(on: now, calendar: calendar) else { return nil }
+        let parts = calendar.dateComponents([.hour, .minute], from: now)
+        let minute = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+        guard !quiet.contains(minuteOfDay: minute) else { return 0 }
+        let until = (quiet.start - minute + 24 * 60) % (24 * 60)
+        return until
+    }
+
     /// Minutes left today, or nil for no limit.
     public static func minutesLeft(_ controls: ParentalControls, log: PlaytimeLog, now: Date = Date(),
                                    calendar: Calendar = .current) -> Int? {
-        guard let limit = controls.dailyLimitMinutes else { return nil }
+        guard let limit = controls.limit(on: now, calendar: calendar) else { return nil }
         return max(0, limit - Int(log.seconds(on: now, calendar: calendar) / 60))
     }
 
@@ -274,6 +298,8 @@ public enum PlayGate {
         case .allowed: return nil
         case let .dailyLimitReached(minutes): return L("That's today's {} minutes of play. See you tomorrow!", minutes)
         case let .quietHours(until): return L("It's quiet time. Games open again at {}.", until)
+        case .dayOff: return L("Today is a day off from games. See you tomorrow!")
+        case .paused: return L("A grown-up has paused games for now.")
         }
     }
 }

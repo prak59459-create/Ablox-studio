@@ -24,6 +24,11 @@ public final class ViewportLink {
     public func returnToStart() {
         coordinator?.returnToStart()
     }
+
+    /// Told of every sound the game plays, for sound captions.
+    public var onSound: ((SoundCue) -> Void)? {
+        didSet { coordinator?.listenForSounds() }
+    }
 }
 
 /// The 3D play surface: a non-AR `ARView` driving the world, the local
@@ -129,6 +134,7 @@ public struct GameViewport: UIViewRepresentable {
     public func updateUIView(_ view: ARView, context: Context) {
         context.coordinator.parent = self
         link?.coordinator = context.coordinator
+        context.coordinator.listenForSounds()
         context.coordinator.setFeedbackEnabled(sound: soundEnabled && preferences.effectsVolume > 0.02, haptics: hapticsEnabled)
         context.coordinator.setPreferences(preferences)
         context.coordinator.setGraphics(quality: graphicsQuality, showFrameRate: showFrameRate)
@@ -356,6 +362,12 @@ public struct GameViewport: UIViewRepresentable {
             }
         }
 
+        /// Sound captions: every cue played goes to the link.
+        func listenForSounds() {
+            let link = parent.link
+            feedback.onPlayed = link?.onSound == nil ? nil : { [weak link] cue in link?.onSound?(cue) }
+        }
+
         func returnToStart() {
             let world = parent.session.world
             let index = parent.session.people.firstIndex { $0.peerID == parent.session.localPeerID } ?? 0
@@ -535,6 +547,8 @@ public struct GameViewport: UIViewRepresentable {
             }
             var movement = MovementConfig.default
             movement.walkSpeed *= scale.speed
+            // Access options: a gentler pace for anyone who needs it.
+            movement.walkSpeed *= Float(preferences.access.movementSpeed)
             movement.jumpSpeed *= scale.jump
             // The world's gravity (Earth's by default) times the player's own.
             let worldGravity = world.environment.gravity / -9.81
