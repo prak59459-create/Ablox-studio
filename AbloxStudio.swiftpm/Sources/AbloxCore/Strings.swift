@@ -36,7 +36,7 @@ public enum Strings {
     /// Exposed so the tests can see duplicates, which the dictionary hides.
     public static let entries: [(String, String)] = [
         coreEntries, clientEntries, studioEntries, guideEntries, catalogueEntries, scriptEntries, updateEntries,
-        featureEntries, featureEntries2, featureEntries3, featureEntries4, featureEntries5, featureEntries6, featureEntries7, featureEntries8
+        featureEntries, featureEntries2, featureEntries3, featureEntries4, featureEntries5, featureEntries6, featureEntries7, featureEntries8, featureEntries9
     ].flatMap { $0 }
 
     // MARK: - Shared vocabulary
@@ -2546,5 +2546,52 @@ public enum Strings {
         ("Lavender", "ラベンダー"),
         ("Peach", "ピーチ"),
         ("Chocolate", "チョコレート"),
+        ("Hop for joy", "ぴょんぴょん"),
+        ("Spin", "くるくる"),
+        ("Flex", "力こぶ"),
+        ("Shrug", "さあ？"),
+        ("Think", "考え中"),
+        ("Facepalm", "あちゃー"),
+        ("Salute", "けいれい"),
+        ("Thumbs up", "いいね"),
+        ("Heart hands", "ハート"),
+        ("Yawn", "あくび"),
+        ("Stretch", "のび"),
+        ("Dab", "ダブ"),
+        ("Floss", "フロス"),
+    ]
+
+    static let featureEntries9: [(String, String)] = [
+        ("Robot dance", "ロボットダンス"),
+        ("Flip", "宙がえり"),
+        ("Cry", "えーん"),
+        ("Stomp", "じだんだ"),
+        ("Victory", "ばんざい"),
+        ("Air guitar", "エアギター"),
+        ("Peace", "ピース"),
+        ("Sparkle trail", "きらきらトレイル"),
+        ("Fire trail", "ほのおトレイル"),
+        ("Bubble trail", "あわトレイル"),
+        ("Heart trail", "ハートトレイル"),
+        ("Star trail", "星トレイル"),
+        ("Rainbow trail", "にじトレイル"),
+        ("Snow trail", "雪トレイル"),
+        ("Leaf trail", "葉っぱトレイル"),
+        ("Smoke trail", "けむりトレイル"),
+        ("Confetti trail", "紙ふぶきトレイル"),
+        ("Magic trail", "まほうトレイル"),
+        ("Sand trail", "すなトレイル"),
+        ("Gold aura", "金のオーラ"),
+        ("Rainbow aura", "にじのオーラ"),
+        ("Fire aura", "ほのおのオーラ"),
+        ("Ice aura", "こおりのオーラ"),
+        ("Shadow aura", "かげのオーラ"),
+        ("Electric aura", "いなずまのオーラ"),
+        ("Nature aura", "しぜんのオーラ"),
+        ("Galaxy aura", "ぎんがのオーラ"),
+        ("Trail", "トレイル"),
+        ("Aura", "オーラ"),
+        ("Winning pose", "勝ったときのポーズ"),
+        ("Hold one to make it a favourite (keys 1–4).", "長押しでお気に入り（キー1〜4）。"),
     ]
 }

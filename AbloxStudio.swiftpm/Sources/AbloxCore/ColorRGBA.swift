@@ -114,6 +114,10 @@ public extension ColorRGBA {
         ColorRGBA(hex: "#7C4A2D")!  // chocolate
     ]
 
+    /// Red to violet, for rainbow trails and auras.
+    static let rainbow: [ColorRGBA] = ["#EF4444", "#F97316", "#FACC15", "#4ADE80", "#22D3EE", "#3B82F6", "#A855F7"]
+        .compactMap { ColorRGBA(hex: $0) }
+
     /// The palette as it first was, for anything that must look the same on
     /// every version (a generated avatar).
     static var originalPalette: ArraySlice<ColorRGBA> { palette.prefix(12) }

@@ -17,20 +17,22 @@ public final class AvatarEntity: Entity {
 
     /// Everything that is the person, so sitting down in a car moves it all
     /// at once. The ride itself hangs off the avatar, not the rig.
-    private let rig = Entity()
-    private let body = ModelEntity()
-    private let head = ModelEntity()
-    private let leftArm = ModelEntity()
-    private let rightArm = ModelEntity()
-    private let leftLeg = ModelEntity()
-    private let rightLeg = ModelEntity()
+    // Internal rather than private: the newer moves and the aura are in
+    // AvatarMoves.swift, compiled on their own.
+    let rig = Entity()
+    let body = ModelEntity()
+    let head = ModelEntity()
+    let leftArm = ModelEntity()
+    let rightArm = ModelEntity()
+    let leftLeg = ModelEntity()
+    let rightLeg = ModelEntity()
     private var hatEntity: Entity?
     /// A part of the hat that turns by itself (a propeller).
     private var spinningHatPart: Entity?
     private var faceEntity: Entity?
     private var appliedFace: AvatarProfile.Face?
     private var appliedFaceHeadColor: ColorRGBA?
-    private var petEntity: Entity?
+    var petEntity: Entity?
     private var appliedPet: AvatarProfile.Pet = .none
     private var appliedPetColor: ColorRGBA?
     private var petPhase: Float = 0
@@ -50,7 +52,20 @@ public final class AvatarEntity: Entity {
     private var strideDistance: Float = 0
 
     /// How far a ride lowers or raises the person in it.
-    private var seatHeight: Float = 0
+    var seatHeight: Float = 0
+
+    /// A little jump or spin from the pet when its owner emotes.
+    var petTrick: Float = 0
+    /// Seconds stood still, for looking about.
+    var idleTime: Float = 0
+    /// The ring round the feet, and what it is.
+    var auraEntity: Entity?
+    var auraOrbs: [Entity] = []
+    var auraMaterials: [RealityKit.Material] = []
+    var appliedAura: AvatarProfile.Aura = .none
+    var auraTime: Float = 0
+    /// How far the avatar moved in the last frame, for its trail.
+    public private(set) var lastStep: Float = 0
 
     /// A wave, a dance… playing now, and for how long so far.
     private var gesture: Emote?
@@ -136,6 +151,7 @@ public final class AvatarEntity: Entity {
         applyRide(profile.ride, color: profile.rideColor)
         applyFace(profile.face)
         applyPet(profile.pet, color: profile.petColor)
+        applyAura(profile.aura)
     }
 
     // MARK: Face
@@ -308,7 +324,7 @@ public final class AvatarEntity: Entity {
     }
 
     /// Where the pet stays, beside and a little behind.
-    private var petHome: SIMD3<Float> {
+    var petHome: SIMD3<Float> {
         appliedPet.flies ? SIMD3<Float>(0.55, 1.75, 0.25) : SIMD3<Float>(0.7, 0, 0.35)
     }
 
@@ -536,6 +552,8 @@ public final class AvatarEntity: Entity {
     /// which is moved directly rather than eased.
     public func animate(travelled: Float, deltaTime: Float) {
         strideDistance += travelled
+        lastStep = travelled
+        animateAura(deltaTime: deltaTime)
         if let spinningHatPart {
             spinningHatPart.orientation = simd_quatf(angle: deltaTime * 9, axis: SIMD3<Float>(0, 1, 0)) * spinningHatPart.orientation
         }
@@ -543,11 +561,12 @@ public final class AvatarEntity: Entity {
             // A small bob, faster while walking; fliers hover.
             petPhase += deltaTime * (travelled > 0.01 ? 12 : 3)
             let bob = appliedPet.flies ? sin(petPhase * 0.5) * 0.08 : abs(sin(petPhase)) * 0.06
-            petEntity.position = petHome + SIMD3<Float>(0, bob, 0)
+            petEntity.position = petHome + SIMD3<Float>(0, bob + petTrickLift(deltaTime: deltaTime), 0)
         }
         let speed = travelled / Swift.max(deltaTime, 1e-4)
         if animateGesture(deltaTime: deltaTime, speed: speed) { return }
         animateLimbs(speed: speed)
+        lookAbout(speed: speed, deltaTime: deltaTime)
     }
 
     // MARK: Gestures
@@ -557,9 +576,11 @@ public final class AvatarEntity: Entity {
         resetPose()
         gesture = emote
         gestureTime = 0
+        // The pet joins in.
+        petTrick = 0.9
     }
 
-    private func resetPose() {
+    func resetPose() {
         rig.position = SIMD3<Float>(0, seatHeight, 0)
         rig.orientation = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
         head.orientation = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
@@ -594,22 +615,23 @@ public final class AvatarEntity: Entity {
         case .point: posePoint()
         case .laugh: poseLaugh(t)
         case .sit: poseSit()
+        default: poseNewer(emote, t)
         }
         return true
     }
 
-    private static let sideways = SIMD3<Float>(1, 0, 0)
-    private static let upright = SIMD3<Float>(0, 1, 0)
-    private static let forwards = SIMD3<Float>(0, 0, 1)
+    static let sideways = SIMD3<Float>(1, 0, 0)
+    static let upright = SIMD3<Float>(0, 1, 0)
+    static let forwards = SIMD3<Float>(0, 0, 1)
 
     /// An arm straight up from the shoulder, tilted `swing` outwards.
-    private func raise(_ arm: ModelEntity, side: Float, swing: Float = 0) {
+    func raise(_ arm: ModelEntity, side: Float, swing: Float = 0) {
         let reach: Float = 0.42 + abs(swing) * 0.1
         arm.position = SIMD3<Float>(side * reach, 1.5, 0)
         arm.orientation = simd_quatf(angle: side * swing, axis: Self.forwards)
     }
 
-    private func lower(_ arm: ModelEntity, side: Float) {
+    func lower(_ arm: ModelEntity, side: Float) {
         arm.position = SIMD3<Float>(side * 0.39, 0.95, 0)
     }
 

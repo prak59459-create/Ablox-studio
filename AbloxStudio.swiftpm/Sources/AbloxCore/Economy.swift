@@ -17,6 +17,8 @@ public struct ShopItem: Codable, Hashable, Identifiable, Sendable {
         case hat
         case face
         case pet
+        case trail
+        case aura
 
         public var displayName: String {
             switch self {
@@ -26,6 +28,8 @@ public struct ShopItem: Codable, Hashable, Identifiable, Sendable {
             case .hat: return L("Hat")
             case .face: return L("Face")
             case .pet: return L("Pet")
+            case .trail: return L("Trail")
+            case .aura: return L("Aura")
             }
         }
     }
@@ -53,6 +57,9 @@ public struct ShopItem: Codable, Hashable, Identifiable, Sendable {
     public let face: AvatarProfile.Face?
     /// For pet items.
     public let pet: AvatarProfile.Pet?
+    /// For trail and aura items.
+    public let trail: AvatarProfile.Trail?
+    public let aura: AvatarProfile.Aura?
 
     public var rarity: ItemRarity { ItemRarity(price: price) }
 
@@ -64,7 +71,9 @@ public struct ShopItem: Codable, Hashable, Identifiable, Sendable {
         color: ColorRGBA? = nil,
         hat: AvatarProfile.HatStyle? = nil,
         face: AvatarProfile.Face? = nil,
-        pet: AvatarProfile.Pet? = nil
+        pet: AvatarProfile.Pet? = nil,
+        trail: AvatarProfile.Trail? = nil,
+        aura: AvatarProfile.Aura? = nil
     ) {
         self.id = id
         self.name = name
@@ -74,6 +83,8 @@ public struct ShopItem: Codable, Hashable, Identifiable, Sendable {
         self.hat = hat
         self.face = face
         self.pet = pet
+        self.trail = trail
+        self.aura = aura
     }
 
     /// Items priced 0 are owned from the start and never appear as locked.
@@ -119,6 +130,12 @@ public enum ShopCatalogue {
         }
         for pet in AvatarProfile.Pet.allCases {
             result.append(ShopItem(id: "pet.\(pet.rawValue)", name: pet.englishName, kind: .pet, price: pet.price, pet: pet))
+        }
+        for trail in AvatarProfile.Trail.allCases {
+            result.append(ShopItem(id: "trail.\(trail.rawValue)", name: trail.englishName, kind: .trail, price: trail.price, trail: trail))
+        }
+        for aura in AvatarProfile.Aura.allCases {
+            result.append(ShopItem(id: "aura.\(aura.rawValue)", name: aura.englishName, kind: .aura, price: aura.price, aura: aura))
         }
 
         return result

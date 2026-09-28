@@ -289,3 +289,75 @@ final class PlayerProgressTests: XCTestCase {
         XCTAssertEqual(SaveSlots.storageID(world: world, slot: 2), SaveSlots.storageID(world: world, slot: 2), "stable")
     }
 }
+
+/// Emotes, trails, auras and favourites (the second set of looks).
+final class MovesAndTrailsTests: XCTestCase {
+
+    func testEveryEmoteTravelsAndHasATime() {
+        XCTAssertEqual(Emote.allCases.count, 28)
+        for emote in Emote.allCases {
+            XCTAssertEqual(Gesture(wire: emote.rawValue), .emote(emote))
+            XCTAssertGreaterThan(emote.seconds, 0)
+            XCTAssertEqual(emote.rawValue, emote.rawValue.lowercased())
+        }
+        for stamp in Stamp.all {
+            XCTAssertEqual(Gesture(wire: "stamp:" + stamp), .stamp(stamp))
+        }
+        XCTAssertEqual(Stamp.all.count, 24)
+        XCTAssertEqual(Set(Stamp.all).count, Stamp.all.count)
+    }
+
+    func testFavouritesComeFirstAndAreCapped() throws {
+        var favourites = EmoteFavourites()
+        XCTAssertTrue(favourites.toggle(.dab))
+        XCTAssertTrue(favourites.toggle(.wave))
+        XCTAssertEqual(Array(favourites.ordered.prefix(2)), [.dab, .wave])
+        XCTAssertEqual(favourites.ordered.count, Emote.allCases.count)
+        XCTAssertTrue(favourites.toggle(.spin))
+        XCTAssertTrue(favourites.toggle(.flip))
+        XCTAssertFalse(favourites.toggle(.floss), "four at most")
+        XCTAssertEqual(favourites.emote(inSlot: 3), .flip)
+        XCTAssertNil(favourites.emote(inSlot: 4))
+        XCTAssertTrue(favourites.toggle(.wave), "removing always works")
+        XCTAssertFalse(favourites.contains(.wave))
+        favourites.victory = .victory
+        let back = try JSONDecoder().decode(EmoteFavourites.self, from: JSONEncoder().encode(favourites))
+        XCTAssertEqual(back, favourites)
+        XCTAssertEqual(back.victory, .victory)
+    }
+
+    func testTrailsAndAurasAreSkippedByOlderIPads() throws {
+        var profile = AvatarProfile(displayName: "Kai")
+        let plain = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(profile)) as? [String: Any])
+        XCTAssertNil(plain["trail"])
+        XCTAssertNil(plain["aura"])
+        profile.trail = .rainbow
+        profile.aura = .galaxy
+        let data = try JSONEncoder().encode(profile)
+        XCTAssertEqual(try JSONDecoder().decode(AvatarProfile.self, from: data), profile)
+        // Something unknown from a newer iPad is simply no trail.
+        let newer = #"{"displayName":"N","bodyColor":{"r":1,"g":1,"b":1,"a":1},"headColor":{"r":1,"g":1,"b":1,"a":1},"accentColor":{"r":1,"g":1,"b":1,"a":1},"hat":"none","height":1,"trail":"lava","aura":"plasma"}"#
+        let loaded = try JSONDecoder().decode(AvatarProfile.self, from: Data(newer.utf8))
+        XCTAssertEqual(loaded.trail, .none)
+        XCTAssertEqual(loaded.aura, .none)
+    }
+
+    func testTrailsAndAurasAreInTheShop() {
+        for trail in AvatarProfile.Trail.allCases {
+            let item = ShopCatalogue.item(id: "trail.\(trail.rawValue)")
+            XCTAssertNotNil(item)
+            XCTAssertEqual(item?.kind, .trail)
+            XCTAssertEqual(trail == .none, trail.particles == nil)
+        }
+        for aura in AvatarProfile.Aura.allCases {
+            XCTAssertEqual(ShopCatalogue.item(id: "aura.\(aura.rawValue)")?.kind, .aura)
+            XCTAssertEqual(aura == .none, aura.colors.isEmpty)
+        }
+        XCTAssertEqual(ShopCatalogue.items(of: .trail).count, 13)
+        XCTAssertEqual(ShopCatalogue.items(of: .aura).count, 9)
+        // Only the rainbow changes colour, through all of them.
+        XCTAssertNil(AvatarProfile.Trail.fire.color(at: 3))
+        let colours = Set((0..<70).compactMap { AvatarProfile.Trail.rainbow.color(at: Double($0) / 6)?.hexString })
+        XCTAssertEqual(colours.count, ColorRGBA.rainbow.count)
+    }
+}

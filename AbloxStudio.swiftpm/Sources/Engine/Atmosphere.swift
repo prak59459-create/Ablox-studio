@@ -296,12 +296,13 @@ final class ParticleField {
 
     /// A steady source (a burning block, the rain): `rate` a second, kept
     /// smooth across frames by `key`.
-    func stream(_ kind: ParticleKind, key: String, at position: Vec3, rate: Float, spread: Vec3 = .zero, dt: Float) {
+    func stream(_ kind: ParticleKind, key: String, at position: Vec3, rate: Float, spread: Vec3 = .zero, dt: Float,
+                color: ColorRGBA? = nil) {
         var amount = (carry[key] ?? 0) + rate * dt
         let whole = Int(amount)
         amount -= Float(whole)
         carry[key] = amount
-        if whole > 0 { emit(kind, at: position, count: whole, color: nil, spread: spread) }
+        if whole > 0 { emit(kind, at: position, count: whole, color: color, spread: spread) }
     }
 
     func emit(_ kind: ParticleKind, at position: Vec3, count: Int, color: ColorRGBA?, spread: Vec3 = .zero) {

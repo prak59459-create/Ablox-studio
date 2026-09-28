@@ -86,6 +86,10 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
     /// A small friend that follows them about.
     public var pet: Pet
     public var petColor: ColorRGBA
+    /// Something left behind while moving: sparkles, bubbles…
+    public var trail: Trail
+    /// A glowing ring round the feet.
+    public var aura: Aura
 
     public init(
         displayName: String = "Player",
@@ -100,7 +104,9 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         face: Face = .smile,
         hatColor: ColorRGBA? = nil,
         pet: Pet = .none,
-        petColor: ColorRGBA = ColorRGBA(hex: "#F59E0B")!
+        petColor: ColorRGBA = ColorRGBA(hex: "#F59E0B")!,
+        trail: Trail = .none,
+        aura: Aura = .none
     ) {
         self.displayName = displayName
         self.bodyColor = bodyColor
@@ -115,11 +121,13 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         self.hatColor = hatColor
         self.pet = pet
         self.petColor = petColor
+        self.trail = trail
+        self.aura = aura
     }
 
     private enum CodingKeys: String, CodingKey {
         case displayName, bodyColor, headColor, accentColor, hat, height, ride, rideColor, title, face, hatColor, pet, petColor
-        case hatNew, faceNew, petNew
+        case hatNew, faceNew, petNew, trail, aura
     }
 
     // Written by hand so a profile saved before rides existed — on this
@@ -138,6 +146,8 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         face = (try? c.decodeIfPresent(Face.self, forKey: .faceNew)) ?? (try? c.decodeIfPresent(Face.self, forKey: .face)) ?? .smile
         hatColor = try? c.decodeIfPresent(ColorRGBA.self, forKey: .hatColor)
         pet = (try? c.decodeIfPresent(Pet.self, forKey: .petNew)) ?? (try? c.decodeIfPresent(Pet.self, forKey: .pet)) ?? Pet.none
+        trail = (try? c.decodeIfPresent(Trail.self, forKey: .trail)) ?? Trail.none
+        aura = (try? c.decodeIfPresent(Aura.self, forKey: .aura)) ?? Aura.none
         petColor = (try? c.decodeIfPresent(ColorRGBA.self, forKey: .petColor)) ?? ColorRGBA(hex: "#F59E0B")!
     }
 
@@ -171,6 +181,177 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         if pet != .none {
             if Pet.legacy.contains(pet) { try c.encode(pet, forKey: .pet) } else { try c.encode(pet, forKey: .petNew) }
             try c.encode(petColor, forKey: .petColor)
+        }
+        // Keys an older iPad does not know, and skips.
+        if trail != .none { try c.encode(trail, forKey: .trail) }
+        if aura != .none { try c.encode(aura, forKey: .aura) }
+    }
+
+    /// Left behind while moving.
+    public enum Trail: String, Codable, CaseIterable, Sendable {
+        case none, sparkle, fire, bubbles, hearts, stars, rainbow, snow, leaves, smoke, confetti, magic, sand
+
+        public var displayName: String {
+            switch self {
+            case .none: return L("None")
+            case .sparkle: return L("Sparkle trail")
+            case .fire: return L("Fire trail")
+            case .bubbles: return L("Bubble trail")
+            case .hearts: return L("Heart trail")
+            case .stars: return L("Star trail")
+            case .rainbow: return L("Rainbow trail")
+            case .snow: return L("Snow trail")
+            case .leaves: return L("Leaf trail")
+            case .smoke: return L("Smoke trail")
+            case .confetti: return L("Confetti trail")
+            case .magic: return L("Magic trail")
+            case .sand: return L("Sand trail")
+            }
+        }
+
+        /// The English name, kept as the original for the shop.
+        public var englishName: String {
+            switch self {
+            case .none: return "None"
+            case .sparkle: return "Sparkle trail"
+            case .fire: return "Fire trail"
+            case .bubbles: return "Bubble trail"
+            case .hearts: return "Heart trail"
+            case .stars: return "Star trail"
+            case .rainbow: return "Rainbow trail"
+            case .snow: return "Snow trail"
+            case .leaves: return "Leaf trail"
+            case .smoke: return "Smoke trail"
+            case .confetti: return "Confetti trail"
+            case .magic: return "Magic trail"
+            case .sand: return "Sand trail"
+            }
+        }
+
+        public var symbolName: String {
+            switch self {
+            case .none: return "nosign"
+            case .sparkle: return "sparkle"
+            case .fire: return "flame.fill"
+            case .bubbles: return "bubbles.and.sparkles.fill"
+            case .hearts: return "heart.fill"
+            case .stars: return "star.fill"
+            case .rainbow: return "rainbow"
+            case .snow: return "snowflake"
+            case .leaves: return "leaf.fill"
+            case .smoke: return "smoke.fill"
+            case .confetti: return "party.popper.fill"
+            case .magic: return "wand.and.stars"
+            case .sand: return "wind"
+            }
+        }
+
+        /// The particles it is made of.
+        public var particles: ParticleKind? {
+            switch self {
+            case .none: return nil
+            case .sparkle: return .sparkles
+            case .fire: return .fire
+            case .bubbles: return .bubbles
+            case .hearts: return .hearts
+            case .stars: return .stars
+            case .rainbow, .confetti: return .confetti
+            case .snow: return .snow
+            case .leaves: return .leaves
+            case .smoke: return .smoke
+            case .magic: return .magic
+            case .sand: return .dust
+            }
+        }
+
+        /// The rainbow runs through the colours in order; the rest use their
+        /// particles' own.
+        public func color(at time: Double) -> ColorRGBA? {
+            guard self == .rainbow else { return nil }
+            let colours = ColorRGBA.rainbow
+            return colours[Int((time * 6).rounded(.down)) % colours.count]
+        }
+
+        public var price: Int {
+            switch self {
+            case .none: return 0
+            case .sand, .smoke, .leaves: return 150
+            case .bubbles, .snow, .confetti: return 200
+            case .sparkle, .hearts, .stars: return 250
+            case .fire, .magic: return 350
+            case .rainbow: return 500
+            }
+        }
+    }
+
+    /// A glowing ring round the feet.
+    public enum Aura: String, Codable, CaseIterable, Sendable {
+        case none, gold, rainbow, fire, ice, shadow, electric, nature, galaxy
+
+        public var displayName: String {
+            switch self {
+            case .none: return L("None")
+            case .gold: return L("Gold aura")
+            case .rainbow: return L("Rainbow aura")
+            case .fire: return L("Fire aura")
+            case .ice: return L("Ice aura")
+            case .shadow: return L("Shadow aura")
+            case .electric: return L("Electric aura")
+            case .nature: return L("Nature aura")
+            case .galaxy: return L("Galaxy aura")
+            }
+        }
+
+        public var englishName: String {
+            rawValue == "none" ? "None" : rawValue.prefix(1).uppercased() + rawValue.dropFirst() + " aura"
+        }
+
+        public var symbolName: String {
+            switch self {
+            case .none: return "nosign"
+            case .gold: return "sun.max.fill"
+            case .rainbow: return "rainbow"
+            case .fire: return "flame.circle.fill"
+            case .ice: return "snowflake.circle.fill"
+            case .shadow: return "moon.circle.fill"
+            case .electric: return "bolt.circle.fill"
+            case .nature: return "leaf.circle.fill"
+            case .galaxy: return "sparkles"
+            }
+        }
+
+        /// The ring's colours: one, or several it turns through.
+        public var colors: [ColorRGBA] {
+            switch self {
+            case .none: return []
+            case .gold: return [ColorRGBA(hex: "#FACC15")!, ColorRGBA(hex: "#FDE68A")!]
+            case .rainbow: return ColorRGBA.rainbow
+            case .fire: return [ColorRGBA(hex: "#F97316")!, ColorRGBA(hex: "#EF4444")!, ColorRGBA(hex: "#FACC15")!]
+            case .ice: return [ColorRGBA(hex: "#7DD3FC")!, ColorRGBA(hex: "#E0F2FE")!]
+            case .shadow: return [ColorRGBA(hex: "#4C1D95")!, ColorRGBA(hex: "#1E1B4B")!]
+            case .electric: return [ColorRGBA(hex: "#22D3EE")!, ColorRGBA(hex: "#FDE047")!]
+            case .nature: return [ColorRGBA(hex: "#4ADE80")!, ColorRGBA(hex: "#A3E635")!]
+            case .galaxy: return [ColorRGBA(hex: "#A855F7")!, ColorRGBA(hex: "#3B82F6")!, ColorRGBA(hex: "#EC4899")!]
+            }
+        }
+
+        /// Small lights circling above the ring.
+        public var orbs: Int {
+            switch self {
+            case .electric, .galaxy: return 4
+            case .fire, .nature: return 3
+            case .none, .gold, .rainbow, .ice, .shadow: return 0
+            }
+        }
+
+        public var price: Int {
+            switch self {
+            case .none: return 0
+            case .nature, .ice, .shadow: return 300
+            case .fire, .electric: return 400
+            case .gold: return 500
+            case .rainbow, .galaxy: return 700
+            }
         }
     }
 

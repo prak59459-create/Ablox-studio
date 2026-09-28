@@ -22,6 +22,10 @@ final class EconomyTests: XCTestCase {
                 XCTAssertNotNil(item.face, "\(item.id) is a face item with no face")
             case .pet:
                 XCTAssertNotNil(item.pet, "\(item.id) is a pet item with no pet")
+            case .trail:
+                XCTAssertNotNil(item.trail, "\(item.id) is a trail item with no trail")
+            case .aura:
+                XCTAssertNotNil(item.aura, "\(item.id) is an aura item with no aura")
             }
             XCTAssertGreaterThanOrEqual(item.price, 0)
             XCTAssertFalse(item.name.isEmpty)
@@ -186,7 +190,9 @@ final class EconomyTests: XCTestCase {
         for item in ShopCatalogue.items {
             XCTAssertTrue(
                 // A pet only follows its owner about; it never helps them.
-                item.color != nil || item.hat != nil || item.face != nil || item.pet != nil,
+                // Trails and auras are light and particles, nothing more.
+                item.color != nil || item.hat != nil || item.face != nil || item.pet != nil
+                    || item.trail != nil || item.aura != nil,
                 "\(item.id) carries something that is not appearance"
             )
         }

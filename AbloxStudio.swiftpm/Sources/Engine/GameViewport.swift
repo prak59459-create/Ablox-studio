@@ -493,6 +493,21 @@ public struct GameViewport: UIViewRepresentable {
 
         // MARK: Render loop
 
+        /// Sparkles, bubbles… behind anyone wearing a trail, while they move.
+        private func emitTrails(dt: Float) {
+            guard let particles else { return }
+            var subjects: [(PeerID, AvatarEntity)] = avatars.map { ($0.key, $0.value) }
+            if let local = localAvatar { subjects.append((parent.session.localPeerID, local)) }
+            let time = Date().timeIntervalSinceReferenceDate
+            for (peer, avatar) in subjects where avatar.lastStep > 0.01 {
+                let trail = avatar.profile.trail
+                guard let kind = trail.particles else { continue }
+                let at = Vec3(avatar.position) + Vec3(0, 0.25, 0)
+                particles.stream(kind, key: "trail.\(peer)", at: at, rate: 14, spread: Vec3(0.15, 0.08, 0.15), dt: dt,
+                                 color: trail.color(at: time))
+            }
+        }
+
         private func tick(deltaTime: Float) {
             let dt = min(deltaTime, 1.0 / 20)
             let world = placeMovingParts(in: parent.session.world)
@@ -572,6 +587,7 @@ public struct GameViewport: UIViewRepresentable {
             for avatar in avatars.values {
                 avatar.update(deltaTime: dt)
             }
+            emitTrails(dt: dt)
 
             // 6. Apply anything the host told us to do since the last frame.
             let effects = parent.session.drainEffects()
