@@ -113,6 +113,8 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
     /// The aiming mark in the middle of the screen, when a game shows one.
     public var crosshair: CrosshairStyle = .plus
     public var crosshairColor: CrosshairColor = .white
+    /// The play screen's chips, buttons, stick and camera habits.
+    public var hud = HUDOptions()
 
     public struct PointOffset: Codable, Hashable, Sendable {
         public var x: Double = 0
@@ -154,6 +156,7 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
         markMeaning = (try? c.decodeIfPresent(Bool.self, forKey: .markMeaning)) ?? d.markMeaning
         crosshair = (try? c.decodeIfPresent(CrosshairStyle.self, forKey: .crosshair)) ?? d.crosshair
         crosshairColor = (try? c.decodeIfPresent(CrosshairColor.self, forKey: .crosshairColor)) ?? d.crosshairColor
+        hud = (try? c.decodeIfPresent(HUDOptions.self, forKey: .hud)) ?? d.hud
         clamp()
     }
 
@@ -171,6 +174,7 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
         musicVolume = musicVolume.isFinite ? within(musicVolume, 0...1) : 0.7
         jumpButtonOffset.x = jumpButtonOffset.x.isFinite ? within(jumpButtonOffset.x, -400...400) : 0
         jumpButtonOffset.y = jumpButtonOffset.y.isFinite ? within(jumpButtonOffset.y, -300...100) : 0
+        hud.clamp()
     }
 
     // MARK: Decisions

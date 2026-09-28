@@ -207,6 +207,10 @@ public struct GameViewport: UIViewRepresentable {
         private var shakeSerial = 0
         private var shakeRemaining: Float = 0
         private var shakeStrength: Float = 0
+        /// "Camera follows behind me": the yaw it last saw or set, and a
+        /// pause after the player turns the camera themselves.
+        private var followSeenYaw: Float?
+        private var followPause: Float = 0
 
         /// Settings → Comfort and friends.
         private var preferences = PlayPreferences()
@@ -552,6 +556,8 @@ public struct GameViewport: UIViewRepresentable {
                 // sideways strafes instead of turning away from the target.
                 let forward = Quat.yaw(degrees: parent.cameraYaw).act(Vec3(0, 0, -1))
                 localSnapshot.yawDegrees = atan2(forward.x, -forward.z) * 180 / .pi
+            } else {
+                followCamera(stick: input.stick, dt: dt)
             }
 
             // 2. Velocity → position, resolved against the world.
@@ -614,6 +620,28 @@ public struct GameViewport: UIViewRepresentable {
                 powerClock = 0
                 checkPowerAndHeat()
             }
+        }
+
+        /// Play screen options: the camera drifts round behind a player who
+        /// walks on, but leaves it be for a moment after they turn it
+        /// themselves.
+        private func followCamera(stick: Vec3, dt: Float) {
+            let yaw = parent.cameraYaw
+            var seen = yaw
+            defer { followSeenYaw = seen }
+            guard preferences.hud.cameraFollows, !parent.photoMode, parent.spectating == nil, !parent.preferFirstPerson,
+                  parent.session.scripted.camera.mode == .thirdPerson else { return }
+            if let last = followSeenYaw, abs(normalizeDegrees(yaw - last)) > 0.01 {
+                followPause = 1.5
+            }
+            if followPause > 0 {
+                followPause -= dt
+                return
+            }
+            let turn = CameraHabits.followTurn(cameraYaw: yaw, bodyYaw: localSnapshot.yawDegrees, stick: stick, seconds: dt)
+            guard turn != 0 else { return }
+            seen = normalizeDegrees(yaw + turn)
+            parent.cameraYaw = seen
         }
 
         /// Low Power Mode, the battery saver and a hot iPad all cap the
