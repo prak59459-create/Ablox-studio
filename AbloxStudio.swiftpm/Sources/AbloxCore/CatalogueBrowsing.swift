@@ -12,6 +12,12 @@ public enum GameSort: String, Codable, CaseIterable, Sendable, Identifiable {
     case newest
     case mostPlayed
     case liked
+    /// The player's own stars, most first.
+    case rating
+    /// Fewest parts first: quickest to download and start.
+    case smallest
+    /// Most players first.
+    case players
     public var id: String { rawValue }
 
     public var displayName: String {
@@ -21,6 +27,9 @@ public enum GameSort: String, Codable, CaseIterable, Sendable, Identifiable {
         case .newest: return L("Newest")
         case .mostPlayed: return L("Most played")
         case .liked: return L("Liked first")
+        case .rating: return L("My stars")
+        case .smallest: return L("Quick to load")
+        case .players: return L("Most players")
         }
     }
 
@@ -31,6 +40,9 @@ public enum GameSort: String, Codable, CaseIterable, Sendable, Identifiable {
         case .newest: return "clock.arrow.circlepath"
         case .mostPlayed: return "gamecontroller"
         case .liked: return "heart"
+        case .rating: return "star"
+        case .smallest: return "bolt"
+        case .players: return "person.3"
         }
     }
 }
@@ -41,7 +53,7 @@ public enum CatalogueBrowsing {
     /// never jumps about between two identical calls.
     public static func sorted(_ listings: [GameListing], by order: GameSort,
                               playedSeconds: (GameListing) -> Double = { _ in 0 },
-                              liked: Set<String> = []) -> [GameListing] {
+                              liked: Set<String> = [], stars: [String: Int] = [:]) -> [GameListing] {
         let indexed = Array(listings.enumerated())
         func stable(_ before: (GameListing, GameListing) -> Bool?) -> [GameListing] {
             indexed.sorted { a, b in before(a.element, b.element) ?? (a.offset < b.offset) }.map(\.element)
@@ -66,6 +78,15 @@ public enum CatalogueBrowsing {
                 let x = liked.contains(a.id), y = liked.contains(b.id)
                 return x == y ? nil : x
             }
+        case .rating:
+            return stable { a, b in
+                let x = stars[a.id] ?? 0, y = stars[b.id] ?? 0
+                return x == y ? nil : x > y
+            }
+        case .smallest:
+            return stable { a, b in a.blockCount == b.blockCount ? nil : a.blockCount < b.blockCount }
+        case .players:
+            return stable { a, b in a.maxPlayers == b.maxPlayers ? nil : a.maxPlayers > b.maxPlayers }
         }
     }
 

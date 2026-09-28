@@ -278,6 +278,13 @@ public final class GameLibrary: ObservableObject {
         installed.contains(listing.id)
     }
 
+    /// Deletes one downloaded game, to make room; it downloads again when
+    /// next played.
+    public func removeDownload(_ listing: GameListing) {
+        try? FileManager.default.removeItem(at: worldCacheURL(for: listing.id))
+        refreshInstalledList()
+    }
+
     /// Deletes everything downloaded. The player's own worlds are elsewhere
     /// and are not touched.
     public func clearCache() {
