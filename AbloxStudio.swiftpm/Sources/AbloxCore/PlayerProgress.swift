@@ -37,6 +37,29 @@ public struct DailyBonus: Codable, Hashable, Sendable {
 
 // MARK: - Badges
 
+/// Things done over time that nothing else counts, for badges and levels.
+public struct LifetimeCounters: Codable, Hashable, Sendable {
+    public var emotes = 0
+    public var stamps = 0
+    public var roundsWon = 0
+    public var missionsClaimed = 0
+    public var lookCodesWorn = 0
+    public var clipsSaved = 0
+
+    public init() {}
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func count(_ key: CodingKeys) -> Int { Swift.max(0, (try? c.decodeIfPresent(Int.self, forKey: key)) ?? 0) }
+        emotes = count(.emotes)
+        stamps = count(.stamps)
+        roundsWon = count(.roundsWon)
+        missionsClaimed = count(.missionsClaimed)
+        lookCodesWorn = count(.lookCodesWorn)
+        clipsSaved = count(.clipsSaved)
+    }
+}
+
 /// What a player has done, for badges.
 public struct ProgressStats: Hashable, Sendable {
     public var gamesPlayed: Int
@@ -48,6 +71,17 @@ public struct ProgressStats: Hashable, Sendable {
     public var worldsMade: Int
     public var hasPet: Bool
     public var bestStreak: Int
+    // Added with the second set of badges.
+    public var counters = LifetimeCounters()
+    public var hatsOwned = 0
+    public var petsOwned = 0
+    public var trailsOwned = 0
+    public var aurasOwned = 0
+    public var friends = 0
+    public var gamesLiked = 0
+    public var outfitsSaved = 0
+    /// Plays of the game played most.
+    public var mostPlaysOfOneGame = 0
 
     public init(gamesPlayed: Int = 0, totalMinutes: Int = 0, daysPlayed: Int = 0, lifetimeCoins: Int = 0, itemsOwned: Int = 0,
                 pictures: Int = 0, worldsMade: Int = 0, hasPet: Bool = false, bestStreak: Int = 0) {
@@ -61,6 +95,46 @@ public struct ProgressStats: Hashable, Sendable {
         self.hasPet = hasPet
         self.bestStreak = bestStreak
     }
+
+    /// Experience, from everything done: time, days, wins and missions.
+    public var experience: Int {
+        totalMinutes * 2 + daysPlayed * 20 + counters.roundsWon * 10 + counters.missionsClaimed * 25
+    }
+
+    public var level: PlayerLevel { PlayerLevel(experience: experience) }
+}
+
+/// A player's level from their experience. Each level needs 100 more than
+/// the one before: 100 for level 2, 300 in all for level 3, 600 for 4…
+public struct PlayerLevel: Hashable, Sendable {
+    public let number: Int
+    /// Experience into this level, and how much the level holds.
+    public let progress: Int
+    public let span: Int
+
+    public static let maximum = 99
+
+    public init(experience: Int) {
+        var level = 1
+        var remaining = Swift.max(0, experience)
+        while level < Self.maximum, remaining >= level * 100 {
+            remaining -= level * 100
+            level += 1
+        }
+        number = level
+        progress = level == Self.maximum ? 0 : remaining
+        span = level * 100
+    }
+
+    /// Experience needed in all to reach `level`.
+    public static func experience(for level: Int) -> Int {
+        (1..<Swift.max(1, level)).reduce(0) { $0 + $1 * 100 }
+    }
+
+    /// Coins for reaching `level`.
+    public static func reward(for level: Int) -> Int {
+        level <= 1 ? 0 : Swift.min(500, 30 + level * 20)
+    }
 }
 
 /// Badges earned across every game — and each one a title to wear.
@@ -70,6 +144,11 @@ public enum Achievement: String, CaseIterable, Sendable, Identifiable {
     case saver, rich, tycoon
     case stylist, collector
     case photographer, builder, petFriend, loyal
+    // The second set.
+    case emoteFan, stampFan, winner, champion, missionStarter, missionMaster
+    case hatCollector, petKeeper, trailBlazer, glowing, friendly, popular
+    case critic, fashionista, lookSharer, dedicated, veteran, legend
+    case millionaire, worldMaker, architect, superFan, streakMaster, clipMaker, levelTen
 
     public var id: String { rawValue }
 
@@ -90,6 +169,31 @@ public enum Achievement: String, CaseIterable, Sendable, Identifiable {
         case .builder: return L("Builder")
         case .petFriend: return L("Pet Friend")
         case .loyal: return L("Loyal")
+        case .emoteFan: return L("Show-off")
+        case .stampFan: return L("Stamp Fan")
+        case .winner: return L("Winner")
+        case .champion: return L("Champion")
+        case .missionStarter: return L("Go-getter")
+        case .missionMaster: return L("Mission Master")
+        case .hatCollector: return L("Hat Collector")
+        case .petKeeper: return L("Zookeeper")
+        case .trailBlazer: return L("Trailblazer")
+        case .glowing: return L("Glowing")
+        case .friendly: return L("Friendly")
+        case .popular: return L("Popular")
+        case .critic: return L("Critic")
+        case .fashionista: return L("Fashionista")
+        case .lookSharer: return L("Copycat")
+        case .dedicated: return L("Dedicated")
+        case .veteran: return L("Veteran")
+        case .legend: return L("Legend")
+        case .millionaire: return L("Coin Master")
+        case .worldMaker: return L("World Maker")
+        case .architect: return L("Architect")
+        case .superFan: return L("Super Fan")
+        case .streakMaster: return L("Streak Master")
+        case .clipMaker: return L("Director")
+        case .levelTen: return L("Level 10")
         }
     }
 
@@ -110,6 +214,31 @@ public enum Achievement: String, CaseIterable, Sendable, Identifiable {
         case .builder: return L("Make a world of your own")
         case .petFriend: return L("Have a pet")
         case .loyal: return L("Come back 7 days in a row")
+        case .emoteFan: return L("Use 50 emotes")
+        case .stampFan: return L("Send 30 stamps")
+        case .winner: return L("Win a round")
+        case .champion: return L("Win 25 rounds")
+        case .missionStarter: return L("Finish 10 missions")
+        case .missionMaster: return L("Finish 60 missions")
+        case .hatCollector: return L("Own 10 hats")
+        case .petKeeper: return L("Own 5 pets")
+        case .trailBlazer: return L("Own a trail")
+        case .glowing: return L("Own an aura")
+        case .friendly: return L("Make 3 friends")
+        case .popular: return L("Make 15 friends")
+        case .critic: return L("Like 10 games")
+        case .fashionista: return L("Save 3 outfits")
+        case .lookSharer: return L("Wear a friend's look code")
+        case .dedicated: return L("Play on 30 different days")
+        case .veteran: return L("Play on 100 different days")
+        case .legend: return L("Play for 50 hours in all")
+        case .millionaire: return L("Earn 100,000 coins")
+        case .worldMaker: return L("Make 5 worlds")
+        case .architect: return L("Make 20 worlds")
+        case .superFan: return L("Play one game 20 times")
+        case .streakMaster: return L("Come back 30 days in a row")
+        case .clipMaker: return L("Save 5 clips")
+        case .levelTen: return L("Reach level 10")
         }
     }
 
@@ -130,31 +259,98 @@ public enum Achievement: String, CaseIterable, Sendable, Identifiable {
         case .builder: return "hammer.fill"
         case .petFriend: return "pawprint.fill"
         case .loyal: return "heart.fill"
+        case .emoteFan: return "figure.dance"
+        case .stampFan: return "face.smiling"
+        case .winner: return "rosette"
+        case .champion: return "trophy.fill"
+        case .missionStarter: return "target"
+        case .missionMaster: return "scope"
+        case .hatCollector: return "crown"
+        case .petKeeper: return "hare.fill"
+        case .trailBlazer: return "sparkle"
+        case .glowing: return "sun.max.fill"
+        case .friendly: return "person.2.fill"
+        case .popular: return "person.3.fill"
+        case .critic: return "hand.thumbsup.fill"
+        case .fashionista: return "hanger"
+        case .lookSharer: return "qrcode"
+        case .dedicated: return "calendar.badge.checkmark"
+        case .veteran: return "medal.fill"
+        case .legend: return "star.circle.fill"
+        case .millionaire: return "bitcoinsign.circle.fill"
+        case .worldMaker: return "cube.fill"
+        case .architect: return "building.columns.fill"
+        case .superFan: return "gamecontroller.fill"
+        case .streakMaster: return "flame.fill"
+        case .clipMaker: return "film.fill"
+        case .levelTen: return "10.circle.fill"
+        }
+    }
+
+    /// How far along, and what it takes: (3, 10) for "3 of 10".
+    public func progress(_ s: ProgressStats) -> (current: Int, target: Int) {
+        let c = s.counters
+        switch self {
+        case .firstGame: return (s.gamesPlayed, 1)
+        case .explorer: return (s.gamesPlayed, 10)
+        case .globetrotter: return (s.gamesPlayed, 30)
+        case .playtime: return (s.totalMinutes, 60)
+        case .marathon: return (s.totalMinutes, 600)
+        case .regular: return (s.daysPlayed, 7)
+        case .saver: return (s.lifetimeCoins, 500)
+        case .rich: return (s.lifetimeCoins, 3_000)
+        case .tycoon: return (s.lifetimeCoins, 20_000)
+        case .stylist: return (s.itemsOwned, 15)
+        case .collector: return (s.itemsOwned, 40)
+        case .photographer: return (s.pictures, 10)
+        case .builder: return (s.worldsMade, 1)
+        case .petFriend: return (s.hasPet ? 1 : 0, 1)
+        case .loyal: return (s.bestStreak, 7)
+        case .emoteFan: return (c.emotes, 50)
+        case .stampFan: return (c.stamps, 30)
+        case .winner: return (c.roundsWon, 1)
+        case .champion: return (c.roundsWon, 25)
+        case .missionStarter: return (c.missionsClaimed, 10)
+        case .missionMaster: return (c.missionsClaimed, 60)
+        case .hatCollector: return (s.hatsOwned, 10)
+        case .petKeeper: return (s.petsOwned, 5)
+        case .trailBlazer: return (s.trailsOwned, 1)
+        case .glowing: return (s.aurasOwned, 1)
+        case .friendly: return (s.friends, 3)
+        case .popular: return (s.friends, 15)
+        case .critic: return (s.gamesLiked, 10)
+        case .fashionista: return (s.outfitsSaved, 3)
+        case .lookSharer: return (c.lookCodesWorn, 1)
+        case .dedicated: return (s.daysPlayed, 30)
+        case .veteran: return (s.daysPlayed, 100)
+        case .legend: return (s.totalMinutes, 3_000)
+        case .millionaire: return (s.lifetimeCoins, 100_000)
+        case .worldMaker: return (s.worldsMade, 5)
+        case .architect: return (s.worldsMade, 20)
+        case .superFan: return (s.mostPlaysOfOneGame, 20)
+        case .streakMaster: return (s.bestStreak, 30)
+        case .clipMaker: return (c.clipsSaved, 5)
+        case .levelTen: return (s.level.number, 10)
         }
     }
 
     public func isEarned(_ s: ProgressStats) -> Bool {
-        switch self {
-        case .firstGame: return s.gamesPlayed >= 1
-        case .explorer: return s.gamesPlayed >= 10
-        case .globetrotter: return s.gamesPlayed >= 30
-        case .playtime: return s.totalMinutes >= 60
-        case .marathon: return s.totalMinutes >= 600
-        case .regular: return s.daysPlayed >= 7
-        case .saver: return s.lifetimeCoins >= 500
-        case .rich: return s.lifetimeCoins >= 3_000
-        case .tycoon: return s.lifetimeCoins >= 20_000
-        case .stylist: return s.itemsOwned >= 15
-        case .collector: return s.itemsOwned >= 40
-        case .photographer: return s.pictures >= 10
-        case .builder: return s.worldsMade >= 1
-        case .petFriend: return s.hasPet
-        case .loyal: return s.bestStreak >= 7
-        }
+        let (current, target) = progress(s)
+        return current >= target
     }
 
     public static func earned(_ stats: ProgressStats) -> [Achievement] {
         allCases.filter { $0.isEarned(stats) }
+    }
+
+    /// The badges not yet earned that are closest, most done first.
+    public static func nextUp(_ stats: ProgressStats, count: Int = 3) -> [Achievement] {
+        let open = allCases.filter { !$0.isEarned(stats) }
+        func share(_ badge: Achievement) -> Double {
+            let (current, target) = badge.progress(stats)
+            return Double(Swift.max(0, current)) / Double(Swift.max(1, target))
+        }
+        return Array(open.sorted { share($0) > share($1) }.prefix(count))
     }
 }
 

@@ -1,7 +1,8 @@
 import Foundation
 
 /// A look as a short code to read out or type in, like "4K2P-9QXA-…":
-/// colours, hat, face, pet and height, but never the name.
+/// colours, hat, face, pet and height — and trail, aura, name card and
+/// bubble when any is chosen — but never the name.
 ///
 /// Wearing someone's code only puts on what this player owns. Anything
 /// else is listed, so it can go on the wishlist, rather than being worn
@@ -19,9 +20,17 @@ public enum OutfitCode {
         public var hatColor: ColorRGBA?
         public var petColor: ColorRGBA
         public var height: Float
+        /// Only in the longer codes; nil keeps what the wearer has on.
+        public var trail: AvatarProfile.Trail?
+        public var aura: AvatarProfile.Aura?
+        public var nameplate: AvatarProfile.NamePlate?
+        public var bubble: AvatarProfile.BubbleStyle?
     }
 
     static let version: UInt8 = 1
+    /// A look with a trail, aura, name card or bubble. Plain looks keep the
+    /// first kind of code, so an older iPad can still read them.
+    static let versionWithExtras: UInt8 = 2
     /// Crockford's base 32: no I, L, O or U, so nothing is misread.
     static let alphabet = Array("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
 
@@ -35,6 +44,10 @@ public enum OutfitCode {
             profile.hatColor.map(paletteIndex) ?? 255, paletteIndex(profile.petColor),
             height
         ]
+        if profile.trail != .none || profile.aura != .none || profile.nameplate != .classic || profile.bubble != .classic {
+            bytes[0] = versionWithExtras
+            bytes += [index(of: profile.trail), index(of: profile.aura), index(of: profile.nameplate), index(of: profile.bubble)]
+        }
         bytes.append(checksum(bytes))
         let characters = base32(bytes)
         return stride(from: 0, to: characters.count, by: 4)
@@ -53,8 +66,9 @@ public enum OutfitCode {
             default: cleaned.append(character)
             }
         }
-        guard let bytes = unbase32(cleaned), bytes.count == 11,
-              bytes[0] == version, checksum(Array(bytes.dropLast())) == bytes[10] else { return nil }
+        guard let bytes = unbase32(cleaned), let kind = bytes.first,
+              (kind == version && bytes.count == 11) || (kind == versionWithExtras && bytes.count == 15),
+              checksum(Array(bytes.dropLast())) == bytes[bytes.count - 1] else { return nil }
         let palette = ColorRGBA.palette
         func colour(_ byte: UInt8) -> ColorRGBA? { Int(byte) < palette.count ? palette[Int(byte)] : nil }
         guard let body = colour(bytes[1]), let head = colour(bytes[2]), let accent = colour(bytes[3]),
@@ -63,9 +77,17 @@ public enum OutfitCode {
               let pet = value(AvatarProfile.Pet.self, bytes[6]),
               let petColor = colour(bytes[8]) else { return nil }
         let span = heightRange.upperBound - heightRange.lowerBound
-        return Outfit(body: body, head: head, accent: accent, hat: hat, face: face, pet: pet,
-                      hatColor: colour(bytes[7]), petColor: petColor,
-                      height: heightRange.lowerBound + Float(bytes[9]) / 255 * span)
+        var outfit = Outfit(body: body, head: head, accent: accent, hat: hat, face: face, pet: pet,
+                            hatColor: colour(bytes[7]), petColor: petColor,
+                            height: heightRange.lowerBound + Float(bytes[9]) / 255 * span)
+        if kind == versionWithExtras {
+            // Something from a newer iPad that this one lacks is left off.
+            outfit.trail = value(AvatarProfile.Trail.self, bytes[10]) ?? AvatarProfile.Trail.none
+            outfit.aura = value(AvatarProfile.Aura.self, bytes[11]) ?? AvatarProfile.Aura.none
+            outfit.nameplate = value(AvatarProfile.NamePlate.self, bytes[12]) ?? .classic
+            outfit.bubble = value(AvatarProfile.BubbleStyle.self, bytes[13]) ?? .classic
+        }
+        return outfit
     }
 
     /// `profile` wearing what it can of `outfit`, and the shop items it
@@ -83,6 +105,10 @@ public enum OutfitCode {
         take(.hat, matching: { $0.hat == outfit.hat }) { $0.hat = outfit.hat }
         take(.face, matching: { $0.face == outfit.face }) { $0.face = outfit.face }
         take(.pet, matching: { $0.pet == outfit.pet }) { $0.pet = outfit.pet }
+        if let trail = outfit.trail { take(.trail, matching: { $0.trail == trail }) { $0.trail = trail } }
+        if let aura = outfit.aura { take(.aura, matching: { $0.aura == aura }) { $0.aura = aura } }
+        if let plate = outfit.nameplate { take(.nameplate, matching: { $0.nameplate == plate }) { $0.nameplate = plate } }
+        if let bubble = outfit.bubble { take(.bubble, matching: { $0.bubble == bubble }) { $0.bubble = bubble } }
         // Colours of the hat and pet, and height, are free to choose anyway.
         look.hatColor = outfit.hatColor
         look.petColor = outfit.petColor

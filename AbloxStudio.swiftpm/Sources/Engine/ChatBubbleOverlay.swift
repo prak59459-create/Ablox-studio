@@ -35,6 +35,8 @@ final class ChatBubbleOverlay: UIView {
         let anchor: CGPoint
         /// From the camera, in metres: far bubbles are drawn smaller.
         let distance: Float
+        /// Their bubble's colours.
+        var style: AvatarProfile.BubbleStyle = .classic
     }
 
     private var stacks: [PeerID: SpeakerStack] = [:]
@@ -67,7 +69,7 @@ final class ChatBubbleOverlay: UIView {
                 addSubview(stack)
                 stacks[speaker.id] = stack
             }
-            stack.show(speaker.messages)
+            stack.show(speaker.messages, style: speaker.style)
             stack.place(at: speaker.anchor, scale: Self.scale(forDistance: speaker.distance))
             bringSubviewToFront(stack)
         }
@@ -101,6 +103,7 @@ private final class SpeakerStack: UIView {
 
     private var bubbles: [UUID: BubbleView] = [:]
     private var order: [UUID] = []
+    private var style: AvatarProfile.BubbleStyle = .classic
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -114,8 +117,15 @@ private final class SpeakerStack: UIView {
         fatalError("init(coder:) is not used")
     }
 
-    func show(_ messages: [ChatBubbleOverlay.Message]) {
+    func show(_ messages: [ChatBubbleOverlay.Message], style chosen: AvatarProfile.BubbleStyle = .classic) {
         let ids = messages.map(\.id)
+        if chosen != style {
+            // New colours: every bubble is made again.
+            style = chosen
+            for bubble in bubbles.values { bubble.removeFromSuperview() }
+            bubbles.removeAll()
+            order = []
+        }
         if ids != order {
             rebuild(messages)
         }
@@ -137,7 +147,7 @@ private final class SpeakerStack: UIView {
             bubbles.removeValue(forKey: id)
         }
         for message in messages where bubbles[message.id] == nil {
-            let bubble = BubbleView(text: message.text)
+            let bubble = BubbleView(text: message.text, style: style)
             addSubview(bubble)
             bubbles[message.id] = bubble
         }
@@ -205,12 +215,17 @@ private final class BubbleView: UIView {
         }
     }
 
-    init(text: String) {
+    init(text: String, style: AvatarProfile.BubbleStyle = .classic) {
         super.init(frame: .zero)
         isUserInteractionEnabled = false
         backgroundColor = .clear
+        let colours = style.colours
 
-        card.backgroundColor = .white
+        card.backgroundColor = colours.background.uiColor
+        if let border = colours.border {
+            card.layer.borderWidth = 2
+            card.layer.borderColor = border.uiColor.cgColor
+        }
         card.layer.cornerRadius = 12
         card.layer.cornerCurve = .continuous
         // A soft edge so a white bubble still reads against a white sky.
@@ -222,13 +237,13 @@ private final class BubbleView: UIView {
 
         label.text = text
         label.font = .systemFont(ofSize: 15, weight: .semibold)
-        label.textColor = UIColor(red: 0.11, green: 0.12, blue: 0.15, alpha: 1)
+        label.textColor = colours.text.uiColor
         label.numberOfLines = 4
         label.lineBreakMode = .byTruncatingTail
         label.textAlignment = .center
         card.addSubview(label)
 
-        tail.fillColor = UIColor.white.cgColor
+        tail.fillColor = colours.background.uiColor.cgColor
         layer.addSublayer(tail)
     }
 

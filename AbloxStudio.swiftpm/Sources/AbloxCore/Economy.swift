@@ -19,6 +19,8 @@ public struct ShopItem: Codable, Hashable, Identifiable, Sendable {
         case pet
         case trail
         case aura
+        case nameplate
+        case bubble
 
         public var displayName: String {
             switch self {
@@ -30,6 +32,8 @@ public struct ShopItem: Codable, Hashable, Identifiable, Sendable {
             case .pet: return L("Pet")
             case .trail: return L("Trail")
             case .aura: return L("Aura")
+            case .nameplate: return L("Name card")
+            case .bubble: return L("Chat bubble")
             }
         }
     }
@@ -60,6 +64,9 @@ public struct ShopItem: Codable, Hashable, Identifiable, Sendable {
     /// For trail and aura items.
     public let trail: AvatarProfile.Trail?
     public let aura: AvatarProfile.Aura?
+    /// For name card and chat bubble items.
+    public let nameplate: AvatarProfile.NamePlate?
+    public let bubble: AvatarProfile.BubbleStyle?
 
     public var rarity: ItemRarity { ItemRarity(price: price) }
 
@@ -73,7 +80,9 @@ public struct ShopItem: Codable, Hashable, Identifiable, Sendable {
         face: AvatarProfile.Face? = nil,
         pet: AvatarProfile.Pet? = nil,
         trail: AvatarProfile.Trail? = nil,
-        aura: AvatarProfile.Aura? = nil
+        aura: AvatarProfile.Aura? = nil,
+        nameplate: AvatarProfile.NamePlate? = nil,
+        bubble: AvatarProfile.BubbleStyle? = nil
     ) {
         self.id = id
         self.name = name
@@ -85,6 +94,8 @@ public struct ShopItem: Codable, Hashable, Identifiable, Sendable {
         self.pet = pet
         self.trail = trail
         self.aura = aura
+        self.nameplate = nameplate
+        self.bubble = bubble
     }
 
     /// Items priced 0 are owned from the start and never appear as locked.
@@ -136,6 +147,14 @@ public enum ShopCatalogue {
         }
         for aura in AvatarProfile.Aura.allCases {
             result.append(ShopItem(id: "aura.\(aura.rawValue)", name: aura.englishName, kind: .aura, price: aura.price, aura: aura))
+        }
+        for plate in AvatarProfile.NamePlate.allCases {
+            result.append(ShopItem(id: "nameplate.\(plate.rawValue)", name: plate.englishName, kind: .nameplate,
+                                   price: plate.price, nameplate: plate))
+        }
+        for bubble in AvatarProfile.BubbleStyle.allCases {
+            result.append(ShopItem(id: "bubble.\(bubble.rawValue)", name: bubble.englishName, kind: .bubble,
+                                   price: bubble.price, bubble: bubble))
         }
 
         return result

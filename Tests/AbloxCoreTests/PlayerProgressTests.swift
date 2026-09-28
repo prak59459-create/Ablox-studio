@@ -361,3 +361,136 @@ final class MovesAndTrailsTests: XCTestCase {
         XCTAssertEqual(colours.count, ColorRGBA.rainbow.count)
     }
 }
+
+/// Name cards, chat bubbles, levels and the second set of badges.
+final class LevelsAndCardsTests: XCTestCase {
+
+    func testCardsAndBubblesTravelOnlyWhenChosen() throws {
+        var profile = AvatarProfile(displayName: "Kai")
+        let plain = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(profile)) as? [String: Any])
+        XCTAssertNil(plain["nameplate"], "an older iPad sees nothing new")
+        XCTAssertNil(plain["bubble"])
+        profile.nameplate = .neon
+        profile.bubble = .comic
+        let data = try JSONEncoder().encode(profile)
+        XCTAssertEqual(try JSONDecoder().decode(AvatarProfile.self, from: data), profile)
+        let newer = #"{"displayName":"N","bodyColor":{"r":1,"g":1,"b":1,"a":1},"headColor":{"r":1,"g":1,"b":1,"a":1},"accentColor":{"r":1,"g":1,"b":1,"a":1},"hat":"none","height":1,"nameplate":"hologram","bubble":"plasma"}"#
+        let loaded = try JSONDecoder().decode(AvatarProfile.self, from: Data(newer.utf8))
+        XCTAssertEqual(loaded.nameplate, .classic)
+        XCTAssertEqual(loaded.bubble, .classic)
+    }
+
+    func testCardsAndBubblesAreInTheShopAndClassicIsFree() {
+        for plate in AvatarProfile.NamePlate.allCases {
+            let item = ShopCatalogue.item(id: "nameplate.\(plate.rawValue)")
+            XCTAssertEqual(item?.kind, .nameplate)
+            XCTAssertEqual(item?.nameplate, plate)
+            XCTAssertEqual(plate.rawValue, plate.rawValue.lowercased())
+            XCTAssertGreaterThan(plate.colours.background.a, 0.3, "\(plate) must be readable")
+        }
+        for bubble in AvatarProfile.BubbleStyle.allCases {
+            XCTAssertEqual(ShopCatalogue.item(id: "bubble.\(bubble.rawValue)")?.bubble, bubble)
+            XCTAssertNotEqual(bubble.colours.background.hexString, bubble.colours.text.hexString)
+        }
+        XCTAssertEqual(ShopCatalogue.items(of: .nameplate).count, 11)
+        XCTAssertEqual(ShopCatalogue.items(of: .bubble).count, 11)
+        let wallet = PlayerWallet()
+        XCTAssertTrue(wallet.owns("nameplate.classic"))
+        XCTAssertTrue(wallet.owns("bubble.classic"))
+        XCTAssertFalse(wallet.owns("nameplate.gold"))
+    }
+
+    func testLevelsNeedMoreEachTime() {
+        XCTAssertEqual(PlayerLevel(experience: 0).number, 1)
+        XCTAssertEqual(PlayerLevel(experience: -50).number, 1)
+        XCTAssertEqual(PlayerLevel(experience: 99).number, 1)
+        XCTAssertEqual(PlayerLevel(experience: 100).number, 2)
+        XCTAssertEqual(PlayerLevel(experience: 299).number, 2)
+        XCTAssertEqual(PlayerLevel(experience: 300).number, 3)
+        let mid = PlayerLevel(experience: 350)
+        XCTAssertEqual(mid.progress, 50)
+        XCTAssertEqual(mid.span, 300)
+        for level in 2...20 {
+            let start = PlayerLevel.experience(for: level)
+            XCTAssertEqual(PlayerLevel(experience: start).number, level)
+            XCTAssertEqual(PlayerLevel(experience: start - 1).number, level - 1)
+        }
+        let top = PlayerLevel(experience: .max / 4)
+        XCTAssertEqual(top.number, PlayerLevel.maximum)
+        XCTAssertEqual(top.progress, 0)
+        XCTAssertEqual(PlayerLevel.reward(for: 1), 0)
+        XCTAssertEqual(PlayerLevel.reward(for: 2), 70)
+        XCTAssertEqual(PlayerLevel.reward(for: 99), 500, "capped")
+    }
+
+    func testExperienceComesFromPlayingWinningAndMissions() {
+        var stats = ProgressStats(totalMinutes: 30, daysPlayed: 2)
+        XCTAssertEqual(stats.experience, 100)
+        XCTAssertEqual(stats.level.number, 2)
+        stats.counters.roundsWon = 5
+        stats.counters.missionsClaimed = 4
+        XCTAssertEqual(stats.experience, 250)
+    }
+
+    func testBadgeProgressAndNextUp() {
+        var stats = ProgressStats()
+        XCTAssertEqual(Achievement.allCases.count, 40)
+        XCTAssertFalse(Achievement.winner.isEarned(stats))
+        stats.counters.roundsWon = 1
+        XCTAssertTrue(Achievement.winner.isEarned(stats))
+        XCTAssertEqual(Achievement.champion.progress(stats).current, 1)
+        XCTAssertEqual(Achievement.champion.progress(stats).target, 25)
+        stats.counters.emotes = 45
+        let next = Achievement.nextUp(stats)
+        XCTAssertEqual(next.first, .emoteFan, "45 of 50 is the nearest")
+        XCTAssertFalse(next.contains(.winner), "earned badges are not next")
+        XCTAssertLessThanOrEqual(next.count, 3)
+        for badge in Achievement.allCases {
+            XCTAssertFalse(badge.title.isEmpty)
+            XCTAssertFalse(badge.detail.isEmpty)
+            XCTAssertGreaterThan(badge.progress(stats).target, 0)
+        }
+    }
+
+    func testLookCodesCarryTheExtrasOnlyWhenWorn() throws {
+        var profile = AvatarProfile(displayName: "Kai", hat: .topHat)
+        let plain = OutfitCode.code(for: profile)
+        XCTAssertEqual(try XCTUnwrap(OutfitCode.outfit(from: plain)).trail, nil, "a plain look keeps the old code")
+        XCTAssertEqual(plain.count, 22, "18 letters and 4 dashes, as before")
+        profile.trail = .fire
+        profile.aura = .galaxy
+        profile.nameplate = .royal
+        profile.bubble = .comic
+        let code = OutfitCode.code(for: profile)
+        XCTAssertGreaterThan(code.count, plain.count)
+        let outfit = try XCTUnwrap(OutfitCode.outfit(from: code))
+        XCTAssertEqual(outfit.hat, .topHat)
+        XCTAssertEqual(outfit.trail, .fire)
+        XCTAssertEqual(outfit.aura, .galaxy)
+        XCTAssertEqual(outfit.nameplate, .royal)
+        XCTAssertEqual(outfit.bubble, .comic)
+        // Only what is owned goes on; the rest is listed.
+        var mine = AvatarProfile(displayName: "Me")
+        mine.trail = .sparkle
+        let result = OutfitCode.wear(outfit, on: mine, wallet: PlayerWallet())
+        XCTAssertEqual(result.profile.trail, .sparkle)
+        XCTAssertEqual(Set(result.missing.map(\.id)).isSuperset(of: ["trail.fire", "aura.galaxy", "nameplate.royal", "bubble.comic"]), true)
+        // An old code leaves the wearer's trail alone.
+        let old = OutfitCode.wear(try XCTUnwrap(OutfitCode.outfit(from: plain)), on: mine, wallet: PlayerWallet())
+        XCTAssertEqual(old.profile.trail, .sparkle)
+        // A damaged long code is refused like a short one.
+        var characters = Array(code)
+        let spot = characters.lastIndex { $0 != "-" }!
+        characters[spot] = characters[spot] == "7" ? "8" : "7"
+        XCTAssertNil(OutfitCode.outfit(from: String(characters)))
+    }
+
+    func testCountersSurviveOldAndDamagedSaves() throws {
+        let old = try JSONDecoder().decode(LifetimeCounters.self, from: Data(#"{"emotes":3}"#.utf8))
+        XCTAssertEqual(old.emotes, 3)
+        XCTAssertEqual(old.roundsWon, 0)
+        let damaged = try JSONDecoder().decode(LifetimeCounters.self, from: Data(#"{"stamps":-4,"clipsSaved":"x"}"#.utf8))
+        XCTAssertEqual(damaged.stamps, 0)
+        XCTAssertEqual(damaged.clipsSaved, 0)
+    }
+}

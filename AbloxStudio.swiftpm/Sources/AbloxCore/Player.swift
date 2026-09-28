@@ -90,6 +90,9 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
     public var trail: Trail
     /// A glowing ring round the feet.
     public var aura: Aura
+    /// The card behind their name, and the bubble round what they say.
+    public var nameplate: NamePlate
+    public var bubble: BubbleStyle
 
     public init(
         displayName: String = "Player",
@@ -106,7 +109,9 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         pet: Pet = .none,
         petColor: ColorRGBA = ColorRGBA(hex: "#F59E0B")!,
         trail: Trail = .none,
-        aura: Aura = .none
+        aura: Aura = .none,
+        nameplate: NamePlate = .classic,
+        bubble: BubbleStyle = .classic
     ) {
         self.displayName = displayName
         self.bodyColor = bodyColor
@@ -123,11 +128,13 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         self.petColor = petColor
         self.trail = trail
         self.aura = aura
+        self.nameplate = nameplate
+        self.bubble = bubble
     }
 
     private enum CodingKeys: String, CodingKey {
         case displayName, bodyColor, headColor, accentColor, hat, height, ride, rideColor, title, face, hatColor, pet, petColor
-        case hatNew, faceNew, petNew, trail, aura
+        case hatNew, faceNew, petNew, trail, aura, nameplate, bubble
     }
 
     // Written by hand so a profile saved before rides existed — on this
@@ -148,6 +155,8 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         pet = (try? c.decodeIfPresent(Pet.self, forKey: .petNew)) ?? (try? c.decodeIfPresent(Pet.self, forKey: .pet)) ?? Pet.none
         trail = (try? c.decodeIfPresent(Trail.self, forKey: .trail)) ?? Trail.none
         aura = (try? c.decodeIfPresent(Aura.self, forKey: .aura)) ?? Aura.none
+        nameplate = (try? c.decodeIfPresent(NamePlate.self, forKey: .nameplate)) ?? .classic
+        bubble = (try? c.decodeIfPresent(BubbleStyle.self, forKey: .bubble)) ?? .classic
         petColor = (try? c.decodeIfPresent(ColorRGBA.self, forKey: .petColor)) ?? ColorRGBA(hex: "#F59E0B")!
     }
 
@@ -185,6 +194,8 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
         // Keys an older iPad does not know, and skips.
         if trail != .none { try c.encode(trail, forKey: .trail) }
         if aura != .none { try c.encode(aura, forKey: .aura) }
+        if nameplate != .classic { try c.encode(nameplate, forKey: .nameplate) }
+        if bubble != .classic { try c.encode(bubble, forKey: .bubble) }
     }
 
     /// Left behind while moving.

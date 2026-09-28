@@ -1024,7 +1024,8 @@ public struct GameViewport: UIViewRepresentable {
                     id: peer,
                     name: isLocal ? "" : (player?.profile.displayName ?? avatar.profile.displayName),
                     title: isLocal ? "" : (player?.profile.title ?? ""),
-                    anchor: point, distance: distance, isNPC: player?.isNPC ?? false
+                    anchor: point, distance: distance, isNPC: player?.isNPC ?? false,
+                    plate: player?.profile.nameplate ?? avatar.profile.nameplate
                 ))
             }
             overlay.update(tags, showNames: !parent.photoMode)
@@ -1070,7 +1071,8 @@ public struct GameViewport: UIViewRepresentable {
                 // mirrored; better not to draw it at all.
                 guard distance > 0.5, distance < 70, toTop.dot(viewDirection) > 0.2 * distance,
                       let point = view.project(top.simd) else { continue }
-                speakers.append(ChatBubbleOverlay.Speaker(id: peer, messages: messages, anchor: point, distance: distance))
+                speakers.append(ChatBubbleOverlay.Speaker(id: peer, messages: messages, anchor: point, distance: distance,
+                                                          style: avatar.profile.bubble))
             }
             overlay.update(speakers)
         }

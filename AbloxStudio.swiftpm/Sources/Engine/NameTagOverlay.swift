@@ -17,6 +17,8 @@ final class NameTagOverlay: UIView {
         let anchor: CGPoint
         let distance: Float
         let isNPC: Bool
+        /// The card their name sits on.
+        var plate: AvatarProfile.NamePlate = .classic
     }
 
     /// How long a stamp floats before it has gone.
@@ -57,7 +59,7 @@ final class NameTagOverlay: UIView {
                     labels[tag.id] = made
                     return made
                 }()
-                view.set(name: tag.name, title: tag.title)
+                view.set(name: tag.name, title: tag.title, plate: tag.plate)
                 view.transform = CGAffineTransform(scaleX: scale, y: scale)
                 view.center = CGPoint(x: tag.anchor.x, y: tag.anchor.y - view.bounds.height * scale / 2)
             } else if let view = labels.removeValue(forKey: tag.id) {
@@ -113,6 +115,7 @@ private final class TagView: UIView {
     private let name = UILabel()
     private let title = UILabel()
     private var shown: (String, String)?
+    private var plate: AvatarProfile.NamePlate?
 
     init() {
         super.init(frame: .zero)
@@ -132,7 +135,16 @@ private final class TagView: UIView {
         fatalError("init(coder:) is not used")
     }
 
-    func set(name text: String, title subtitle: String) {
+    func set(name text: String, title subtitle: String, plate chosen: AvatarProfile.NamePlate) {
+        if chosen != plate {
+            plate = chosen
+            let colours = chosen.colours
+            backgroundColor = colours.background.uiColor
+            name.textColor = colours.text.uiColor
+            title.textColor = colours.accent.uiColor
+            layer.borderWidth = colours.border == nil ? 0 : 1.5
+            layer.borderColor = colours.border.map { $0.uiColor.cgColor }
+        }
         guard shown?.0 != text || shown?.1 != subtitle else { return }
         shown = (text, subtitle)
         name.text = text
