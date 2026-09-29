@@ -31,6 +31,8 @@ public final class GameLibrary: ObservableObject {
     @Published public private(set) var status: Status = .idle
     /// Ids whose world file is already on disk.
     @Published public private(set) var installed: Set<String> = []
+    /// How big each downloaded game is on this iPad, in bytes, by id.
+    @Published public private(set) var installedSizes: [String: Int] = [:]
     /// When the catalogue last changed, for the "last updated" line.
     @Published public private(set) var updatedAt: Date?
 
@@ -164,9 +166,19 @@ public final class GameLibrary: ObservableObject {
             return nil
         }
 
+        // Every byte is reported as it arrives, so the Games tab can say
+        // how many megabytes have come down (GameDownloads).
+        let id = listing.id
+        let downloads = GameDownloads.shared
+        downloads.began(id, expected: listing.downloadSize)
+        var received = 0
+        defer { downloads.ended(id, total: received) }
+
         do {
-            let data = try await fetch(url, limit: GameCatalogue.Limits.maximumWorldBytes)
+            let data = try await fetch(url, limit: GameCatalogue.Limits.maximumWorldBytes,
+                                       progress: Self.meter(id, offset: 0, expected: listing.downloadSize))
             var world = try WorldDocument.decoded(from: data)
+            received = data.count
 
             guard world.blocks.count <= GameCatalogue.Limits.maximumBlocks else {
                 status = .failed(L("That world has too many parts to open safely."))
@@ -183,7 +195,9 @@ public final class GameLibrary: ObservableObject {
             // repository copy is the one that counts.
             var scripts: [(name: String, source: String)] = []
             for script in effectiveSource.scriptURLs(for: listing) {
-                let bytes = try await fetch(script.url, limit: GameCatalogue.Limits.maximumScriptBytes)
+                let bytes = try await fetch(script.url, limit: GameCatalogue.Limits.maximumScriptBytes,
+                                            progress: Self.meter(id, offset: received, expected: listing.downloadSize))
+                received += bytes.count
                 guard let text = String(data: bytes, encoding: .utf8) else { continue }
                 scripts.append((name: script.name, source: text))
             }
@@ -257,19 +271,15 @@ public final class GameLibrary: ObservableObject {
         return pictures
     }
 
-    /// Downloads every game not yet on this iPad, so the whole list plays
-    /// with no network. Returns how many were fetched.
-    @discardableResult
-    public func downloadAll(progress: ((Int, Int) -> Void)? = nil) async -> Int {
-        let missing = listings.filter { !isInstalled($0) && $0.isSupported }
-        var fetched = 0
-        for (index, listing) in missing.enumerated() {
-            progress?(index, missing.count)
-            if await download(listing) != nil { fetched += 1 }
-            _ = await coverData(for: listing)
-        }
-        progress?(missing.count, missing.count)
-        return fetched
+    /// Every downloaded game's size added up, in bytes.
+    public var installedBytes: Int {
+        installedSizes.values.reduce(0, +)
+    }
+
+    /// Reads again which games are on this iPad — after a download that
+    /// another Games tab's library did.
+    public func reloadInstalled() {
+        refreshInstalledList()
     }
 
     // MARK: Cache
@@ -310,16 +320,19 @@ public final class GameLibrary: ObservableObject {
     private func refreshInstalledList() {
         guard let files = try? FileManager.default.contentsOfDirectory(
             at: cacheDirectory,
-            includingPropertiesForKeys: nil
+            includingPropertiesForKeys: [.fileSizeKey]
         ) else {
             installed = []
+            installedSizes = [:]
             return
         }
-        installed = Set(
-            files
-                .filter { $0.lastPathComponent.hasSuffix(".ablox") }
-                .map { $0.deletingPathExtension().lastPathComponent }
-        )
+        var sizes: [String: Int] = [:]
+        for url in files where url.lastPathComponent.hasSuffix(".ablox") {
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            sizes[url.deletingPathExtension().lastPathComponent] = size
+        }
+        installed = Set(sizes.keys)
+        installedSizes = sizes
     }
 
     private var indexCacheURL: URL {
@@ -374,17 +387,35 @@ public final class GameLibrary: ObservableObject {
 
     private enum FetchError: Error { case tooLarge, badStatus(Int) }
 
+    /// Sends a download's byte count to `GameDownloads`: `offset` bytes of
+    /// the game came before this file, and `expected` is the whole game's
+    /// size when the list says it.
+    nonisolated private static func meter(_ id: String, offset: Int, expected: Int?) -> @Sendable (Int, Int?) -> Void {
+        { received, total in
+            let whole = expected ?? total.map { $0 + offset }
+            Task { @MainActor in GameDownloads.shared.received(id, bytes: offset + received, expected: whole) }
+        }
+    }
+
     /// One GET, with the response size held to `limit`.
     ///
     /// Checked twice: `expectedContentLength` refuses an honest large file
     /// before it is transferred, and the byte count refuses a response that
     /// lied about its length or did not declare one.
-    private func fetch(_ url: URL, limit: Int) async throws -> Data {
+    ///
+    /// With `progress`, the body is read a piece at a time and the count so
+    /// far reported every 64 KB, off the main actor (a world is up to
+    /// millions of bytes).
+    private func fetch(_ url: URL, limit: Int, progress: (@Sendable (Int, Int?) -> Void)? = nil) async throws -> Data {
         var request = URLRequest(url: url)
         // The catalogue is small and changes rarely; letting the URL cache
         // answer keeps a list that is scrolled repeatedly off the network.
         request.cachePolicy = .useProtocolCachePolicy
         request.timeoutInterval = 20
+
+        if let progress {
+            return try await Self.stream(request, session: session, limit: limit, progress: progress)
+        }
 
         let (data, response) = try await session.data(for: request)
 
@@ -398,6 +429,29 @@ public final class GameLibrary: ObservableObject {
         }
         guard data.count <= limit else { throw FetchError.tooLarge }
 
+        return data
+    }
+
+    nonisolated private static func stream(_ request: URLRequest, session: URLSession, limit: Int,
+                                           progress: @escaping @Sendable (Int, Int?) -> Void) async throws -> Data {
+        let (bytes, response) = try await session.bytes(for: request)
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw FetchError.badStatus(http.statusCode)
+        }
+        let declared = response.expectedContentLength > 0 ? Int(response.expectedContentLength) : nil
+        if let declared, declared > limit { throw FetchError.tooLarge }
+        var data = Data()
+        data.reserveCapacity(min(declared ?? 65_536, limit))
+        var nextReport = 65_536
+        for try await byte in bytes {
+            data.append(byte)
+            if data.count > limit { throw FetchError.tooLarge }
+            if data.count >= nextReport {
+                progress(data.count, declared)
+                nextReport = data.count + 65_536
+            }
+        }
+        progress(data.count, declared)
         return data
     }
 }

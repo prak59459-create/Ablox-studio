@@ -86,6 +86,10 @@ public struct GameListing: Codable, Equatable, Identifiable, Sendable {
     /// too old to open some of what it lists.
     public var schemaVersion: Int
     public var updatedAt: Date
+    /// How much there is to download — the world file and its scripts, in
+    /// bytes — so the Games tab can say "0.4 / 1.2 MB". Optional: lists
+    /// written before it existed do not say, and older apps ignore it.
+    public var bytes: Int?
 
     public init(
         id: String,
@@ -100,7 +104,8 @@ public struct GameListing: Codable, Equatable, Identifiable, Sendable {
         blockCount: Int = 0,
         maxPlayers: Int = 4,
         schemaVersion: Int = WorldDocument.currentSchemaVersion,
-        updatedAt: Date = Date()
+        updatedAt: Date = Date(),
+        bytes: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -115,6 +120,15 @@ public struct GameListing: Codable, Equatable, Identifiable, Sendable {
         self.maxPlayers = maxPlayers
         self.schemaVersion = schemaVersion
         self.updatedAt = updatedAt
+        self.bytes = bytes
+    }
+
+    /// The download's size when the list gives a believable one: more than
+    /// nothing and no more than a world and its scripts may be.
+    public var downloadSize: Int? {
+        guard let bytes, bytes > 0 else { return nil }
+        let most = GameCatalogue.Limits.maximumWorldBytes + GameCatalogue.Limits.maximumScripts * GameCatalogue.Limits.maximumScriptBytes
+        return bytes <= most ? bytes : nil
     }
 
     /// Whether this app can open the world at all.

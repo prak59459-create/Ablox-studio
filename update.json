@@ -1,18 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "1.7",
-  "build": 8,
+  "version": "1.8",
+  "build": 9,
   "protocol": 8,
   "date": "2026-09-29",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shared rules updated with Ablox 1.8: the suggestion box's database rules and sending",
-      "Shared translations updated"
+      "Shared with Ablox 1.9: games published to the list can carry their download size, and downloading a game reports its megabytes as they arrive",
+      "Nothing changes in how Studio works"
     ],
     "ja": [
-      "Ablox 1.8 と共通のルールを更新: 意見箱のデータベースのルールと送るしくみ",
-      "共通の日本語訳を更新"
+      "Ablox 1.9 といっしょ: ゲーム一覧のゲームにダウンロードの大きさが入れられるようになり、ダウンロード中は何MBまで来たかがわかるようになりました",
+      "Studio の使い方は変わりません"
     ]
   }
 }
