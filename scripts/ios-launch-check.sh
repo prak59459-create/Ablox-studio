@@ -72,23 +72,47 @@ executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.
 echo "== Installing $app ($bundle)"
 xcrun simctl install "$udid" "$app"
 
+# Starts the app with its output written to files. The simulator now and
+# then does not answer a launch (no process number comes back); that is
+# the simulator, not the app, so it is tried again, three times at most.
+launch() {
+  local name="$1"; shift
+  local attempt
+  for attempt in 1 2 3; do
+    xcrun simctl terminate "$udid" "$bundle" > /dev/null 2>&1 || true
+    if perl -e 'alarm shift; exec @ARGV' 60 xcrun simctl launch --terminate-running-process \
+         --stdout="$out/$name.stdout.log" --stderr="$out/$name.stderr.log" \
+         "$udid" "$bundle" ${@+"$@"} > "$out/$name.launch.log" 2>&1 \
+       && grep -qE ": [0-9]+" "$out/$name.launch.log"; then
+      return 0
+    fi
+    echo "   (the simulator did not start the app, attempt $attempt: $(tr '\n' ' ' < "$out/$name.launch.log"))"
+    sleep 5
+  done
+  return 1
+}
+
+is_running() {
+  xcrun simctl spawn "$udid" launchctl list 2>/dev/null | grep -F "UIKitApplication:$bundle" | awk '{ print $1 }' | grep -qE '^[0-9]+$'
+}
+
 touch "$out/started"
 sleep 1
 echo "== Launching and watching for $watch seconds"
-xcrun simctl launch --console-pty --terminate-running-process "$udid" "$bundle" > "$out/console.log" 2>&1 &
-launcher=$!
+if ! launch main; then
+  echo "== The simulator would not start the app at all (not a crash of the app)."
+  exit 1
+fi
 sleep "$watch"
 xcrun simctl io "$udid" screenshot "$out/screen.png" > /dev/null 2>&1 || true
 
 running=0
-if xcrun simctl spawn "$udid" launchctl list 2>/dev/null | grep -F "UIKitApplication:$bundle" | awk '{ print $1 }' | grep -qE '^[0-9]+$'; then
-  running=1
-fi
-kill "$launcher" 2>/dev/null || true
+if is_running; then running=1; fi
 
 echo
 echo "== What the app wrote (stdout and stderr)"
-sed -e 's/\r$//' "$out/console.log" | tail -200
+cat "$out/main.launch.log"
+cat "$out/main.stdout.log" "$out/main.stderr.log" 2>/dev/null | tail -200
 
 echo
 echo "== The app's log lines"
@@ -152,17 +176,19 @@ fi
 failed=""
 for tab in ${TABS-Games Worlds Avatar Shop Settings}; do
   touch "$out/started-$tab"
-  xcrun simctl terminate "$udid" "$bundle" > /dev/null 2>&1 || true
-  xcrun simctl launch --console-pty "$udid" "$bundle" -AbloxOpenTab "$tab" > "$out/console-$tab.log" 2>&1 &
-  launcher=$!
+  if ! launch "$tab" -AbloxOpenTab "$tab"; then
+    echo "== $tab: the simulator would not start the app (not a crash of the app)"
+    failed="$failed $tab"
+    continue
+  fi
   sleep "${TAB_WATCH:-12}"
   xcrun simctl io "$udid" screenshot "$out/screen-$tab.png" > /dev/null 2>&1 || true
-  if xcrun simctl spawn "$udid" launchctl list 2>/dev/null | grep -F "UIKitApplication:$bundle" | awk '{ print $1 }' | grep -qE '^[0-9]+$'; then
+  if is_running; then
     echo "== $tab: still running"
   else
     echo "== $tab: NOT running"
     failed="$failed $tab"
-    sed -e 's/\r$//' "$out/console-$tab.log" | grep -iE "fatal|error|crash|precondition" | tail -20
+    cat "$out/$tab.stdout.log" "$out/$tab.stderr.log" 2>/dev/null | grep -iE "fatal|error|crash|precondition" | tail -20
     for report in $(find "$HOME/Library/Logs/DiagnosticReports" -newer "$out/started-$tab" -type f -name "*.ips" 2>/dev/null); do
       grep -q "$executable" "$report" || continue
       python3 - "$report" <<'PY'
@@ -178,7 +204,6 @@ for t in body.get("threads", []):
 PY
     done
   fi
-  kill "$launcher" 2>/dev/null || true
 done
 
 if [ -n "$failed" ]; then
