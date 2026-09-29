@@ -86,6 +86,19 @@ public final class CloudService: ObservableObject {
     public var allowsFriends: Bool { settings.allowFriends }
     public var allowsChat: Bool { settings.allowFriends && settings.allowFriendChat }
     public var allowsInternetPlay: Bool { settings.allowInternetPlay && settings.config.isUsable }
+    public var allowsSuggestions: Bool { settings.allowSuggestions && settings.config.isUsable }
+
+    // MARK: The suggestion box
+
+    /// Sends one suggestion (see `SuggestionBox`); returns its key.
+    public func sendSuggestion(kind: SuggestionKind, text: String, app: String, version: String,
+                               language: String) async throws -> String {
+        guard allowsSuggestions, let database, let uid, state == .ready else { throw CloudError.notConfigured }
+        let id = SuggestionBox.newID()
+        try await database.update("", SuggestionBox.write(id: id, uid: uid, kind: kind, text: text,
+                                                           app: app, version: version, language: language))
+        return id
+    }
 
     // MARK: Switching on and off
 

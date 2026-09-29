@@ -502,6 +502,8 @@ public struct CloudSettings: Codable, Hashable, Sendable {
     public var allowFriendChat = false
     /// Friends see which game this iPad is in.
     public var shareWhatIPlay = true
+    /// The suggestion box may send what is written in it.
+    public var allowSuggestions = false
     /// A database typed in here, instead of the one built into the app.
     public var custom = CloudConfig()
 
@@ -514,6 +516,7 @@ public struct CloudSettings: Codable, Hashable, Sendable {
         allowFriends = (try? c.decodeIfPresent(Bool.self, forKey: .allowFriends)) ?? d.allowFriends
         allowFriendChat = (try? c.decodeIfPresent(Bool.self, forKey: .allowFriendChat)) ?? d.allowFriendChat
         shareWhatIPlay = (try? c.decodeIfPresent(Bool.self, forKey: .shareWhatIPlay)) ?? d.shareWhatIPlay
+        allowSuggestions = (try? c.decodeIfPresent(Bool.self, forKey: .allowSuggestions)) ?? d.allowSuggestions
         custom = (try? c.decodeIfPresent(CloudConfig.self, forKey: .custom)) ?? d.custom
     }
 
@@ -524,7 +527,7 @@ public struct CloudSettings: Codable, Hashable, Sendable {
 
     /// Anything switched on, with somewhere to connect to.
     public var isActive: Bool {
-        config.isUsable && (allowInternetPlay || allowFriends)
+        config.isUsable && (allowInternetPlay || allowFriends || allowSuggestions)
     }
 }
 

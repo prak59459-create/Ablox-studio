@@ -15,6 +15,9 @@ import Foundation
 /// - `friends/<uid>/<other>`: who `uid` has added; only after a request.
 /// - `chats/<a>_<b>`: the two friends' chat; 200 characters a line, each
 ///   line written once by whoever says it.
+/// - `suggestions/<id>`: the suggestion box. Anyone signed in may add one
+///   (a minute apart, noted in `suggestionTimes/<uid>`), never change or
+///   read one; only `SuggestionBox.readerUID` reads them, and clears them.
 /// - `lobby/<room>`: internet rooms, read by everyone signed in, written by
 ///   the room's host.
 /// - `relay/<room>`: the game's own encrypted stream in pieces, between the
@@ -79,6 +82,23 @@ public enum CloudRules {
               ".write": "auth != null && ($pair.beginsWith(auth.uid + '_') || $pair.endsWith('_' + auth.uid)) && (!newData.exists() || (!data.exists() && root.child('friends').child(auth.uid).child($pair.replace(auth.uid, '').replace('_', '')).exists() && root.child('friends').child($pair.replace(auth.uid, '').replace('_', '')).child(auth.uid).exists()))",
               ".validate": "newData.hasChildren(['from', 'text', 'at']) && newData.child('from').val() === auth.uid && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 200 && newData.child('at').isNumber() && newData.child('at').val() <= now + 60000"
             }
+          }
+        },
+
+        "suggestions": {
+          ".read": "auth != null && auth.uid === '6ktyBZljv5ZgBUgjjHSzrZqv9aj1'",
+          ".indexOn": ["at"],
+          "$id": {
+            ".write": "auth != null && ((!data.exists() && newData.child('from').val() === auth.uid && newData.parent().parent().child('suggestionTimes').child(auth.uid).val() === now) || (auth.uid === '6ktyBZljv5ZgBUgjjHSzrZqv9aj1' && !newData.exists()))",
+            ".validate": "$id.matches(/^s[0-9]{10,16}-[A-Z2-9]{6}$/) && newData.hasChildren(['from', 'kind', 'text', 'app', 'version', 'language', 'at']) && newData.child('kind').isString() && newData.child('kind').val().matches(/^(game|feature|problem|other)$/) && newData.child('text').isString() && newData.child('text').val().length >= 5 && newData.child('text').val().length <= 500 && newData.child('app').isString() && newData.child('app').val().length <= 20 && newData.child('version').isString() && newData.child('version').val().length <= 20 && newData.child('language').isString() && newData.child('language').val().length <= 8 && newData.child('at').val() === now",
+            "$other": { ".validate": "$other.matches(/^(from|kind|text|app|version|language|at)$/)" }
+          }
+        },
+
+        "suggestionTimes": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && (!data.exists() || data.val() < now - 60000)",
+            ".validate": "newData.val() === now"
           }
         },
 
