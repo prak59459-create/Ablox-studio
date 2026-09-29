@@ -149,6 +149,31 @@ final class EventsAndRewardsTests: XCTestCase {
         XCTAssertEqual(big.room(from: 5_000), CoinJar.capacity - big.balance)
     }
 
+    /// The jar's slider only exists when its two ends differ: SwiftUI stops
+    /// the app for `Slider(in: 10...10, step: 10)`, which is what 10 to 19
+    /// coins and an empty jar used to make, on the Play tab, at launch.
+    func testTheCoinJarSliderNeverHasTwoEqualEnds() {
+        XCTAssertEqual(CoinJar.sliderTop(coins: 15, saved: 0), 10, "one step: no slider")
+        XCTAssertEqual(CoinJar.sliderTop(coins: 0, saved: 0), 10)
+        XCTAssertEqual(CoinJar.sliderTop(coins: 25, saved: 0), 20)
+        XCTAssertEqual(CoinJar.sliderTop(coins: 0, saved: 45), 40, "taking out what is saved")
+        XCTAssertEqual(CoinJar.sliderTop(coins: 99_999, saved: 4_990), 4_990, "the jar is nearly full")
+        XCTAssertEqual(CoinJar.sliderTop(coins: -5, saved: -5), 10)
+        for coins in stride(from: 0, through: 200, by: 1) {
+            for saved in [0, 5, 10, 11, 60, 4_999, 5_000] {
+                let top = CoinJar.sliderTop(coins: coins, saved: saved)
+                XCTAssertGreaterThanOrEqual(top, CoinJar.step)
+                XCTAssertEqual(top % CoinJar.step, 0)
+            }
+        }
+        XCTAssertEqual(CoinJar.chosen(50, top: 30), 30, "the old default, above what there is")
+        XCTAssertEqual(CoinJar.chosen(50, top: 10), 10)
+        XCTAssertEqual(CoinJar.chosen(24, top: 100), 20)
+        XCTAssertEqual(CoinJar.chosen(-3, top: 100), 10)
+        XCTAssertEqual(CoinJar.chosen(.nan, top: 100), 10)
+        XCTAssertEqual(CoinJar.chosen(.infinity, top: 100), 100)
+    }
+
     func testFirstTimesBirthdayAndBadgeRewards() {
         var firsts = FirstTimes()
         XCTAssertEqual(firsts.firstVisit("Kart"), FirstTimes.newGameCoins)

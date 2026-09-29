@@ -1,18 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "1.5",
-  "build": 6,
+  "version": "1.6",
+  "build": 7,
   "protocol": 8,
   "date": "2026-09-29",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "The shared play engine is updated to match Ablox 1.6: it can keep game clips itself, without ReplayKit",
-      "Shared translations updated with Ablox"
+      "Each change to Ablox Studio is now also started on an iPad simulator by the automatic checks, so a crash at launch shows up there",
+      "Shared rules updated with Ablox 1.7"
     ],
     "ja": [
-      "共通のプレイエンジンを Ablox 1.6 と同じに更新: ReplayKit を使わずにゲームのクリップを記録できるしくみ",
-      "Ablox と共通の日本語訳を更新"
+      "これからは変更のたびに、自動チェックで Ablox Studio を iPad のシミュレータでも起動して、起動してすぐ止まらないか確かめます",
+      "Ablox 1.7 と共通のルールを更新"
     ]
   }
 }

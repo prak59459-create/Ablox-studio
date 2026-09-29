@@ -371,6 +371,25 @@ public struct CoinJar: Codable, Hashable, Sendable {
     public static let weeklyMaximum = 50
     public static let capacity = 5_000
     public static let week: TimeInterval = 7 * 86_400
+    /// Coins go in and come out ten at a time.
+    public static let step = 10
+
+    /// The top of the jar's slider: the most that could go in or come out,
+    /// in whole steps, and never less than one step. When it is one step
+    /// there is nothing to choose, and no slider is shown — SwiftUI stops the
+    /// app for a slider whose two ends are the same.
+    public static func sliderTop(coins: Int, saved: Int) -> Int {
+        let canPut = Swift.min(Swift.max(0, coins), capacity - Swift.max(0, saved))
+        let most = Swift.max(canPut, saved)
+        return Swift.max(step, most / step * step)
+    }
+
+    /// The amount picked on the slider, in whole steps from one step to `top`.
+    public static func chosen(_ amount: Double, top: Int) -> Int {
+        guard !amount.isNaN else { return step }
+        let clamped = Swift.min(Swift.max(amount, Double(step)), Double(Swift.max(step, top)))
+        return Swift.min(Swift.max(step, Int((clamped / Double(step)).rounded()) * step), Swift.max(step, top))
+    }
 
     public init() {}
 

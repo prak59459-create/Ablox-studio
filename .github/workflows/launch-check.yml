@@ -1,0 +1,39 @@
+name: Launch check
+
+# Starts Ablox Studio on an iPad simulator and fails when it does not stay
+# running, printing why (scripts/ios-launch-check.sh). Swift Playgrounds on
+# the iPad only says that the app may have crashed.
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "AbloxStudio.swiftpm/**"
+      - "scripts/ios-launch-check.sh"
+      - ".github/workflows/launch-check.yml"
+  workflow_dispatch:
+    inputs:
+      watch:
+        description: "Seconds to watch the app after it starts"
+        type: string
+        default: "30"
+
+jobs:
+  launch:
+    name: Start on an iPad simulator
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build, start and watch
+        run: scripts/ios-launch-check.sh
+        env:
+          WATCH: ${{ inputs.watch || '30' }}
+          OUT: ${{ runner.temp }}/launch
+          TABS: ""
+      - name: Keep the logs and the screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: launch-check
+          path: ${{ runner.temp }}/launch
+          if-no-files-found: ignore
