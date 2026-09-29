@@ -1,20 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "1.4",
-  "build": 5,
+  "version": "1.5",
+  "build": 6,
   "protocol": 8,
-  "date": "2026-09-28",
+  "date": "2026-09-29",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "The script reference beside the editor has a new section, More helpers: 60 new functions, all usable in your games and test runs",
-      "Test runs are safer: nan or huge numbers as a list position or a count give nil or an error instead of stopping Studio",
-      "While paused on a breakpoint, your own variables named like a function (count, first…) are shown"
+      "The shared play engine is updated to match Ablox 1.6: it can keep game clips itself, without ReplayKit",
+      "Shared translations updated with Ablox"
     ],
     "ja": [
-      "エディターの横のリファレンスに「もっと便利な機能」を追加: 新しい関数60個をゲームとテストプレイで使えます",
-      "テストプレイがより安全に: リストの位置や個数に nan やとても大きな数を使っても、Studio が止まらず nil かエラーになります",
-      "ブレークポイントで止まったとき、関数と同じ名前（count や first など）の自分の変数も表示されます"
+      "共通のプレイエンジンを Ablox 1.6 と同じに更新: ReplayKit を使わずにゲームのクリップを記録できるしくみ",
+      "Ablox と共通の日本語訳を更新"
     ]
   }
 }

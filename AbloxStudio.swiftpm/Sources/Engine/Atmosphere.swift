@@ -34,6 +34,8 @@ final class Atmosphere {
     private let post = PostEffect()
     private var appliedEffect: ScreenEffect = .none
     private var appliedVision: ColourVision = .off
+    /// Game clips take their frames from the same pass.
+    private var recording = false
 
     init(parent: Entity) {
         dome = ModelEntity(mesh: ProceduralMesh.skyDome, materials: [UnlitMaterial(color: .black)])
@@ -130,6 +132,11 @@ final class Atmosphere {
         }
 
         setEffect(environment.screenEffect)
+        let clips = GameClipRecorder.shared.isRecording
+        if clips != recording {
+            recording = clips
+            installPostProcess()
+        }
         return Light(pitch: pitch, yaw: yaw, brightness: brightness, skyBottom: bottom)
     }
 
@@ -149,10 +156,11 @@ final class Atmosphere {
         installPostProcess()
     }
 
-    /// Core Image only runs when there is something for it to do.
+    /// Core Image only runs when there is something for it to do: a look,
+    /// colour vision, or a clip being kept.
     private func installPostProcess() {
         guard let view else { return }
-        if appliedEffect == .none && appliedVision == .off {
+        if appliedEffect == .none && appliedVision == .off && !recording {
             view.renderCallbacks.postProcess = nil
         } else {
             let post = self.post
@@ -198,6 +206,7 @@ final class PostEffect: @unchecked Sendable {
         let destination = CIRenderDestination(mtlTexture: frame.targetColorTexture, commandBuffer: frame.commandBuffer)
         destination.isFlipped = false
         _ = try? ciContext.startTask(toRender: output, to: destination)
+        GameClipRecorder.shared.capture(output, in: frame)
     }
 
     static func filtered(_ image: CIImage, _ effect: ScreenEffect) -> CIImage {

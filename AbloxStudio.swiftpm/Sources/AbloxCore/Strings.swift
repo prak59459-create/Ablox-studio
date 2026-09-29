@@ -1458,7 +1458,6 @@ public enum Strings {
         ("Plays an emote (wave, dance, clap, cheer, bow, point, laugh, sit) or an emoji stamp on everyone's screen.", "エモート（wave・dance・clap・cheer・bow・point・laugh・sit）や絵文字スタンプを、みんなの画面で再生します。"),
         ("Point", "ゆびさす"),
         ("Reconnecting", "再接続中"),
-        ("Recording is not available right now.", "いまは録画できません。"),
         ("Resume", "つづける"),
         ("Retro", "レトロ"),
         ("Save the last 30 seconds", "直前30秒を保存"),
@@ -3269,5 +3268,7 @@ public enum Strings {
         ("Filling in text, and numbers the way games show them: 1,234,567, 1.5K and 1:05.", "文字に値を入れる、ゲームらしい数の表し方: 1,234,567、1.5K、1:05。"),
         ("Directions: from one thing to another, the way a yaw faces, the yaw that faces something, turning, and the angle between two.", "方向: あるものから別のものへの向き、yaw が向いている方向、何かの方を向く yaw、回転、2つの方向のあいだの角度。"),
         ("Colours from numbers, round the rainbow, part way between two, or at random.", "数から色を作る、虹の色の順に、2つの色の間の色、ランダムな色。"),
+        ("Nothing to save yet. Play a few more seconds, then try again.", "まだ保存できるものがありません。もう少し遊んでから、もう一度ためしてください。"),
+        ("The Settings app could not be opened from here. Open Settings yourself and look under Swift Playgrounds.", "ここからは設定アプリを開けませんでした。設定アプリを自分で開いて、Swift Playgrounds の項目を見てください。"),
     ]
 }

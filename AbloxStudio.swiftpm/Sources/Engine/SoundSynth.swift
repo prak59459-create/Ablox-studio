@@ -30,6 +30,7 @@ final class SoundSynth: @unchecked Sendable {
     private let lock = NSLock()
     private var sampleRate: Double = 44_100
     private var failed = false
+    private var tapInstalled = false
 
     // Everything below is touched by the audio thread, under the lock.
 
@@ -98,6 +99,19 @@ final class SoundSynth: @unchecked Sendable {
             failed = true
             return false
         }
+    }
+
+    /// Hears everything the engine plays — for game clips. Nil stops.
+    /// Called on the main thread; `listener` runs on the audio thread.
+    func listen(_ listener: ((AVAudioPCMBuffer, AVAudioTime) -> Void)?) {
+        let mixer = engine.mainMixerNode
+        if tapInstalled {
+            mixer.removeTap(onBus: 0)
+            tapInstalled = false
+        }
+        guard let listener else { return }
+        mixer.installTap(onBus: 0, bufferSize: 4096, format: nil) { buffer, time in listener(buffer, time) }
+        tapInstalled = true
     }
 
     func stop() {
