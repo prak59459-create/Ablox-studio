@@ -11,9 +11,17 @@ import AbloxCore
 /// Swift Playgrounds. After the new version starts, it says once what
 /// changed.
 ///
-/// With the project on this iPad chosen once, a new version can instead go
+/// With the project on this iPad chosen once, a new version instead goes
 /// straight into it, only the files that changed (`ProjectSync`), so Swift
-/// Playgrounds rebuilds those rather than the whole app.
+/// Playgrounds rebuilds those rather than the whole app — by itself as soon
+/// as it is downloaded, or with one tap (`updateNow`). Swift Playgrounds keeps
+/// an open project as it was when opened, so the new files count once the
+/// project is closed and opened again; the next launch checks that they did
+/// (`waitingForReopen`).
+///
+/// Downloads try again by themselves when the connection drops or GitHub is
+/// busy, and from a second address (`UpdateRetry`, `UpdateChannel`); what
+/// still goes wrong is written to the problem reports with its error code.
 ///
 /// The rules — what is newer, what a manifest may say, which files are the
 /// project — are in `AppUpdate.swift` and `ProjectSync.swift` in the core,
@@ -65,6 +73,17 @@ public final class AppUpdater: ObservableObject {
     @Published public private(set) var inPlace: InPlace = .idle
     /// The project chosen in Files ("Ablox.swiftpm"), once there is one.
     @Published public private(set) var linkedProject: String?
+    /// Put a downloaded version straight into the chosen project without
+    /// being asked.
+    @Published public var installsAutomatically: Bool {
+        didSet { defaults.set(installsAutomatically, forKey: Keys.autoInstall) }
+    }
+    /// The version written into the project ("2.1-10") that is not running
+    /// yet: Swift Playgrounds builds it once the project is opened again.
+    @Published public private(set) var waitingForReopen: String?
+    /// True when the app was opened again after writing a version into the
+    /// project, and it is still the old one: the project was not reopened.
+    @Published public private(set) var stillOld = false
     /// A branch to take versions from instead of the released ones, for
     /// trying something before it is out. Empty: the released ones.
     @Published public var followedBranch: String {
@@ -93,6 +112,8 @@ public final class AppUpdater: ObservableObject {
         static let project = "update.project"
         static let projectInside = "update.projectInside"
         static let branch = "update.branch"
+        static let autoInstall = "update.autoInstall"
+        static let written = "update.written"
     }
 
     public init(release: InstalledApp, defaults: UserDefaults = .standard) {
@@ -101,6 +122,7 @@ public final class AppUpdater: ObservableObject {
         checksAutomatically = defaults.object(forKey: Keys.autoCheck) as? Bool ?? true
         downloadsAutomatically = defaults.object(forKey: Keys.autoDownload) as? Bool ?? true
         followedBranch = defaults.string(forKey: Keys.branch) ?? ""
+        installsAutomatically = defaults.object(forKey: Keys.autoInstall) as? Bool ?? true
         if defaults.data(forKey: Keys.project) != nil {
             linkedProject = defaults.string(forKey: Keys.projectInside).flatMap { $0.isEmpty ? nil : $0 } ?? release.package
         }
@@ -113,6 +135,16 @@ public final class AppUpdater: ObservableObject {
             availability = UpdatePolicy.availability(installed: release.version, build: release.build, manifest: manifest)
         }
         noticeNewVersion()
+        // A version written into the project earlier: running now, or still
+        // waiting for the project to be opened again?
+        if let written = defaults.string(forKey: Keys.written) {
+            if written == "\(release.version)-\(release.build)" || !Self.isNewer(written, than: release) {
+                defaults.removeObject(forKey: Keys.written)
+            } else {
+                waitingForReopen = written
+                stillOld = true
+            }
+        }
         // A project unpacked before this launch is still there unless the
         // system cleared the cache.
         if case .newer = availability, let staged = defaults.string(forKey: Keys.staged),
@@ -172,9 +204,12 @@ public final class AppUpdater: ObservableObject {
         let before = phase
         phase = .checking
         do {
-            let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw Failure.server }
+            let data = try await withRetries { () async throws -> Data in
+                let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+                let (data, response) = try await URLSession.shared.data(for: request)
+                try Self.checkStatus(response)
+                return data
+            }
             let manifest = try UpdateManifest.decode(data, forApp: release.app)
             lastChecked = Date()
             defaults.set(lastChecked!.timeIntervalSince1970, forKey: Keys.lastChecked)
@@ -198,6 +233,8 @@ public final class AppUpdater: ObservableObject {
             }
         } catch {
             // A check nobody asked for fails quietly; the next one will do.
+            // Either way it goes in the problem reports, with its code.
+            note("check", error)
             phase = userInitiated ? .failed(Self.message(for: error)) : (before == .checking ? .idle : before)
         }
     }
@@ -214,13 +251,46 @@ public final class AppUpdater: ObservableObject {
             defaults.set(Self.label(manifest), forKey: Keys.staged)
             phase = .ready
         } catch {
+            note("download", error)
             phase = automatic ? .available : .failed(Self.message(for: error))
+            return
+        }
+        // With the project chosen, nothing is left for anyone to do.
+        if installsAutomatically, linkedProject != nil {
+            await installInPlace()
         }
     }
 
-    /// The repository as a zip, checked for size.
+    /// The one tap: download if that is still to do, then put it into the
+    /// chosen project. Without a chosen project it stops at downloaded, and
+    /// the install sheet says how to choose one.
+    public func updateNow() async {
+        if case .newer = availability, stagedPackage == nil {
+            // Puts it in by itself when it may, so once is enough.
+            await download()
+            if installsAutomatically { return }
+        }
+        guard stagedPackage != nil, linkedProject != nil, inPlace != .working else { return }
+        await installInPlace()
+    }
+
+    /// The repository as a zip, checked for size: each address in turn, each
+    /// with a few tries.
     private func fetchArchive(automatic: Bool) async throws -> Data {
-        guard let url = channel.archiveURL else { throw Failure.server }
+        let urls = channel.archiveURLs
+        guard !urls.isEmpty else { throw Failure.status(0) }
+        var last: Error = Failure.status(0)
+        for url in urls {
+            do {
+                return try await withRetries { () async throws -> Data in try await self.fetch(url, automatic: automatic) }
+            } catch {
+                last = error
+            }
+        }
+        throw last
+    }
+
+    private func fetch(_ url: URL, automatic: Bool) async throws -> Data {
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 180)
         if automatic {
             // Not on a phone's data plan or in Low Data Mode without asking.
@@ -229,10 +299,36 @@ public final class AppUpdater: ObservableObject {
         }
         let (file, response) = try await URLSession.shared.download(for: request)
         defer { try? FileManager.default.removeItem(at: file) }
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw Failure.server }
+        try Self.checkStatus(response)
         let size = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? Int) ?? 0
         guard size <= UpdatePackage.Limits.maximumBytes else { throw Failure.tooLarge }
         return try Data(contentsOf: file)
+    }
+
+    /// Runs `work`, trying again after a pause when the failure is the kind
+    /// that passes (`UpdateRetry`): a dropped connection, a busy server.
+    private func withRetries<T>(_ work: () async throws -> T) async throws -> T {
+        var attempt = 0
+        while true {
+            do {
+                return try await work()
+            } catch {
+                guard attempt < UpdateRetry.delays.count, Self.isTemporary(error) else { throw error }
+                try await Task.sleep(nanoseconds: UInt64(UpdateRetry.delays[attempt] * 1_000_000_000))
+                attempt += 1
+            }
+        }
+    }
+
+    nonisolated private static func checkStatus(_ response: URLResponse) throws {
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else { throw Failure.status(status) }
+    }
+
+    private static func isTemporary(_ error: Error) -> Bool {
+        if case let .status(code)? = error as? Failure { return UpdateRetry.isTemporary(status: code) }
+        if let error = error as? URLError { return UpdateRetry.isTemporary(urlErrorCode: error.code.rawValue) }
+        return false
     }
 
     /// The project folder out of the zip, checked, written to `folder`.
@@ -305,7 +401,7 @@ public final class AppUpdater: ObservableObject {
     /// the files that changed.
     public func installInPlace() async {
         guard let staged = stagedPackage else { return }
-        await putInPlace(staged)
+        await putInPlace(staged, version: latest.map(Self.label))
     }
 
     /// The followed branch (or the released version) as it is right now,
@@ -323,11 +419,15 @@ public final class AppUpdater: ObservableObject {
             let staged = try await unpack(data, into: folder)
             await putInPlace(staged, alreadyWorking: true)
         } catch {
+            note("pull", error)
             inPlace = .failed(Self.message(for: error))
         }
     }
 
-    private func putInPlace(_ staged: URL, alreadyWorking: Bool = false) async {
+    /// Writes `staged` into the chosen project. `version` is the released
+    /// version it is ("2.1-10"), remembered so the next launch can tell
+    /// whether the project was opened again.
+    private func putInPlace(_ staged: URL, alreadyWorking: Bool = false, version: String? = nil) async {
         guard alreadyWorking || inPlace != .working else { return }
         guard let data = defaults.data(forKey: Keys.project) else {
             inPlace = .failed(L("Choose the project first."))
@@ -355,7 +455,13 @@ public final class AppUpdater: ObservableObject {
         switch outcome {
         case let .success(plan):
             inPlace = .done(written: plan.writes.count, deleted: plan.deletions.count)
+            if let version, !plan.writes.isEmpty || !plan.deletions.isEmpty {
+                defaults.set(version, forKey: Keys.written)
+                waitingForReopen = version
+                stillOld = false
+            }
         case let .failure(error):
+            note("write", error)
             inPlace = .failed(inPlaceMessage(for: error))
         }
     }
@@ -379,6 +485,13 @@ public final class AppUpdater: ObservableObject {
                 for path in plan.deletions {
                     try? manager.removeItem(at: folder.appendingPathComponent(path))
                     removeEmptyFolders(above: path, in: folder)
+                }
+                // Read back what was written: a folder that only looked
+                // writable is caught here, not at the next build.
+                for (path, bytes) in plan.writes {
+                    guard let written = manager.contents(atPath: folder.appendingPathComponent(path).path), [UInt8](written) == bytes else {
+                        throw CocoaError(.fileWriteUnknown)
+                    }
                 }
                 return plan
             }
@@ -458,20 +571,48 @@ public final class AppUpdater: ObservableObject {
         if let update = caches?.appendingPathComponent("Update", isDirectory: true) { try? FileManager.default.removeItem(at: update) }
         defaults.removeObject(forKey: Keys.staged)
         defaults.removeObject(forKey: Keys.skipped)
+        defaults.removeObject(forKey: Keys.written)
+    }
+
+    /// Whether "2.1-10" is a later version than the one running.
+    private static func isNewer(_ label: String, than release: InstalledApp) -> Bool {
+        let parts = label.split(separator: "-")
+        guard let version = parts.first.flatMap({ AppVersion(String($0)) }) else { return false }
+        let build = parts.count > 1 ? Int(parts[1]) ?? 0 : 0
+        return version > release.version || (version == release.version && build > release.build)
+    }
+
+    /// The new version is in the project, and the player has seen how to
+    /// open it: stop reminding until the next launch says otherwise.
+    public func dismissReopenReminder() {
+        stillOld = false
     }
 
     // MARK: Errors
 
-    private enum Failure: Error {
-        case server
+    private enum Failure: Error, Equatable {
+        /// GitHub answered with this HTTP status (0: no answer at all).
+        case status(Int)
         case tooLarge
+    }
+
+    /// Writes what went wrong, with its code, into the problem reports, so
+    /// "copy the report" says exactly which step failed and why.
+    private func note(_ step: String, _ error: Error) {
+        let detail: String
+        if case let .status(code)? = error as? Failure {
+            detail = UpdateRetry.technicalDetail(domain: "HTTP", code: code, step: step)
+        } else {
+            let ns = error as NSError
+            detail = UpdateRetry.technicalDetail(domain: ns.domain, code: ns.code, step: step)
+        }
+        ProblemRecorder.shared.record(.update, Self.message(for: error), detail: detail)
     }
 
     private static func message(for error: Error) -> String {
         if let failure = error as? Failure {
-            return failure == .server
-                ? L("GitHub did not answer properly. Try again in a few minutes.")
-                : L("That download was too big and was refused.")
+            if case .tooLarge = failure { return L("That download was too big and was refused.") }
+            return L("GitHub did not answer properly. Try again in a few minutes.")
         }
         if let problem = error as? UpdatePackage.Problem, problem == .tooLarge {
             return L("That download was too big and was refused.")

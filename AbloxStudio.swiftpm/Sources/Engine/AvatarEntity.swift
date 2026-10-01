@@ -70,6 +70,12 @@ public final class AvatarEntity: Entity {
     /// A wave, a dance… playing now, and for how long so far.
     private var gesture: Emote?
     private var gestureTime: Float = 0
+    /// Where the arms and legs are and are heading, and how fast the avatar
+    /// is rising or falling (AvatarPoses.swift).
+    var limbs = LimbState()
+    /// What it is riding, and how far it has walked: read by the poses.
+    var appliedRideKind: AvatarProfile.Ride { appliedRide }
+    var strideDistanceForPose: Float { strideDistance }
 
     public init(peerID: PeerID, profile: AvatarProfile, position: Vec3) {
         self.peerID = peerID
@@ -102,23 +108,25 @@ public final class AvatarEntity: Entity {
     // MARK: Rig
 
     private func buildRig() {
-        // Proportions are deliberately chunky — readable from the third-person
-        // camera distance, and forgiving of the box collider that represents
-        // the player in `WorldCollider`.
-        body.model = ModelComponent(mesh: .generateBox(size: SIMD3<Float>(0.6, 0.7, 0.35), cornerRadius: 0.05), materials: [])
+        // Classic blocky proportions: arms as thick as legs, the two legs as
+        // wide as the body, readable from the third-person camera distance and
+        // forgiving of the box collider that represents the player in
+        // `WorldCollider`. Limbs turn about the shoulder and hip
+        // (`AvatarPoses.swift`), not their middle.
+        body.model = ModelComponent(mesh: .generateBox(size: SIMD3<Float>(0.6, 0.7, 0.34), cornerRadius: 0.05), materials: [])
         body.position = SIMD3<Float>(0, 0.95, 0)
 
         head.model = ModelComponent(mesh: .generateBox(size: SIMD3<Float>(0.45, 0.45, 0.45), cornerRadius: 0.06), materials: [])
         head.position = SIMD3<Float>(0, 1.53, 0)
 
         for (arm, side) in [(leftArm, Float(-1)), (rightArm, Float(1))] {
-            arm.model = ModelComponent(mesh: .generateBox(size: SIMD3<Float>(0.18, 0.6, 0.18), cornerRadius: 0.04), materials: [])
-            arm.position = SIMD3<Float>(side * 0.39, 0.95, 0)
+            arm.model = ModelComponent(mesh: .generateBox(size: SIMD3<Float>(0.24, 0.6, 0.26), cornerRadius: 0.05), materials: [])
+            arm.position = SIMD3<Float>(side * Self.shoulderX, 0.95, 0)
         }
 
         for (leg, side) in [(leftLeg, Float(-1)), (rightLeg, Float(1))] {
-            leg.model = ModelComponent(mesh: .generateBox(size: SIMD3<Float>(0.22, 0.6, 0.22), cornerRadius: 0.04), materials: [])
-            leg.position = SIMD3<Float>(side * 0.16, 0.3, 0)
+            leg.model = ModelComponent(mesh: .generateBox(size: SIMD3<Float>(0.29, 0.6, 0.3), cornerRadius: 0.05), materials: [])
+            leg.position = SIMD3<Float>(side * Self.hipX, 0.3, 0)
         }
 
         for part in [body, head, leftArm, rightArm, leftLeg, rightLeg] {
@@ -564,8 +572,9 @@ public final class AvatarEntity: Entity {
             petEntity.position = petHome + SIMD3<Float>(0, bob + petTrickLift(deltaTime: deltaTime), 0)
         }
         let speed = travelled / Swift.max(deltaTime, 1e-4)
+        trackHeight(deltaTime: deltaTime)
         if animateGesture(deltaTime: deltaTime, speed: speed) { return }
-        animateLimbs(speed: speed)
+        poseBody(speed: speed, deltaTime: deltaTime)
         lookAbout(speed: speed, deltaTime: deltaTime)
     }
 
@@ -585,13 +594,14 @@ public final class AvatarEntity: Entity {
         rig.orientation = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
         head.orientation = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
         for (arm, side) in [(leftArm, Float(-1)), (rightArm, Float(1))] {
-            arm.position = SIMD3<Float>(side * 0.39, 0.95, 0)
+            arm.position = SIMD3<Float>(side * Self.shoulderX, 0.95, 0)
             arm.orientation = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
         }
         for (leg, side) in [(leftLeg, Float(-1)), (rightLeg, Float(1))] {
-            leg.position = SIMD3<Float>(side * 0.16, 0.3, 0)
+            leg.position = SIMD3<Float>(side * Self.hipX, 0.3, 0)
             leg.orientation = simd_quatf(ix: 0, iy: 0, iz: 0, r: 1)
         }
+        limbs.settle()
     }
 
     /// Poses the limbs for the gesture; false when none is playing.
@@ -632,7 +642,7 @@ public final class AvatarEntity: Entity {
     }
 
     func lower(_ arm: ModelEntity, side: Float) {
-        arm.position = SIMD3<Float>(side * 0.39, 0.95, 0)
+        arm.position = SIMD3<Float>(side * Self.shoulderX, 0.95, 0)
     }
 
     private func poseWave(_ t: Float) {
@@ -681,7 +691,7 @@ public final class AvatarEntity: Entity {
     }
 
     private func posePoint() {
-        rightArm.position = SIMD3<Float>(0.39, 1.2, -0.3)
+        rightArm.position = SIMD3<Float>(Self.shoulderX, 1.2, -0.3)
         rightArm.orientation = simd_quatf(angle: -1.5, axis: Self.sideways)
     }
 
@@ -695,34 +705,16 @@ public final class AvatarEntity: Entity {
     private func poseSit() {
         rig.position = SIMD3<Float>(0, seatHeight - 0.32, 0)
         for (leg, side) in [(leftLeg, Float(-1)), (rightLeg, Float(1))] {
-            leg.position = SIMD3<Float>(side * 0.16, 0.55, -0.25)
+            leg.position = SIMD3<Float>(side * Self.hipX, 0.55, -0.25)
             leg.orientation = simd_quatf(angle: -1.45, axis: Self.sideways)
         }
-    }
-
-    private func animateLimbs(speed: Float) {
-        // Below walking pace the limbs settle rather than jitter.
-        guard speed > 0.2 else {
-            for limb in [leftArm, rightArm, leftLeg, rightLeg] {
-                limb.orientation = simd_slerp(limb.orientation, simd_quatf(ix: 0, iy: 0, iz: 0, r: 1), 0.2)
-            }
-            return
-        }
-
-        // Phase from distance travelled, so the swing matches the stride
-        // instead of drifting when the avatar speeds up or slows down.
-        let phase = strideDistance * 3.2
-        let swing = sin(phase) * Swift.min(0.6, speed * 0.09)
-
-        leftLeg.orientation = simd_quatf(angle: swing, axis: SIMD3<Float>(1, 0, 0))
-        rightLeg.orientation = simd_quatf(angle: -swing, axis: SIMD3<Float>(1, 0, 0))
-        leftArm.orientation = simd_quatf(angle: -swing * 0.8, axis: SIMD3<Float>(1, 0, 0))
-        rightArm.orientation = simd_quatf(angle: swing * 0.8, axis: SIMD3<Float>(1, 0, 0))
     }
 
     /// Snaps without easing — used on spawn and after a teleport, where
     /// sliding across the map would look like a bug.
     public func teleport(to newPosition: Vec3, yawDegrees: Float) {
+        // A jump across the map is not a fall.
+        if newPosition.distance(to: Vec3(position)) > 3 { limbs.previousHeight = nil }
         targetPosition = newPosition
         targetYawDegrees = yawDegrees
         position = newPosition.simd

@@ -93,7 +93,7 @@ extension AvatarEntity {
     }
 
     private func poseThumbsUp(_ t: Float) {
-        reach(rightArm, to: SIMD3<Float>(0.39, 1.15, -0.3), angle: -1.4)
+        reach(rightArm, to: SIMD3<Float>(Self.shoulderX, 1.15, -0.3), angle: -1.4)
         rig.position = SIMD3<Float>(0, seatHeight + abs(sin(t * 5)) * 0.05, 0)
     }
 
@@ -128,7 +128,7 @@ extension AvatarEntity {
     private func poseFloss(_ t: Float) {
         let swing: Float = sin(t * 10)
         for (arm, side) in [(leftArm, Float(-1)), (rightArm, Float(1))] {
-            arm.position = SIMD3<Float>(side * 0.39 + swing * 0.18, 0.9, swing * side * 0.15)
+            arm.position = SIMD3<Float>(side * Self.shoulderX + swing * 0.18, 0.9, swing * side * 0.15)
             arm.orientation = simd_quatf(angle: swing * 0.4, axis: Self.forwards)
         }
         rig.orientation = simd_quatf(angle: -swing * 0.15, axis: Self.upright)
@@ -137,8 +137,8 @@ extension AvatarEntity {
     private func poseRobot(_ t: Float) {
         // Stiff, in steps.
         let step: Float = (sin(t * 5) > 0) ? 1 : -1
-        reach(leftArm, to: SIMD3<Float>(-0.39, 1.15, -0.3), angle: step > 0 ? -1.5 : 0)
-        reach(rightArm, to: SIMD3<Float>(0.39, 1.15, -0.3), angle: step > 0 ? 0 : -1.5)
+        reach(leftArm, to: SIMD3<Float>(-Self.shoulderX, 1.15, -0.3), angle: step > 0 ? -1.5 : 0)
+        reach(rightArm, to: SIMD3<Float>(Self.shoulderX, 1.15, -0.3), angle: step > 0 ? 0 : -1.5)
         if step < 0 { lower(leftArm, side: -1) } else { lower(rightArm, side: 1) }
         head.orientation = simd_quatf(angle: step * 0.4, axis: Self.upright)
     }
@@ -159,8 +159,8 @@ extension AvatarEntity {
 
     private func poseStomp(_ t: Float) {
         let beat: Float = sin(t * 9)
-        leftLeg.position = SIMD3<Float>(-0.16, 0.3 + Swift.max(0, beat) * 0.2, 0)
-        rightLeg.position = SIMD3<Float>(0.16, 0.3 + Swift.max(0, -beat) * 0.2, 0)
+        leftLeg.position = SIMD3<Float>(-Self.hipX, 0.3 + Swift.max(0, beat) * 0.2, 0)
+        rightLeg.position = SIMD3<Float>(Self.hipX, 0.3 + Swift.max(0, -beat) * 0.2, 0)
         lower(leftArm, side: -1)
         lower(rightArm, side: 1)
         leftArm.orientation = simd_quatf(angle: -0.3, axis: Self.forwards)

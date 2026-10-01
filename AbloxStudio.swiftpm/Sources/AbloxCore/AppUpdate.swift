@@ -160,8 +160,10 @@ public enum UpdateAvailability: Equatable, Sendable {
 }
 
 public enum UpdatePolicy {
-    /// How often to look without being asked.
-    public static let checkInterval: TimeInterval = 6 * 60 * 60
+    /// How often to look without being asked. `update.json` comes from the
+    /// raw file server, which a classroom of iPads looking every hour does
+    /// not trouble, and a version should not wait half a day to be noticed.
+    public static let checkInterval: TimeInterval = 60 * 60
 
     public static func availability(installed: AppVersion, build: Int, manifest: UpdateManifest) -> UpdateAvailability {
         let newer = manifest.version > installed || (manifest.version == installed && manifest.build > build)
@@ -182,6 +184,38 @@ public enum UpdatePolicy {
         if required { return true }
         guard let skipped else { return true }
         return manifest.version > skipped
+    }
+}
+
+// MARK: - Trying again
+
+/// When a download stumbles — the Wi-Fi drops for a moment, GitHub is busy —
+/// the updater tries again by itself before telling anyone. Plain numbers, so
+/// the rules are tested without a network.
+public enum UpdateRetry {
+    /// Seconds to wait before each further try: three tries in all.
+    public static let delays: [Double] = [2, 5]
+
+    /// A status worth another try: GitHub busy, slow or briefly down.
+    public static func isTemporary(status: Int) -> Bool {
+        status == 408 || status == 429 || (500...599).contains(status)
+    }
+
+    /// `URLError` codes worth another try: timeouts, a lost or changing
+    /// connection, a name that did not resolve this time.
+    public static func isTemporary(urlErrorCode code: Int) -> Bool {
+        temporaryCodes.contains(code)
+    }
+
+    /// timedOut, cannotFindHost, cannotConnectToHost, networkConnectionLost,
+    /// dnsLookupFailed, resourceUnavailable, notConnectedToInternet,
+    /// badServerResponse, secureConnectionFailed.
+    static let temporaryCodes: Set<Int> = [-1001, -1003, -1004, -1005, -1006, -1008, -1009, -1011, -1200]
+
+    /// One line for a problem report: what went wrong, in terms someone
+    /// helping can look up ("NSURLErrorDomain -1001", "HTTP 503").
+    public static func technicalDetail(domain: String, code: Int, step: String) -> String {
+        "\(step): \(domain) \(code)"
     }
 }
 
@@ -228,6 +262,19 @@ public struct UpdateChannel: Equatable, Sendable {
         guard isValid else { return nil }
         let ref = branch == "HEAD" ? "HEAD" : "refs/heads/\(branch)"
         return URL(string: "https://github.com/\(owner)/\(repository)/archive/\(ref).zip")
+    }
+
+    /// The same zip straight from GitHub's archive server, without the
+    /// redirect: tried when the first address fails.
+    public var archiveFallbackURL: URL? {
+        guard isValid else { return nil }
+        let ref = branch == "HEAD" ? "HEAD" : "refs/heads/\(branch)"
+        return URL(string: "https://codeload.github.com/\(owner)/\(repository)/zip/\(ref)")
+    }
+
+    /// Every address the zip can come from, in the order to try them.
+    public var archiveURLs: [URL] {
+        [archiveURL, archiveFallbackURL].compactMap { $0 }
     }
 
     /// Where a person can read about it.

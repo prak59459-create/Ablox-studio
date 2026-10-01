@@ -35,7 +35,7 @@ public enum Strings {
 
     /// Exposed so the tests can see duplicates, which the dictionary hides.
     public static let entries: [(String, String)] = [
-        coreEntries, clientEntries, studioEntries, guideEntries, catalogueEntries, scriptEntries, updateEntries,
+        coreEntries, clientEntries, studioEntries, guideEntries, catalogueEntries, scriptEntries, updateEntries, updateEntries2,
         featureEntries, featureEntries2, featureEntries3, featureEntries4, featureEntries5, featureEntries6, featureEntries7, featureEntries8, featureEntries9, featureEntries10, featureEntries11, featureEntries12, featureEntries13
     ].flatMap { $0 }
 
@@ -1290,6 +1290,45 @@ public enum Strings {
     // MARK: - Updates
 
     /// Keeping the app itself up to date (`AppUpdater`), in both apps.
+    // The one-tap update and opening the project again (2.1).
+    static let updateEntries2: [(String, String)] = [
+        ("After that, this and every new version goes in by itself.", "そのあとは、このバージョンも これからのバージョンも 自動で入ります。"),
+        ("As soon as one is downloaded, it goes into the chosen project. Then close the project and open it again.", "ダウンロードできたら、選んだプロジェクトにすぐ入れます。そのあと プロジェクトを閉じて開き直してください。"),
+        ("Choose {} and tap Open.", "{} を選んで「開く」をタップ。"),
+        ("Close the project: go back to the list of your projects.", "プロジェクトを閉じる: プロジェクトの一覧にもどります。"),
+        ("Downloaded. One tap puts it in.", "ダウンロードしました。1タップで入ります。"),
+        ("Everything you have stays.", "持っているものは、ぜんぶそのままです。"),
+        ("Got it", "わかった"),
+        ("How", "やり方"),
+        ("In Swift Playgrounds, open the new {} and press ▶︎. It is built whole, so the first time takes longer.", "Swift Playgrounds で新しい {} を開いて ▶︎ を押します。ぜんぶを作り直すので、1回目は時間がかかります。"),
+        ("It could not be saved there. Try the Playgrounds folder in Files.", "そこには保存できませんでした。ファイル App の Playgrounds フォルダにしてみてください。"),
+        ("Not working? Install it as a new project", "うまくいかないとき: 新しいプロジェクトとして入れる"),
+        ("On Wi-Fi only, so it is ready when you are.", "Wi-Fi のときだけ。使いたいときには用意ができています。"),
+        ("Once only: choose the project", "はじめに1回だけ: プロジェクトを選ぶ"),
+        ("Only the files that changed go into {}, so the next build is quick.", "{} には変わったファイルだけが入るので、次のビルドはすぐ終わります。"),
+        ("Open the Playgrounds folder (On My iPad or iCloud Drive).", "Playgrounds フォルダを開きます（「このiPad内」か「iCloud Drive」）。"),
+        ("Open {} again and press ▶︎. Only the changed files are built.", "{} をもう一度開いて ▶︎ を押します。変わったファイルだけがビルドされます。"),
+        ("Put new versions in by themselves", "新しいバージョンを自動で入れる"),
+        ("Save it into the Playgrounds folder in Files, or send it to Swift Playgrounds.", "ファイル App の Playgrounds フォルダに保存するか、Swift Playgrounds に送ります。"),
+        ("Save to Files", "ファイルに保存"),
+        ("Saved. Open it in Swift Playgrounds and press ▶︎.", "保存しました。Swift Playgrounds で開いて ▶︎ を押してください。"),
+        ("Still the old one? Close Swift Playgrounds completely (swipe it up in the app switcher) and open it again.", "それでも古いまま？ Swift Playgrounds を完全に閉じて（アプリの切りかえ画面で上にスワイプ）、開き直してください。"),
+        ("Still the old version", "まだ古いバージョンです"),
+        ("Stop it with ■, close the project and open it again: then it is the new version.", "■ で止めて、プロジェクトを閉じて開き直すと 新しいバージョンになります。"),
+        ("Stop the app with ■ in Swift Playgrounds.", "Swift Playgrounds の ■ でアプリを止めます。"),
+        ("Swift Playgrounds is still running the old one. Close the project and open it again.", "Swift Playgrounds がまだ古いほうを動かしています。プロジェクトを閉じて開き直してください。"),
+        ("Tap the button below. Files opens.", "下のボタンを押すと、ファイル App が開きます。"),
+        ("The new version is in the project", "新しいバージョンをプロジェクトに入れました"),
+        ("This appears when the download has finished.", "ダウンロードが終わると出てきます。"),
+        ("This is still the old version: Swift Playgrounds keeps a project as it was when it was opened.", "これはまだ古いバージョンです。Swift Playgrounds は、開いたときのプロジェクトのまま使い続けるからです。"),
+        ("Try again", "もう一度"),
+        ("Update", "アップデート"),
+        ("Update now", "今すぐアップデート"),
+        ("When the app opens, and every hour while it is open.", "アプリを開いたときと、開いているあいだ1時間ごとに。"),
+        ("Your worlds, coins and saved games carry over. When the new one runs, you can delete the old one.", "ワールド・コイン・セーブはそのまま引きつがれます。新しいほうが動いたら、古いほうは消してだいじょうぶです。"),
+        ("{} {} is in the project", "{} {} をプロジェクトに入れました"),
+    ]
+
     static let updateEntries: [(String, String)] = [
         ("{} {} is out", "{} {} が出ました"),
         ("Downloading…", "ダウンロード中…"),

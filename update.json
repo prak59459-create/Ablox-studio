@@ -1,18 +1,20 @@
 {
   "app": "Ablox Studio",
-  "version": "1.8",
-  "build": 9,
+  "version": "1.9",
+  "build": 10,
   "protocol": 8,
-  "date": "2026-09-29",
+  "date": "2026-10-01",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shared with Ablox 1.9: games published to the list can carry their download size, and downloading a game reports its megabytes as they arrive",
-      "Nothing changes in how Studio works"
+      "Updating is one tap: choose the Ablox Studio project in Files once, and every new version goes straight into it by itself. Then close the project and open it again",
+      "Downloads try again by themselves when the connection drops, and problems are saved with their error code",
+      "Characters in test play move like in Ablox: limbs swing from the shoulders and hips, jump and fall poses, running lean, ride poses"
     ],
     "ja": [
-      "Ablox 1.9 といっしょ: ゲーム一覧のゲームにダウンロードの大きさが入れられるようになり、ダウンロード中は何MBまで来たかがわかるようになりました",
-      "Studio の使い方は変わりません"
+      "アップデートが1タップに: ファイル App で Ablox Studio のプロジェクトを1回えらべば、新しいバージョンは自動で入ります。そのあとプロジェクトを閉じて開き直すだけ",
+      "つながりが切れたときは自動でやり直し、問題はエラーの番号つきで残ります",
+      "テストプレイのキャラクターも Ablox と同じ動きに: 肩と腰から動く手足、ジャンプと落下のポーズ、走ると前かがみ、乗り物のポーズ"
     ]
   }
 }

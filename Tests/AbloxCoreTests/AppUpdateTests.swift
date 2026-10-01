@@ -147,6 +147,7 @@ final class AppUpdateTests: XCTestCase {
         XCTAssertFalse(UpdatePolicy.isDue(lastCheck: now.addingTimeInterval(-60), now: now))
         XCTAssertTrue(UpdatePolicy.isDue(lastCheck: now.addingTimeInterval(-7 * 3600), now: now))
         XCTAssertTrue(UpdatePolicy.isDue(lastCheck: now.addingTimeInterval(3600), now: now), "clock set back")
+        XCTAssertTrue(UpdatePolicy.isDue(lastCheck: now.addingTimeInterval(-3700), now: now), "an hour is enough: a version should not wait half a day")
     }
 
     func testReadingAManifest() throws {
@@ -185,6 +186,10 @@ final class AppUpdateTests: XCTestCase {
         XCTAssertEqual(channel.archiveURL?.absoluteString, "https://github.com/prak59459-create/Ablox/archive/HEAD.zip")
         let branch = UpdateChannel(owner: "a", repository: "b", branch: "claude/x-1")
         XCTAssertEqual(branch.archiveURL?.absoluteString, "https://github.com/a/b/archive/refs/heads/claude/x-1.zip")
+        XCTAssertEqual(channel.archiveFallbackURL?.absoluteString, "https://codeload.github.com/prak59459-create/Ablox/zip/HEAD")
+        XCTAssertEqual(branch.archiveFallbackURL?.absoluteString, "https://codeload.github.com/a/b/zip/refs/heads/claude/x-1")
+        XCTAssertEqual(branch.archiveURLs.count, 2, "the zip has a second address to try")
+        XCTAssertTrue(UpdateChannel(owner: "a/b", repository: "c").archiveURLs.isEmpty)
         XCTAssertNil(UpdateChannel(owner: "a/b", repository: "c").manifestURL)
         XCTAssertNil(UpdateChannel(owner: "a", repository: "..").manifestURL)
         XCTAssertNil(UpdateChannel(owner: "a", repository: "b", branch: "../main").manifestURL)
@@ -221,4 +226,16 @@ final class AppUpdateTests: XCTestCase {
             XCTAssertEqual(error as? UpdatePackage.Problem, .archive(.checksum("Ablox-3f2a9c/Ablox.swiftpm/Sources/App.swift")))
         }
     }
+
+    func testTriesAgainOnlyWhenTryingAgainCanHelp() {
+        XCTAssertEqual(UpdateRetry.delays.count, 2, "three tries in all")
+        for status in [408, 429, 500, 502, 503, 504] { XCTAssertTrue(UpdateRetry.isTemporary(status: status), "\(status)") }
+        for status in [200, 301, 403, 404, 410] { XCTAssertFalse(UpdateRetry.isTemporary(status: status), "\(status)") }
+        // Timeouts and a dropped connection are worth another go; a refused
+        // certificate or a cancelled request is not.
+        for code in [-1001, -1005, -1009, -1003] { XCTAssertTrue(UpdateRetry.isTemporary(urlErrorCode: code), "\(code)") }
+        for code in [-999, -1202, -1012, 0] { XCTAssertFalse(UpdateRetry.isTemporary(urlErrorCode: code), "\(code)") }
+        XCTAssertEqual(UpdateRetry.technicalDetail(domain: "NSURLErrorDomain", code: -1001, step: "download"), "download: NSURLErrorDomain -1001")
+    }
+
 }
