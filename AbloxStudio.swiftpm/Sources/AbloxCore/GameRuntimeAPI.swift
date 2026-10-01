@@ -47,7 +47,7 @@ extension GameRuntime: ScriptObjectResolver {
     public static let blockMemberNames: [String] = [
         "name", "id", "position", "x", "y", "z", "size", "rotation", "color", "material", "shape",
         "visible", "solid", "tags", "opacity", "behavior", "move", "move_to", "rotate", "destroy", "clone",
-        "particles", "image"
+        "particles", "image", "label", "label_height", "label_size", "label_range", "animation", "animation_speed", "parent"
     ]
 
     public static let worldMemberNames: [String] = [
@@ -849,7 +849,16 @@ extension GameRuntime: ScriptObjectResolver {
         let options = try optionsMap(value, line: line)
         var block = BlockData(name: "Block")
         block.position = Vec3(0, 1, 0)
-        for key in options.keys {
+        // Hung from another block first: then `position` is measured from it,
+        // and it moves, turns and goes away with it.
+        if let parent = options["parent"], !parent.isNull {
+            guard case let .object(object) = parent, let parentID = blockID(object), world.block(id: parentID) != nil else {
+                throw ScriptError(line: line, kind: .runtime, message: L("“parent” needs a block."))
+            }
+            block.parentID = parentID
+            block.position = .zero
+        }
+        for key in options.keys where key != "parent" {
             guard let option = options[key] else { continue }
             try applyBlockOption(key, option, to: &block, id: nil, line: line)
         }

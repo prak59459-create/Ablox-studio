@@ -187,7 +187,13 @@ public enum ScriptReference {
             Entry("world.effect = \"retro\"  world.shadows = false  world.music = \"calm\"",
                   L("A look for the whole screen (none, bloom, vivid, warm, cool, noir, retro, dream), shadows, and the world's music.")),
             Entry("b.particles = \"fire\"  b.image = \"Poster\"",
-                  L("A block that keeps giving off particles, or shows one of the world's pictures."))
+                  L("A block that keeps giving off particles, or shows one of the world's pictures.")),
+            Entry("b.label = \"Shop\"  b.label = [{text: \"Rare\", color: \"#3B82F6\"}, \"Pizza Cat\"]  b.label_height = 2  b.label_size = 1.2  b.label_range = 40",
+                  L("Words floating over a block, facing the camera: one text (\\n for a new line) or up to four lines, each with its own colour. Height above the block, size, and how far away they show.")),
+            Entry("create_block({parent: body, position: {x: 0, y: 1, z: 0}})  b.parent",
+                  L("A block hung from another: its position is measured from that block, and it moves, turns and goes away with it.")),
+            Entry("b.animation = \"dance\"  b.animation_speed = 2",
+                  L("A block that moves by itself on every iPad, with nothing sent over the network: spin, sway, dance, bounce, pulse or wobble."))
         ])
     }
 

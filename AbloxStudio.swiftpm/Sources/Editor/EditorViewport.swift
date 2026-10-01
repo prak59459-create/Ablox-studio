@@ -92,6 +92,10 @@ public struct EditorViewport: UIViewRepresentable {
         private let boxView = UIView()
         /// Co-editors and pins, as labels over the view.
         private var labels: [String: UILabel] = [:]
+        /// Words floating over blocks (`BlockLabel`), as players will see them.
+        private var blockWords: BlockLabelOverlay?
+        /// When test play began, for blocks that move by themselves.
+        private var animationStart: Date?
         private var updateSubscription: Cancellable?
         /// Blocks hidden because their layer is.
         private var layerHidden: Set<UUID> = []
@@ -125,6 +129,11 @@ public struct EditorViewport: UIViewRepresentable {
             boxView.backgroundColor = UIColor.cyan.withAlphaComponent(0.12)
             view.addSubview(boxView)
 
+            let words = BlockLabelOverlay(frame: view.bounds)
+            words.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            view.insertSubview(words, belowSubview: boxView)
+            blockWords = words
+
             updateSubscription = view.scene.subscribe(to: SceneEvents.Update.self) { [weak self] _ in
                 MainActor.assumeIsolated { self?.updateLabels() }
             }
@@ -136,12 +145,25 @@ public struct EditorViewport: UIViewRepresentable {
             worldScene.removeAll()
             labels.values.forEach { $0.removeFromSuperview() }
             labels.removeAll()
+            blockWords?.removeAll()
+            blockWords?.removeFromSuperview()
+            blockWords = nil
         }
 
         /// Co-editors' names where they are working, and pins pointed in the
         /// chat, kept over the right place as the camera moves.
         private func updateLabels() {
             guard let view else { return }
+            updateBlockWords(in: view)
+            // Blocks that move by themselves do so in test play; while
+            // editing they hold still to be picked and dragged.
+            if parent.session.mode == .play {
+                animationStart = animationStart ?? Date()
+                let seconds = Date().timeIntervalSince(animationStart ?? Date())
+                worldScene.animateBlocks(time: seconds, eye: Vec3(camera.position(relativeTo: nil)))
+            } else if animationStart != nil {
+                animationStart = nil
+            }
             let session = parent.session
             var wanted: [String: (text: String, point: Vec3, color: UIColor)] = [:]
             let colors: [UIColor] = [.systemPink, .systemOrange, .systemGreen, .systemPurple, .systemTeal]
@@ -178,6 +200,30 @@ public struct EditorViewport: UIViewRepresentable {
                     label.isHidden = true
                 }
             }
+        }
+
+        /// Each labelled block's words just above it, in front of the camera
+        /// and within the label's range.
+        private func updateBlockWords(in view: ARView) {
+            guard let overlay = blockWords else { return }
+            let labelled = worldScene.labeledBlocks
+            guard !labelled.isEmpty else {
+                overlay.update([])
+                return
+            }
+            let eye = Vec3(camera.position(relativeTo: nil))
+            let looking = (focus - eye).normalized
+            var items: [BlockLabelOverlay.Item] = []
+            for (id, label) in labelled {
+                guard let entity = worldScene.entity(for: id), entity.isEnabled, entity.parent != nil else { continue }
+                let top = Vec3(entity.position(relativeTo: nil)) + Vec3(0, entity.scale(relativeTo: nil).y / 2 + label.height, 0)
+                let toTop = top - eye
+                let distance = toTop.length
+                guard distance > 0.5, distance < label.range, toTop.dot(looking) > 0.2 * distance,
+                      let point = view.project(top.simd) else { continue }
+                items.append(BlockLabelOverlay.Item(id: id, label: label, anchor: point, distance: distance))
+            }
+            overlay.update(items)
         }
 
         /// A faint reference grid at y = 0, so an empty world is not a void.

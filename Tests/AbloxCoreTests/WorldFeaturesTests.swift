@@ -344,6 +344,80 @@ final class PartsRuntimeTests: RuntimeTestCase {
         XCTAssertEqual(game.world.blocks.first?.particles, .fire)
     }
 
+    func testABlockCanCarryFloatingWords() {
+        let game = game("""
+        on start()
+          let sign = block("Sign")
+          sign.label = "Shop\\nOpen"
+          print(sign.label)
+          let pet = create_block({name: "Pet", position: {x: 0, y: 1, z: 0}, label_size: 2,
+                                  label: [{text: "Rare", color: "#3B82F6"}, "Pizza Cat", {text: "$15/s", color: "#22C55E"}, "4", "5"]})
+          pet.label_height = 99
+          print(pet.label_size, pet.label_height, len(split(pet.label, "\\n")))
+          sign.label = nil
+          print(sign.label)
+        end
+        """, world: {
+            var world = WorldDocument(name: "Shops")
+            world.blocks = [BlockData(name: "Sign")]
+            return world
+        }())
+        startWithBoth(game)
+        XCTAssertTrue(game.drainErrors().isEmpty, "\(game.drainErrors())")
+        XCTAssertEqual(game.drainOutput(), ["Shop\nOpen", "2 40 4", "nil"])
+        let pet = game.world.blocks.first { $0.name == "Pet" }?.label
+        XCTAssertEqual(pet?.lines.map(\.text), ["Rare", "Pizza Cat", "$15/s", "4"], "four lines at most")
+        XCTAssertEqual(pet?.lines.first?.color, ColorRGBA(hex: "#3B82F6"))
+        XCTAssertEqual(pet?.height, BlockLabel.Limits.heights.upperBound, "held to its limits")
+        XCTAssertNil(game.world.blocks.first { $0.name == "Sign" }?.label)
+    }
+
+    func testFloatingWordsSurviveSavingAndOlderWorldsReadTheSame() throws {
+        var world = WorldDocument(name: "Signs")
+        var sign = BlockData(name: "Sign")
+        sign.label = BlockLabel(lines: [BlockLabel.Line(text: "Welcome", color: ColorRGBA(r: 1, g: 0.8, b: 0))], height: 2, size: 1.5, range: 80)
+        world.blocks = [sign, BlockData(name: "Plain")]
+        let decoded = try WorldDocument.decoded(from: world.encodedForFile())
+        XCTAssertEqual(decoded.blocks.first?.label, sign.label)
+        XCTAssertNil(decoded.blocks.last?.label, "a block without words has none")
+        // Words written by hand are held to the same limits.
+        let wild = try JSONDecoder().decode(BlockLabel.self, from: Data(#"{"lines":[{"text":"a","color":{"r":1,"g":1,"b":1,"a":1}}],"height":-5,"size":99,"range":1}"#.utf8))
+        XCTAssertEqual(wild.height, 0)
+        XCTAssertEqual(wild.size, BlockLabel.Limits.sizes.upperBound)
+        XCTAssertEqual(wild.range, BlockLabel.Limits.ranges.lowerBound)
+    }
+
+    func testBlocksHangFromOthersAndMoveByThemselves() {
+        let game = game("""
+        on start()
+          let root = create_block({name: "Pet", position: {x: 10, y: 1, z: 0}, size: 1, animation: "dance", animation_speed: 2})
+          let head = create_block({name: "Head", parent: root, position: {x: 0, y: 1, z: 0}, size: 0.5, animation_speed: 9})
+          print(head.parent.name, root.animation, root.animation_speed, head.animation, head.animation_speed)
+          print(head.x, head.y)
+          root.move({x: 5, y: 0, z: 0})
+          print(head.x)
+          root.animation = nil
+          print(root.animation)
+          root.destroy()
+          print(len(blocks("Head")))
+        end
+        """)
+        startWithBoth(game)
+        XCTAssertTrue(game.drainErrors().isEmpty, "\(game.drainErrors())")
+        XCTAssertEqual(game.drainOutput(), ["Pet dance 2 sway 5", "10 2", "15", "nil", "0"])
+    }
+
+    func testAnimationsArePlainNumbersOnEveryIPad() {
+        let dance = BlockAnimation(kind: .dance)
+        let a = dance.pose(at: 1, phase: 0)
+        let b = dance.pose(at: 1, phase: 0.5)
+        XCTAssertNotEqual(a.degrees, b.degrees, "two pets on the same dance are not in step")
+        XCTAssertEqual(BlockAnimation(kind: .spin, speed: 99).speed, BlockAnimation.speeds.upperBound)
+        let pulse = BlockAnimation(kind: .pulse).pose(at: 0.3, phase: 0)
+        XCTAssertEqual(pulse.degrees, Vec3(0, 0, 0), "a pulse never turns")
+        XCTAssertLessThan(abs(pulse.stretch.x - 1), 0.07)
+    }
+
     func testMisspelledPartsSayWhatIsAvailable() {
         let game = game("""
         on start()

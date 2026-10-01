@@ -40,6 +40,10 @@ public final class WorldScene {
     private var pictures: [UUID: WorldImage] = [:]
     /// The lamps and spotlights lit, by block. At most `BlockLight.maximumLit`.
     private var lamps: [UUID: Entity] = [:]
+    /// Blocks with words over them (`BlockLabel`), for the label overlay.
+    private var labels: [UUID: BlockLabel] = [:]
+    /// Blocks that move by themselves (`BlockAnimation`).
+    private var animated: [UUID: BlockAnimation] = [:]
 
     public init(collisionShapes: Bool = true) {
         self.collisionShapes = collisionShapes
@@ -105,6 +109,8 @@ public final class WorldScene {
             culled.remove(id)
             pictures.removeValue(forKey: id)
             lamps.removeValue(forKey: id)
+            labels.removeValue(forKey: id)
+            animated.removeValue(forKey: id)
         }
     }
 
@@ -168,6 +174,8 @@ public final class WorldScene {
         BlockEntityFactory.apply(block, to: entity, physicsEnabled: physicsEnabled && block.hasCollision,
                                  collisionShapes: collisionShapes, picture: picture)
         updateLamp(block, on: entity)
+        if let label = block.label, !label.isEmpty { labels[block.id] = label } else { labels.removeValue(forKey: block.id) }
+        if let animation = block.animation { animated[block.id] = animation } else { animated.removeValue(forKey: block.id) }
         if culled.contains(block.id) || effectHidden.contains(block.id) { entity.isEnabled = false }
         lastAppliedBlocks[block.id] = block
         reparentIfNeeded(entity, block: block, forceTopLevel: forceTopLevel)
@@ -319,6 +327,30 @@ public final class WorldScene {
         entities[blockID]
     }
 
+    /// Every block with words over it, and the words.
+    public var labeledBlocks: [UUID: BlockLabel] {
+        labels
+    }
+
+    /// Turns and stretches each block that moves by itself, for `time`
+    /// seconds: only those within `range` of `eye`, since a far one would not
+    /// be seen moving. Never moves a block, so a `move_to` carries on. Nothing
+    /// goes over the network: every iPad does this for itself.
+    public func animateBlocks(time: Double, eye: Vec3, range: Float = 90) {
+        guard !animated.isEmpty else { return }
+        let limit = range * range
+        for (id, animation) in animated {
+            guard let entity = entities[id], entity.isEnabled, let block = lastAppliedBlocks[id] else { continue }
+            let offset = Vec3(entity.position(relativeTo: nil)) - eye
+            guard offset.lengthSquared < limit else { continue }
+            // Each block starts its own way through, so a row of them is not in step.
+            let phase = Double(id.uuid.0) / 255 + Double(id.uuid.1) / 65_025
+            let pose = animation.pose(at: time, phase: phase)
+            entity.orientation = (block.transform.rotation * Quat.euler(degrees: pose.degrees)).simd
+            entity.scale = (block.transform.scale * pose.stretch).simd
+        }
+    }
+
     /// Walks up from a hit-test result to the owning block.
     public func blockID(forHit entity: Entity) -> UUID? {
         var cursor: Entity? = entity
@@ -350,6 +382,8 @@ public final class WorldScene {
         culled.removeAll()
         parentIDs.removeAll()
         lamps.removeAll()
+        labels.removeAll()
+        animated.removeAll()
     }
 
     // MARK: Runtime effects

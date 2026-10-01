@@ -1,20 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "1.9",
-  "build": 10,
+  "version": "2.0",
+  "build": 11,
   "protocol": 8,
   "date": "2026-10-01",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Updating is one tap: choose the Ablox Studio project in Files once, and every new version goes straight into it by itself. Then close the project and open it again",
-      "Downloads try again by themselves when the connection drops, and problems are saved with their error code",
-      "Characters in test play move like in Ablox: limbs swing from the shoulders and hips, jump and fall poses, running lean, ride poses"
+      "Shared with Ablox 2.2: words floating over blocks, blocks hanging from one another, and blocks that move by themselves",
+      "The editor shows the words over blocks as players will see them, and test play shows the movement"
     ],
     "ja": [
-      "アップデートが1タップに: ファイル App で Ablox Studio のプロジェクトを1回えらべば、新しいバージョンは自動で入ります。そのあとプロジェクトを閉じて開き直すだけ",
-      "つながりが切れたときは自動でやり直し、問題はエラーの番号つきで残ります",
-      "テストプレイのキャラクターも Ablox と同じ動きに: 肩と腰から動く手足、ジャンプと落下のポーズ、走ると前かがみ、乗り物のポーズ"
+      "Ablox 2.2 といっしょ: ブロックの上に浮かぶ文字、ブロックどうしをつなげる、自分で動くブロック",
+      "エディタでも ブロックの上の文字が 遊ぶときと同じように見え、テストプレイでは動きも見えます"
     ]
   }
 }

@@ -184,6 +184,10 @@ public struct GameViewport: UIViewRepresentable {
         private var chatBubbles: ChatBubbleOverlay?
         /// Names and titles over heads, and emoji stamps.
         private var nameTags: NameTagOverlay?
+        /// Words floating over blocks, under the name tags.
+        private var blockLabels: BlockLabelOverlay?
+        /// Seconds of play, for blocks that move by themselves.
+        private var animationClock: Double = 0
 
         private weak var view: ARView?
         private var updateSubscription: Cancellable?
@@ -274,6 +278,11 @@ public struct GameViewport: UIViewRepresentable {
             worldScene.anchor.addChild(local)
             localAvatar = local
 
+            let words = BlockLabelOverlay(frame: view.bounds)
+            words.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            view.addSubview(words)
+            blockLabels = words
+
             let tags = NameTagOverlay(frame: view.bounds)
             tags.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             view.addSubview(tags)
@@ -342,6 +351,9 @@ public struct GameViewport: UIViewRepresentable {
             nameTags?.removeAll()
             nameTags?.removeFromSuperview()
             nameTags = nil
+            blockLabels?.removeAll()
+            blockLabels?.removeFromSuperview()
+            blockLabels = nil
             particles?.removeAll()
             particles = nil
             atmosphere?.detach()
@@ -624,6 +636,9 @@ public struct GameViewport: UIViewRepresentable {
             updateMusic(world: world)
             updateChatBubbles()
             updateNameTags()
+            updateBlockLabels()
+            animationClock += Double(dt)
+            worldScene.animateBlocks(time: animationClock, eye: Vec3(camera.position(relativeTo: nil)))
             updateWeapons(dt: dt)
             if parent.isFiring { fireIfReady(index: index) }
             fadeTracers(dt: dt)
@@ -1082,6 +1097,32 @@ public struct GameViewport: UIViewRepresentable {
             }
             overlay.sizeFactor = CGFloat(chat.nameSize.scale)
             overlay.update(tags, showNames: !parent.photoMode)
+        }
+
+        // MARK: Words over blocks
+
+        /// Each labelled block's words just above it, if it is in front of
+        /// the camera and within the label's range.
+        private func updateBlockLabels() {
+            guard let view, let overlay = blockLabels else { return }
+            let labelled = worldScene.labeledBlocks
+            guard !labelled.isEmpty, !parent.photoMode else {
+                overlay.update([])
+                return
+            }
+            let eye = Vec3(camera.position(relativeTo: nil))
+            var items: [BlockLabelOverlay.Item] = []
+            for (id, label) in labelled {
+                guard let entity = worldScene.entity(for: id), entity.isEnabled, entity.parent != nil else { continue }
+                let half = entity.scale(relativeTo: nil).y / 2
+                let top = Vec3(entity.position(relativeTo: nil)) + Vec3(0, half + label.height, 0)
+                let toTop = top - eye
+                let distance = toTop.length
+                guard distance > 0.5, distance < label.range, toTop.dot(viewDirection) > 0.2 * distance,
+                      let point = view.project(top.simd) else { continue }
+                items.append(BlockLabelOverlay.Item(id: id, label: label, anchor: point, distance: distance))
+            }
+            overlay.update(items)
         }
 
         // MARK: Chat bubbles

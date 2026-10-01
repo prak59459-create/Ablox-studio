@@ -544,6 +544,13 @@ extension GameRuntime {
         switch name {
         case "particles": return block.particles.map { .string($0.rawValue) } ?? .null
         case "image": return block.imageID.flatMap { id in world.image(id: id)?.name }.map { .string($0) } ?? .null
+        case "label": return block.label.map { .string($0.text) } ?? .null
+        case "label_height": return block.label.map { .number(Double($0.height)) } ?? .null
+        case "label_size": return block.label.map { .number(Double($0.size)) } ?? .null
+        case "label_range": return block.label.map { .number(Double($0.range)) } ?? .null
+        case "animation": return block.animation.map { .string($0.kind.rawValue) } ?? .null
+        case "animation_speed": return block.animation.map { .number(Double($0.speed)) } ?? .null
+        case "parent": return block.parentID.flatMap { world.block(id: $0) != nil ? blockObject($0) : nil } ?? .null
         default: return nil
         }
     }
@@ -569,9 +576,62 @@ extension GameRuntime {
             } else {
                 throw ScriptError(line: line, kind: .runtime, message: L("This world has no picture called “{}”.", value.displayText))
             }
+        case "label":
+            try setLabel(value, on: &block, line: line)
+        case "animation":
+            if value.isNull {
+                block.animation = nil
+            } else if let kind = BlockAnimation.Kind(rawValue: value.displayText.lowercased()) {
+                block.animation = BlockAnimation(kind: kind, speed: block.animation?.speed ?? 1)
+            } else {
+                throw ScriptError(line: line, kind: .runtime,
+                                  message: L("“animation” is one of: {}.", BlockAnimation.Kind.allCases.map(\.rawValue).joined(separator: ", ")))
+            }
+        case "animation_speed":
+            let speed = Float(try number(value, name, line))
+            block.animation = BlockAnimation(kind: block.animation?.kind ?? .sway, speed: speed)
+        case "parent":
+            throw ScriptError(line: line, kind: .runtime, message: L("A block’s parent is chosen when it is made: create_block({parent: …})."))
+        case "label_height", "label_size", "label_range":
+            let n = Float(try number(value, name, line))
+            var label = block.label ?? BlockLabel()
+            if name == "label_height" {
+                label = BlockLabel(lines: label.lines, height: n, size: label.size, range: label.range)
+            } else if name == "label_size" {
+                label = BlockLabel(lines: label.lines, height: label.height, size: n, range: label.range)
+            } else {
+                label = BlockLabel(lines: label.lines, height: label.height, size: label.size, range: n)
+            }
+            block.label = label
         default:
             return false
         }
         return true
+    }
+
+    /// `b.label = "Hello"` (lines split at "\n"), a list of lines, each
+    /// text or `{text, color}`, or nil to take the words away.
+    private func setLabel(_ value: ScriptValue, on block: inout BlockData, line: Int) throws {
+        let old = block.label ?? BlockLabel()
+        var lines: [BlockLabel.Line] = []
+        switch value {
+        case .null:
+            block.label = nil
+            return
+        case let .list(list):
+            for item in list.items.prefix(BlockLabel.Limits.maximumLines) {
+                if case .map = item {
+                    let options = try optionsMap(item, line: line)
+                    let tint = try options["color"].map { try color($0, line: line) } ?? .white
+                    lines.append(BlockLabel.Line(text: options["text"]?.displayText ?? "", color: tint))
+                } else {
+                    lines.append(BlockLabel.Line(text: item.displayText))
+                }
+            }
+        default:
+            lines = BlockLabel(text: value.displayText).lines
+        }
+        let label = BlockLabel(lines: lines, height: old.height, size: old.size, range: old.range)
+        block.label = label.isEmpty && block.label == nil ? nil : label
     }
 }

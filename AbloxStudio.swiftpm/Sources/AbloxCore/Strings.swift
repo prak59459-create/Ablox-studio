@@ -1292,6 +1292,12 @@ public enum Strings {
     /// Keeping the app itself up to date (`AppUpdater`), in both apps.
     // The one-tap update and opening the project again (2.1).
     static let updateEntries2: [(String, String)] = [
+        ("A block hung from another: its position is measured from that block, and it moves, turns and goes away with it.", "ほかのブロックにぶら下げたブロック: 位置はそのブロックからはかり、いっしょに動き・回り・消えます。"),
+        ("A block that moves by itself on every iPad, with nothing sent over the network: spin, sway, dance, bounce, pulse or wobble.", "どの iPad でも自分で動くブロック（通信はなし）: spin（回る）・sway（ゆれる）・dance（おどる）・bounce（はずむ）・pulse（ふくらむ）・wobble（ぐらぐら）。"),
+        ("“parent” needs a block.", "“parent” にはブロックが必要です。"),
+        ("A block’s parent is chosen when it is made: create_block({parent: …}).", "ブロックの親は、作るときに決めます: create_block({parent: …})。"),
+        ("“animation” is one of: {}.", "“animation” は次のどれかです: {}。"),
+        ("Words floating over a block, facing the camera: one text (\\n for a new line) or up to four lines, each with its own colour. Height above the block, size, and how far away they show.", "ブロックの上に浮かぶ文字（いつもカメラの方を向く）: 1つの文（\\n で改行）か、色つきの4行まで。ブロックからの高さ、大きさ、見えるきょり。"),
         ("After that, this and every new version goes in by itself.", "そのあとは、このバージョンも これからのバージョンも 自動で入ります。"),
         ("As soon as one is downloaded, it goes into the chosen project. Then close the project and open it again.", "ダウンロードできたら、選んだプロジェクトにすぐ入れます。そのあと プロジェクトを閉じて開き直してください。"),
         ("Choose {} and tap Open.", "{} を選んで「開く」をタップ。"),

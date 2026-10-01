@@ -463,6 +463,12 @@ public struct BlockData: Codable, Hashable, Identifiable, Sendable {
     public var imageID: UUID?
     /// A lamp or a spotlight in it. An older iPad shows the block, unlit.
     public var light: BlockLight?
+    /// Words floating over it (`BlockLabel`). An older iPad shows the block
+    /// without them.
+    public var label: BlockLabel?
+    /// Moving by itself on every iPad (`BlockAnimation`). An older iPad shows
+    /// the block still.
+    public var animation: BlockAnimation?
     /// Studio's layer for it (nil: the main one). Only the editor reads it.
     public var layer: String?
     /// Written only when locked, so a world's file does not grow a flag on
@@ -623,6 +629,8 @@ public extension BlockData {
         particles = try? c.decodeIfPresent(ParticleKind.self, forKey: .particles)
         imageID = try? c.decodeIfPresent(UUID.self, forKey: .imageID)
         light = try? c.decodeIfPresent(BlockLight.self, forKey: .light)
+        label = try? c.decodeIfPresent(BlockLabel.self, forKey: .label)
+        animation = try? c.decodeIfPresent(BlockAnimation.self, forKey: .animation)
         layer = (try? c.decodeIfPresent(String.self, forKey: .layer)).flatMap { $0.map { String($0.prefix(40)) } }
         lockedFlag = (try? c.decodeIfPresent(Bool.self, forKey: .lockedFlag)) ?? nil
     }
