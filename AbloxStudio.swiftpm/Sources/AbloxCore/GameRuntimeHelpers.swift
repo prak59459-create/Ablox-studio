@@ -7,10 +7,27 @@ extension GameRuntime {
 
     public static let helperAPINames: [String] = [
         "nearest_player", "players_near", "random_player", "team_players", "ranking", "alive_players",
-        "nearest_block", "blocks_near"
+        "nearest_block", "blocks_near", "today"
     ]
 
+    /// The date and time where the host iPad is, as a map: what a game needs
+    /// for a weekly event or a season. `weekday` is 1 for Sunday to 7 for
+    /// Saturday, as on a calendar.
+    func today() -> ScriptValue {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let parts = calendar.dateComponents([.year, .month, .day, .weekday, .hour, .minute, .second],
+                                            from: Date(timeIntervalSince1970: wallClock()))
+        let map = ScriptMap()
+        for (key, value) in [("year", parts.year), ("month", parts.month), ("day", parts.day), ("weekday", parts.weekday),
+                             ("hour", parts.hour), ("minute", parts.minute), ("second", parts.second)] {
+            map[key] = .number(Double(value ?? 0))
+        }
+        return .map(map)
+    }
+
     func installHelperAPI(on interpreter: ScriptInterpreter) {
+        interpreter.define("today") { [unowned self] _, _ in self.today() }
         /// The closest player still in the game, or nil; not counting the
         /// one asked about. An optional second value is how far to look.
         interpreter.define("nearest_player") { [unowned self] arguments, line in

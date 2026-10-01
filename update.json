@@ -1,18 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "2.0",
-  "build": 11,
+  "version": "2.1",
+  "build": 12,
   "protocol": 8,
   "date": "2026-10-01",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shared with Ablox 2.2: words floating over blocks, blocks hanging from one another, and blocks that move by themselves",
-      "The editor shows the words over blocks as players will see them, and test play shows the movement"
+      "Shared with Ablox 2.3: today() gives the date for weekly and seasonal events in test play too"
     ],
     "ja": [
-      "Ablox 2.2 といっしょ: ブロックの上に浮かぶ文字、ブロックどうしをつなげる、自分で動くブロック",
-      "エディタでも ブロックの上の文字が 遊ぶときと同じように見え、テストプレイでは動きも見えます"
+      "Ablox 2.3 といっしょ: today() で日付が分かり、テストプレイでも曜日や季節のイベントが試せます"
     ]
   }
 }

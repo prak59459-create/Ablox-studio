@@ -418,6 +418,21 @@ final class PartsRuntimeTests: RuntimeTestCase {
         XCTAssertLessThan(abs(pulse.stretch.x - 1), 0.07)
     }
 
+    func testTodayIsTheHostsDateForWeeklyEvents() {
+        let game = game("""
+        on start()
+          let d = today()
+          print(d.year, d.month, d.day, d.weekday, d.hour, d.minute)
+        end
+        """)
+        // Tuesday 31 October 2028, 18:45 UTC.
+        game.wallClock = { 1_856_630_700 }
+        game.timeZone = TimeZone(identifier: "UTC")!
+        startWithBoth(game)
+        XCTAssertTrue(game.drainErrors().isEmpty, "\(game.drainErrors())")
+        XCTAssertEqual(game.drainOutput(), ["2028 10 31 3 18 45"])
+    }
+
     func testMisspelledPartsSayWhatIsAvailable() {
         let game = game("""
         on start()

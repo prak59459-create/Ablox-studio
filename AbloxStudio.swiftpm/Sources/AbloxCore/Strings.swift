@@ -1292,6 +1292,7 @@ public enum Strings {
     /// Keeping the app itself up to date (`AppUpdater`), in both apps.
     // The one-tap update and opening the project again (2.1).
     static let updateEntries2: [(String, String)] = [
+        ("The date and time where the host iPad is: year, month, day, weekday (1 Sunday … 7 Saturday), hour, minute, second. For weekly events and seasons.", "ホストの iPad の日付と時刻: 年・月・日・曜日（1 日曜 … 7 土曜）・時・分・秒。週ごとのイベントや季節に。"),
         ("A block hung from another: its position is measured from that block, and it moves, turns and goes away with it.", "ほかのブロックにぶら下げたブロック: 位置はそのブロックからはかり、いっしょに動き・回り・消えます。"),
         ("A block that moves by itself on every iPad, with nothing sent over the network: spin, sway, dance, bounce, pulse or wobble.", "どの iPad でも自分で動くブロック（通信はなし）: spin（回る）・sway（ゆれる）・dance（おどる）・bounce（はずむ）・pulse（ふくらむ）・wobble（ぐらぐら）。"),
         ("“parent” needs a block.", "“parent” にはブロックが必要です。"),

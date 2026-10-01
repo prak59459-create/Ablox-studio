@@ -123,6 +123,8 @@ public final class GameRuntime {
     /// Seconds since 1970. The day and moving platforms are counted on it,
     /// because every iPad in the room has (nearly) the same one.
     public var wallClock: @Sendable () -> Double = { Date().timeIntervalSince1970 }
+    /// Where `today()` is read: the host iPad's own time zone.
+    public var timeZone: TimeZone = .current
     var lastTick: Double?
     var lastNPCStep: Double?
     var timers: [ScriptTimer] = []

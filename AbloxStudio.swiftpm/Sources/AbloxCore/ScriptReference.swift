@@ -202,6 +202,8 @@ public enum ScriptReference {
             Entry("after(2, func() … end)", L("Runs something once, later.")),
             Entry("let t = every(1, func() … end)  cancel(t)", L("Runs something again and again, until cancelled.")),
             Entry("time()", L("Seconds since the round began.")),
+            Entry("let d = today()  d.weekday == 3  d.month == 10",
+                  L("The date and time where the host iPad is: year, month, day, weekday (1 Sunday … 7 Saturday), hour, minute, second. For weekly events and seasons.")),
             Entry("distance(p, b)", L("Metres between two players, blocks or positions.")),
             Entry("raycast(p, p.look, 50)", L("The first thing along a line: {point, distance, block, player}, or nil.")),
             Entry("random()  random(1, 6)  random(list)", L("A random number, a dice roll, or a random item.")),
