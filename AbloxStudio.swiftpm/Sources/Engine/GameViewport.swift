@@ -692,6 +692,8 @@ public struct GameViewport: UIViewRepresentable {
             let cap = preferences.graphicsCap(lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled, heat: heat)
             guard cap != powerCap else { return }
             powerCap = cap
+            // Auto starts its steps down from the cap, not from above it.
+            if let cap, graphicsQuality == .auto { governor.limit(to: cap) }
             apply(profile: .profile(for: capped(appliedLevel)))
         }
 
@@ -751,6 +753,7 @@ public struct GameViewport: UIViewRepresentable {
             case .high: particles?.budget = 600
             case .medium: particles?.budget = 300
             case .low: particles?.budget = 140
+            case .lightest: particles?.budget = 60
             }
             guard let view else { return }
 

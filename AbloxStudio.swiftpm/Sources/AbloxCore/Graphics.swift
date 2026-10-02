@@ -7,6 +7,9 @@ public enum GraphicsQuality: String, Codable, CaseIterable, Sendable {
     case high
     case medium
     case low
+    /// Low and then some: for Low Power Mode and the oldest iPads. Only the
+    /// drawing gets lighter — every part, rule and script plays the same.
+    case lightest
 
     public var displayName: String {
         switch self {
@@ -14,6 +17,7 @@ public enum GraphicsQuality: String, Codable, CaseIterable, Sendable {
         case .high: return L("High")
         case .medium: return L("Medium")
         case .low: return L("Low")
+        case .lightest: return L("Lightest")
         }
     }
 
@@ -23,6 +27,7 @@ public enum GraphicsQuality: String, Codable, CaseIterable, Sendable {
         case .high: return L("Shadows, smooth shapes and everything in view. For newer iPads.")
         case .medium: return L("Shorter shadows, simpler shapes and a slightly lower resolution.")
         case .low: return L("No shadows, simple shapes, far parts hidden and a lower resolution. For big worlds and older iPads.")
+        case .lightest: return L("The lightest drawing, for Low Power Mode and the oldest iPads. The game itself plays just the same.")
         }
     }
 
@@ -33,6 +38,7 @@ public enum GraphicsQuality: String, Codable, CaseIterable, Sendable {
         case .high: return .high
         case .medium: return .medium
         case .low: return .low
+        case .lightest: return .lightest
         }
     }
 }
@@ -42,7 +48,7 @@ public enum GraphicsQuality: String, Codable, CaseIterable, Sendable {
 public struct GraphicsProfile: Equatable, Sendable {
 
     public enum Level: Int, Comparable, CaseIterable, Sendable {
-        case low = 0, medium, high
+        case lightest = 0, low, medium, high
 
         public static func < (lhs: Level, rhs: Level) -> Bool { lhs.rawValue < rhs.rawValue }
 
@@ -54,6 +60,7 @@ public struct GraphicsProfile: Equatable, Sendable {
             case .high: return L("High")
             case .medium: return L("Medium")
             case .low: return L("Low")
+            case .lightest: return L("Lightest")
             }
         }
     }
@@ -88,6 +95,11 @@ public struct GraphicsProfile: Equatable, Sendable {
         case .low:
             return GraphicsProfile(level: .low, shadowDistance: nil, resolutionScale: 0.7, viewDistance: 80,
                                    smoothShapes: false, roundSegments: 10, sphereRings: 6, postEffects: false)
+        case .lightest:
+            // Fewer pixels and a nearer horizon do most of the work. Parts
+            // out of view still collide, move and run their scripts.
+            return GraphicsProfile(level: .lightest, shadowDistance: nil, resolutionScale: 0.55, viewDistance: 55,
+                                   smoothShapes: false, roundSegments: 8, sphereRings: 4, postEffects: false)
         }
     }
 }
@@ -125,6 +137,16 @@ public struct FrameRateGovernor: Sendable {
 
     public init(startingAt level: GraphicsProfile.Level = .high) {
         self.level = level
+    }
+
+    /// Comes down to `cap` straight away (Low Power Mode, a hot iPad), so the
+    /// next steps down start from there instead of from levels that were
+    /// never drawn.
+    public mutating func limit(to cap: GraphicsProfile.Level) {
+        guard level > cap else { return }
+        level = cap
+        slowWindows = 0
+        fastWindows = 0
     }
 
     /// Adds one frame. Returns the new level when it changes.

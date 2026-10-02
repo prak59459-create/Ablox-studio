@@ -197,6 +197,10 @@ extension AvatarEntity {
         }
         // Leaning forward tips the top toward the front (-Z), about the feet.
         rig.orientation = simd_quatf(angle: -limbs.lean, axis: Self.sideways)
+        // The head leans back by as much, so it keeps looking ahead instead
+        // of at the ground while running or riding. Looking about when idle
+        // (`lookAbout`) sets the head after this.
+        head.orientation = simd_quatf(angle: limbs.lean, axis: Self.sideways)
     }
 
     /// Swinging forward (about X: the avatar faces -Z, so a positive angle

@@ -16,6 +16,7 @@ final class GraphicsTests: XCTestCase {
         let high = GraphicsProfile.profile(for: .high)
         let medium = GraphicsProfile.profile(for: .medium)
         let low = GraphicsProfile.profile(for: .low)
+        let lightest = GraphicsProfile.profile(for: .lightest)
         XCTAssertNil(low.shadowDistance)
         XCTAssertLessThan(medium.shadowDistance!, high.shadowDistance!)
         XCTAssertLessThan(low.resolutionScale, medium.resolutionScale)
@@ -23,15 +24,42 @@ final class GraphicsTests: XCTestCase {
         XCTAssertLessThan(low.viewDistance!, medium.viewDistance!)
         XCTAssertLessThan(low.roundSegments, high.roundSegments)
         XCTAssertLessThan(low.sphereRings, high.sphereRings)
+        XCTAssertNil(lightest.shadowDistance)
+        XCTAssertFalse(lightest.postEffects)
+        XCTAssertLessThan(lightest.resolutionScale, low.resolutionScale)
+        XCTAssertLessThan(lightest.viewDistance!, low.viewDistance!)
+        XCTAssertLessThan(lightest.roundSegments, low.roundSegments)
+        XCTAssertLessThan(lightest.sphereRings, low.sphereRings)
+    }
+
+    func testLevelsAreInOrderFromLightestToHigh() {
+        XCTAssertEqual(GraphicsProfile.Level.allCases, [.lightest, .low, .medium, .high])
+        XCTAssertNil(GraphicsProfile.Level.lightest.lower)
+        XCTAssertEqual(GraphicsProfile.Level.lightest.higher, .low)
+        XCTAssertEqual(GraphicsQuality.lightest.fixedLevel, .lightest)
+    }
+
+    func testACapBringsAutoDownAtOnceAndItKeepsGoingFromThere() {
+        // Low Power Mode caps at medium: Auto starts there, not at high.
+        var governor = FrameRateGovernor()
+        governor.limit(to: .medium)
+        XCTAssertEqual(governor.level, .medium)
+        // Still too slow: the very next steps go lower than the cap.
+        XCTAssertEqual(run(&governor, fps: 20, seconds: 2.5), [.low])
+        XCTAssertEqual(run(&governor, fps: 20, seconds: 2.5), [.lightest])
+        // A cap above where it already is changes nothing.
+        governor.limit(to: .high)
+        XCTAssertEqual(governor.level, .lightest)
     }
 
     func testASlowGameStepsDownUntilItIsFastEnough() {
         var governor = FrameRateGovernor()
         XCTAssertEqual(run(&governor, fps: 20, seconds: 2.5), [.medium])
         XCTAssertEqual(run(&governor, fps: 22, seconds: 2.5), [.low])
+        XCTAssertEqual(run(&governor, fps: 21, seconds: 2.5), [.lightest])
         // Nothing lower to go to.
         XCTAssertEqual(run(&governor, fps: 20, seconds: 5), [])
-        XCTAssertEqual(governor.level, .low)
+        XCTAssertEqual(governor.level, .lightest)
         XCTAssertEqual(governor.framesPerSecond, 20, accuracy: 1)
     }
 

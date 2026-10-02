@@ -1,16 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "2.2",
-  "build": 13,
+  "version": "2.3",
+  "build": 14,
   "protocol": 8,
   "date": "2026-10-02",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shared with Ablox 2.4: big worlds keep up faster when blocks are added, moved or changed, in test play and while editing"
+      "The game preview has the new \"Lightest\" graphics from Ablox 2.5, and characters keep looking ahead while running",
+      "Everything from 2.2: faster editing of worlds with lots of parts"
     ],
     "ja": [
-      "Ablox 2.4 といっしょ: 大きなワールドで ブロックを 足す・動かす・かえるのが 速くなりました（テストプレイでも 編集中でも）"
+      "ゲームのプレビューに Ablox 2.5 の新しい画質「最軽量」が入り、走るときも キャラクターが 前を見るようになりました",
+      "2.2 の内容もそのまま: パーツの多いワールドの編集が速い"
     ]
   }
 }
