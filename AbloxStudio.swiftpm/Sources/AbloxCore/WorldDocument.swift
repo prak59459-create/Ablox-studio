@@ -176,7 +176,24 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
     public var createdAt: Date
     public var modifiedAt: Date
     public var environment: EnvironmentSettings
-    public var blocks: [BlockData]
+    /// Changed in place (a `didSet` here would copy every block on each
+    /// change made from another module), and every change gets a new
+    /// `blockRevision`.
+    public var blocks: [BlockData] {
+        get { storedBlocks }
+        _modify {
+            defer { blockRevision = BlockRevision.next() }
+            yield &storedBlocks
+        }
+        set {
+            storedBlocks = newValue
+            blockRevision = BlockRevision.next()
+        }
+    }
+    private var storedBlocks: [BlockData]
+    /// Different after every change to `blocks`, so a cache can tell at
+    /// once that nothing has changed (see `BlockRevision`).
+    public private(set) var blockRevision = BlockRevision.next()
     public var rules: [EventRule]
     /// The world's `.absc` script files. Empty for a world run by rules alone.
     public var scripts: [ScriptFile]
@@ -206,7 +223,7 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
         self.createdAt = createdAt
         self.modifiedAt = modifiedAt
         self.environment = environment
-        self.blocks = blocks
+        self.storedBlocks = blocks
         self.rules = rules
         self.scripts = scripts
         self.scriptSource = scriptSource
@@ -247,7 +264,7 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         modifiedAt = try c.decode(Date.self, forKey: .modifiedAt)
         environment = try c.decode(EnvironmentSettings.self, forKey: .environment)
-        blocks = try c.decode([BlockData].self, forKey: .blocks)
+        storedBlocks = try c.decode([BlockData].self, forKey: .blocks)
         rules = try c.decodeIfPresent([EventRule].self, forKey: .rules) ?? []
         if let files = try c.decodeIfPresent([ScriptFile].self, forKey: .scripts) {
             scripts = files

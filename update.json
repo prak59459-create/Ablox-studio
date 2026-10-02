@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "2.1",
-  "build": 12,
+  "version": "2.2",
+  "build": 13,
   "protocol": 8,
-  "date": "2026-10-01",
+  "date": "2026-10-02",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shared with Ablox 2.3: today() gives the date for weekly and seasonal events in test play too"
+      "Shared with Ablox 2.4: big worlds keep up faster when blocks are added, moved or changed, in test play and while editing"
     ],
     "ja": [
-      "Ablox 2.3 といっしょ: today() で日付が分かり、テストプレイでも曜日や季節のイベントが試せます"
+      "Ablox 2.4 といっしょ: 大きなワールドで ブロックを 足す・動かす・かえるのが 速くなりました（テストプレイでも 編集中でも）"
     ]
   }
 }

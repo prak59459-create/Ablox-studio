@@ -41,8 +41,9 @@ public struct WorldIndex: Sendable {
     private var large: [Int] = []
     /// Where each block is in `solidBlocks`, or -1.
     private var solidSlot: [Int] = []
-    /// Blocks something else hangs from: moving one moves those too.
-    private var parents: Set<UUID> = []
+    /// What hangs from each block (their positions in the list): moving a
+    /// block moves those too.
+    private var children: [UUID: [Int]] = [:]
 
     /// Grid cells are this many metres on a side, on the ground plane.
     public static let cellSize: Float = 4
@@ -64,8 +65,13 @@ public struct WorldIndex: Sendable {
     /// through here, so a grown index is exactly the one a fresh build
     /// would make.
     mutating func append(_ added: ArraySlice<BlockData>, in blocks: [BlockData]) {
-        entries.reserveCapacity(blocks.count)
-        solidSlot.reserveCapacity(blocks.count)
+        // Room for everything at once on a fresh build; a block or two added
+        // later just grows the lists (reserving the exact size each time
+        // would copy them every time).
+        if entries.isEmpty {
+            entries.reserveCapacity(blocks.count)
+            solidSlot.reserveCapacity(blocks.count)
+        }
         // Every new block is findable first: one may hang from another
         // added in the same batch.
         for order in added.indices where orderByID[blocks[order].id] == nil {
@@ -74,7 +80,7 @@ public struct WorldIndex: Sendable {
         }
         for order in added.indices {
             let block = blocks[order]
-            if let parent = block.parentID { parents.insert(parent) }
+            if let parent = block.parentID { children[parent, default: []].append(order) }
             let entry = makeEntry(block, order: order, in: blocks)
             entries.append(entry)
             if block.isSolidForPlayers {
@@ -88,18 +94,31 @@ public struct WorldIndex: Sendable {
     }
 
     /// Re-reads blocks changed where they stand: moved, turned, resized,
-    /// recoloured. False, with nothing changed, when that could leave the
-    /// index wrong — a block that others hang from (they moved too), one
-    /// given a different parent or identity, or one that started or
-    /// stopped being solid.
-    mutating func update(orders changed: [Int], in blocks: [BlockData], was before: [BlockData]) -> Bool {
-        guard blocks.count == entries.count, before.count == entries.count else { return false }
+    /// recoloured — and everything hanging from them, which moved too.
+    /// `blocks` may be longer than the index (blocks added on the end are
+    /// for `append` next); only the ones the index has are read. The caller
+    /// has checked that none was replaced or given a different parent.
+    /// False, with nothing changed, when a block started or stopped being
+    /// solid.
+    mutating func update(orders changed: [Int], in blocks: [BlockData]) -> Bool {
+        guard blocks.count >= entries.count else { return false }
         for order in changed {
             let block = blocks[order]
-            guard block.id == before[order].id, block.parentID == before[order].parentID, !parents.contains(block.id),
-                  block.isSolidForPlayers == (solidSlot[order] >= 0) else { return false }
+            guard order < entries.count, block.id == entries[order].id, block.isSolidForPlayers == (solidSlot[order] >= 0) else { return false }
         }
-        for order in changed {
+        // A model hung from one block moves with it: its parts are read again too.
+        var seen = Set(changed)
+        var all = changed
+        var cursor = 0
+        while cursor < all.count {
+            let id = blocks[all[cursor]].id
+            cursor += 1
+            for child in children[id] ?? [] where child < entries.count && seen.insert(child).inserted {
+                guard blocks[child].isSolidForPlayers == (solidSlot[child] >= 0) else { return false }
+                all.append(child)
+            }
+        }
+        for order in all {
             let block = blocks[order], old = entries[order]
             let entry = makeEntry(block, order: order, in: blocks)
             entries[order] = entry
@@ -231,13 +250,53 @@ public struct WorldIndex: Sendable {
 
 /// Keeps one `WorldIndex` up to date with the blocks.
 ///
-/// The check is an array comparison, which is instant while the world has
-/// not changed (the two arrays share storage) and a single pass when it has.
-/// Blocks added on the end, and a few blocks moved where they stand — a
-/// coin dropped, a platform sliding, which is nearly every change in a round
-/// — are folded into the index; anything else builds it again.
+/// While the world has not changed (its `blockRevision` is the one the index
+/// was made at) the check is instant. When it has, each block is compared
+/// with the few fields its entry was made from: blocks added on the end and
+/// blocks changed where they stand — a coin dropped, a platform sliding, a
+/// character's root moved with its parts, which is nearly every change in a
+/// round — are folded into the index; anything else builds it again.
+///
+/// The cache keeps only those fields, never the block list itself: holding
+/// on to the list made every change to the world copy all of it.
 public final class WorldIndexCache: @unchecked Sendable {
-    private var blocks: [BlockData]?
+    /// What a block's entry is made from.
+    private struct Key {
+        let id: UUID
+        let transform: Transform3D
+        let parentID: UUID?
+        let shape: BlockShape
+        let isVisible: Bool
+        let hasCollision: Bool
+        let behavior: BlockBehavior
+        let material: MaterialKind
+
+        init(_ block: BlockData) {
+            id = block.id
+            transform = block.transform
+            parentID = block.parentID
+            shape = block.shape
+            isVisible = block.isVisible
+            hasCollision = block.hasCollision
+            behavior = block.behavior
+            material = block.material
+        }
+
+        func matches(_ block: BlockData) -> Bool {
+            id == block.id && transform == block.transform && parentID == block.parentID && isVisible == block.isVisible
+                && hasCollision == block.hasCollision && Self.sameCase(shape, block.shape) && Self.sameCase(behavior, block.behavior)
+                && Self.sameCase(material, block.material)
+        }
+
+        /// The same case of an enum with no payload. `==` on these goes
+        /// through their text raw values, which was most of the comparison.
+        private static func sameCase<T>(_ a: T, _ b: T) -> Bool {
+            withUnsafeBytes(of: a) { x in withUnsafeBytes(of: b) { y in x.elementsEqual(y) } }
+        }
+    }
+
+    private var keys: [Key] = []
+    private var revision: UInt64?
     private var cached: WorldIndex?
     private let lock = NSLock()
 
@@ -246,31 +305,73 @@ public final class WorldIndexCache: @unchecked Sendable {
     public func index(for world: WorldDocument) -> WorldIndex {
         lock.lock()
         defer { lock.unlock() }
+        if let index = cached, revision == world.blockRevision.value { return index }
         let now = world.blocks
-        if var index = cached, let old = blocks {
-            if old == now { return index }
-            if now.count > old.count, now[..<old.count].elementsEqual(old) {
-                index.append(now[old.count...], in: now)
-                return keep(index, now)
+        if var index = cached, now.count >= keys.count {
+            // Let go of the cached copy, so the one being brought up to date
+            // is the only one and grows in place instead of being copied.
+            cached = nil
+            var changed: [Int] = []
+            var tidy = true
+            let limit = Swift.max(8, keys.count / 8)
+            for order in keys.indices where !keys[order].matches(now[order]) {
+                // A block replaced or hung from something else: start again.
+                guard keys[order].id == now[order].id, keys[order].parentID == now[order].parentID else {
+                    tidy = false
+                    break
+                }
+                changed.append(order)
+                if changed.count > limit {
+                    tidy = false
+                    break
+                }
             }
-            if now.count == old.count {
-                var changed: [Int] = []
-                let limit = Swift.max(8, now.count / 8)
-                for order in now.indices where now[order] != old[order] {
-                    changed.append(order)
-                    if changed.count > limit { break }
+            if tidy, changed.isEmpty || index.update(orders: changed, in: now) {
+                for order in changed { keys[order] = Key(now[order]) }
+                if now.count > keys.count {
+                    let added = now[keys.count...]
+                    index.append(added, in: now)
+                    keys.append(contentsOf: added.map(Key.init))
                 }
-                if changed.count <= limit, index.update(orders: changed, in: now, was: old) {
-                    return keep(index, now)
-                }
+                return keep(index, world)
             }
         }
-        return keep(WorldIndex(world: world), now)
+        keys = now.map(Key.init)
+        return keep(WorldIndex(world: world), world)
     }
 
-    private func keep(_ index: WorldIndex, _ now: [BlockData]) -> WorldIndex {
-        blocks = now
+    private func keep(_ index: WorldIndex, _ world: WorldDocument) -> WorldIndex {
         cached = index
+        revision = world.blockRevision.value
         return index
+    }
+}
+
+/// A number that is different every time a world's blocks change. Copies of
+/// a world share it until one of them changes, so two worlds with the same
+/// number have the same blocks. Never saved, and two worlds are equal or not
+/// whatever theirs are.
+public struct BlockRevision: Hashable, Sendable {
+    public let value: UInt64
+
+    public static func == (lhs: BlockRevision, rhs: BlockRevision) -> Bool { true }
+    public func hash(into hasher: inout Hasher) {}
+
+    static func next() -> BlockRevision {
+        BlockRevision(value: counter.next())
+    }
+
+    private static let counter = RevisionCounter()
+}
+
+private final class RevisionCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var last: UInt64 = 0
+
+    func next() -> UInt64 {
+        lock.lock()
+        defer { lock.unlock() }
+        last &+= 1
+        return last
     }
 }

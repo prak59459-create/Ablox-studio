@@ -77,13 +77,17 @@ final class WorldIndexTests: XCTestCase {
     }
 
     /// Kept up edit by edit — blocks added, moved, hidden, removed,
-    /// re-parented — the cached index is always the one a fresh build gives.
+    /// re-parented, sometimes several at once — the cached index is always
+    /// the one a fresh build gives.
     func testTheCacheKeptUpEditByEditMatchesAFreshIndex() {
         var world = randomWorld(count: 180, seed: 21)
         var random = SeededRandom(seed: 99)
         let cache = WorldIndexCache()
         _ = cache.index(for: world)
         for step in 0..<400 {
+          // One edit, or a few between two looks: a model's root moved and
+          // a coin dropped in the same moment.
+          for _ in 0..<(step % 3 == 0 ? random.integer(2, 4) : 1) {
             let roll = random.integer(0, 9)
             let pick = random.integer(1, world.blocks.count - 1)
             switch roll {
@@ -111,6 +115,7 @@ final class WorldIndexTests: XCTestCase {
             default:
                 world.blocks[pick].transform.scale = Vec3(Float(random.integer(1, 90)), 1, Float(random.integer(1, 90)))
             }
+          }
             let kept = cache.index(for: world)
             let fresh = WorldIndex(world: world)
             XCTAssertEqual(kept.entries, fresh.entries, "step \(step)")
@@ -124,6 +129,27 @@ final class WorldIndexTests: XCTestCase {
                 }
             }
         }
+    }
+
+    /// A model hung from one block (a carpet character): moving the root
+    /// moves every part in the index, and recolouring a part, which the
+    /// index does not keep, changes nothing in it.
+    func testMovingAModelsRootMovesItsPartsInTheIndex() {
+        var world = randomWorld(count: 60, seed: 5)
+        let root = BlockData(name: "Root", transform: Transform3D(position: Vec3(0, 0, 0), scale: Vec3(0.1, 0.1, 0.1)))
+        world.blocks.append(root)
+        for i in 0..<12 {
+            world.blocks.append(BlockData(name: "Part \(i)", transform: Transform3D(position: Vec3(Float(i), 5, 0)), parentID: root.id))
+        }
+        let cache = WorldIndexCache()
+        _ = cache.index(for: world)
+        let rootOrder = world.blocks.count - 13
+        world.blocks[rootOrder].transform.position = Vec3(40, 0, -20)
+        world.blocks[rootOrder + 3].color = ColorRGBA(r: 1, g: 0, b: 0, a: 1)
+        world.blocks.append(BlockData(name: "Coin", transform: Transform3D(position: Vec3(3, 1, 3))))
+        let kept = cache.index(for: world)
+        XCTAssertEqual(kept.entries, WorldIndex(world: world).entries)
+        XCTAssertEqual(kept.entry(for: world.blocks[rootOrder + 1].id)?.position.x ?? 0, 40, accuracy: 0.001)
     }
 
     func testTheColliderGivesTheSameAnswerThroughTheIndex() {
