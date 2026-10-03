@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "2.7",
-  "build": 18,
+  "version": "2.8",
+  "build": 19,
   "protocol": 8,
   "date": "2026-10-03",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shares Ablox 2.9's engine (a longer frame-rate test for the developers); everything from 2.6 is still here"
+      "Shares Ablox 3.0's engine (a more detailed frame-rate test for the developers); everything from 2.6 is still here"
     ],
     "ja": [
-      "Ablox 2.9 と同じエンジン（開発用の速さのテストを長く）。2.6 の内容もそのまま"
+      "Ablox 3.0 と同じエンジン（開発用の速さのテストを くわしく）。2.6 の内容もそのまま"
     ]
   }
 }

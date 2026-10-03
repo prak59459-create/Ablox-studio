@@ -62,6 +62,23 @@ public final class WorldScene {
         }
     }
 
+    /// Whether baked parts' entities leave the scene rather than being
+    /// switched off. Only the launch check's frame-rate run turns it on, to
+    /// find out whether entities that are off still cost RealityKit time.
+    public var detachesBakedParts = false {
+        didSet {
+            guard detachesBakedParts != oldValue, let baker else { return }
+            for id in baker.baked {
+                guard let entity = entities[id], let block = lastAppliedBlocks[id] else { continue }
+                if detachesBakedParts {
+                    entity.removeFromParent()
+                } else {
+                    reparentIfNeeded(entity, block: block, forceTopLevel: false)
+                }
+            }
+        }
+    }
+
     /// Parts drawn by an entity of their own, for the launch check.
     public var partsDrawnOnTheirOwn: Int {
         entities.values.reduce(0) { $0 + ($1.isEnabled && $1.model != nil ? 1 : 0) }
@@ -198,7 +215,7 @@ public final class WorldScene {
         // right entity once all of them exist.
         for order in orders {
             let block = blocks[order]
-            guard let entity = entities[block.id] else { continue }
+            guard let entity = entities[block.id], !(detachesBakedParts && baker?.isBaked(block.id) == true) else { continue }
             if let parentID = block.parentID, entities[parentID] != nil, parentIDs.insert(parentID).inserted {
                 // Something was hung from it: it draws on its own from now,
                 // and is never hidden for distance.
@@ -276,8 +293,9 @@ public final class WorldScene {
             entity = existing
             // Skip untouched blocks: the common case during a drag is that
             // one block changed and the rest did not.
-            if !physicsChanged, previous == block, entity.parent != nil {
-                reparentIfNeeded(entity, block: block, forceTopLevel: forceTopLevel)
+            let detached = detachesBakedParts && baker?.isBaked(block.id) == true
+            if !physicsChanged, previous == block, entity.parent != nil || detached {
+                if !detached { reparentIfNeeded(entity, block: block, forceTopLevel: forceTopLevel) }
                 return
             }
         } else {
@@ -305,6 +323,7 @@ public final class WorldScene {
             }
         }
         entity.isEnabled = shouldShow(block.id)
+        if detachesBakedParts && baker?.isBaked(block.id) == true { return }
         reparentIfNeeded(entity, block: block, forceTopLevel: forceTopLevel)
     }
 
@@ -328,6 +347,13 @@ public final class WorldScene {
 
     private func refreshShown(_ id: UUID) {
         guard let entity = entities[id] else { return }
+        if detachesBakedParts, let block = lastAppliedBlocks[id] {
+            if baker?.isBaked(id) == true {
+                entity.removeFromParent()
+                return
+            }
+            if entity.parent == nil { reparentIfNeeded(entity, block: block, forceTopLevel: false) }
+        }
         let show = shouldShow(id)
         if entity.isEnabled != show { entity.isEnabled = show }
     }

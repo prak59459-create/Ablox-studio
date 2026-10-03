@@ -259,7 +259,11 @@ public struct GameViewport: UIViewRepresentable {
         /// own on High (to compare), then merged meshes on Auto.
         private var benchmarkPhase = 0
         private var benchmarkStart: Double?
-        private static let benchmarkPhases = ["merged-high", "single-high", "merged-auto"]
+        private static let benchmarkPhases = ["merged-high", "single-high", "detached-high", "merged-auto"]
+        /// Time in each part of `tick` over the last second: the world,
+        /// moving, the camera and sky, the words and names, the rest.
+        private var sectionSeconds = [Double](repeating: 0, count: 5)
+        private var sectionMark: Double = 0
         /// Time spent in `tick` over the last second, for the run's report.
         private var tickSeconds: Double = 0
         private var tickLongest: Double = 0
@@ -589,8 +593,16 @@ public struct GameViewport: UIViewRepresentable {
 
         private func tick(deltaTime: Float) {
             let started = reportsFrameRate ? CACurrentMediaTime() : 0
-            defer { if reportsFrameRate { noteTickTime(CACurrentMediaTime() - started) } }
-            if reportsFrameRate { runBenchmarkPhases() }
+            defer {
+                if reportsFrameRate {
+                    endSection(4)
+                    noteTickTime(CACurrentMediaTime() - started)
+                }
+            }
+            if reportsFrameRate {
+                sectionMark = started
+                runBenchmarkPhases()
+            }
             let dt = min(deltaTime, 1.0 / 20)
             // Everything the game changed since the last frame, in one go.
             let session = parent.session
@@ -601,6 +613,7 @@ public struct GameViewport: UIViewRepresentable {
             syncWorldChanges(session.world, index: index)
             followPlayers()
             worldScene.update()
+            endSection(0)
             elapsed += Double(dt)
             watchFrameRate(deltaTime)
 
@@ -685,16 +698,19 @@ public struct GameViewport: UIViewRepresentable {
             // 6. Apply anything the host told us to do since the last frame.
             let effects = parent.session.drainEffects()
             if !effects.isEmpty { apply(effects: effects) }
+            endSection(1)
 
             updateCamera(dt: dt, index: index)
             // The compass and a turning map catch up a few times a second.
             controls.showBearing(at: CACurrentMediaTime())
             updateAtmosphere(world: world, index: index, dt: dt)
+            endSection(2)
             updateWaypoint()
             updateMusic(world: world)
             updateChatBubbles()
             updateNameTags()
             updateBlockLabels()
+            endSection(3)
             animationClock += Double(dt)
             worldScene.animateBlocks(time: animationClock, eye: Vec3(camera.position(relativeTo: nil)))
             labelClock += dt
@@ -822,7 +838,7 @@ public struct GameViewport: UIViewRepresentable {
 
         func setGraphics(quality: GraphicsQuality, showFrameRate: Bool) {
             // The frame-rate run sets its own level for each of its parts.
-            let quality = reportsFrameRate ? (benchmarkPhase == 2 ? GraphicsQuality.auto : .high) : quality
+            let quality = reportsFrameRate ? (benchmarkPhase == 3 ? GraphicsQuality.auto : .high) : quality
             if quality != graphicsQuality || appliedProfile == nil {
                 graphicsQuality = quality
                 // Auto starts from the top and steps down if it has to.
@@ -896,7 +912,8 @@ public struct GameViewport: UIViewRepresentable {
 
         /// The frame-rate run: 40 seconds of merged meshes on High (sampled
         /// from the outside at 26 to 34), 20 with every part drawn on its
-        /// own, then merged meshes on Auto.
+        /// own, 20 with baked parts' entities out of the scene rather than
+        /// switched off, then merged meshes on Auto.
         private func runBenchmarkPhases() {
             watchMainThread()
             let now = CACurrentMediaTime()
@@ -904,11 +921,21 @@ public struct GameViewport: UIViewRepresentable {
             benchmarkStart = start
             // Looking round the town, as a player does.
             parent.controls.cameraYaw = normalizeDegrees(Float(now - start) * 24)
-            let phase = now - start < 40 ? 0 : (now - start < 60 ? 1 : 2)
+            let seconds = now - start
+            let phase = seconds < 40 ? 0 : (seconds < 60 ? 1 : (seconds < 80 ? 2 : 3))
             guard phase != benchmarkPhase else { return }
             benchmarkPhase = phase
             worldScene.bakesStillParts = phase != 1
+            worldScene.detachesBakedParts = phase == 2
             setGraphics(quality: parent.graphicsQuality, showFrameRate: parent.showFrameRate)
+        }
+
+        /// The run's report: time since the last mark goes to `section`.
+        private func endSection(_ section: Int) {
+            guard reportsFrameRate else { return }
+            let now = CACurrentMediaTime()
+            sectionSeconds[section] += now - sectionMark
+            sectionMark = now
         }
 
         private func noteTickTime(_ seconds: Double) {
@@ -926,9 +953,12 @@ public struct GameViewport: UIViewRepresentable {
             let merged = worldScene.mergedSummary
             let level = appliedProfile?.level ?? governor.level
             let mean = tickCount > 0 ? tickSeconds / Double(tickCount) * 1000 : 0
-            let line = String(format: "AbloxFPS %.1f phase=%@ level=%@ pixels=%.2f cpu=%.1f/%.1fms main=%.0f%% ui=%ld meshes=%ld baked=%ld single=%ld second=%.0f\n",
+            let frames = Double(max(tickCount, 1))
+            let parts = sectionSeconds.map { String(format: "%.1f", $0 / frames * 1000) }.joined(separator: "/")
+            sectionSeconds = [Double](repeating: 0, count: sectionSeconds.count)
+            let line = String(format: "AbloxFPS %.1f phase=%@ level=%@ pixels=%.2f cpu=%.1f/%.1fms parts=%@ main=%.0f%% ui=%ld meshes=%ld baked=%ld single=%ld second=%.0f\n",
                               governor.framesPerSecond, Self.benchmarkPhases[benchmarkPhase], level.displayName,
-                              Double(governor.resolutionFactor), mean, tickLongest * 1000, min(100, mainAwake * 100),
+                              Double(governor.resolutionFactor), mean, tickLongest * 1000, parts, min(100, mainAwake * 100),
                               swiftUIUpdates, merged.meshes, merged.parts, worldScene.partsDrawnOnTheirOwn, reportedFrames)
             tickSeconds = 0
             tickLongest = 0
