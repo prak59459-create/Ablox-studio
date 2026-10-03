@@ -259,7 +259,7 @@ public struct GameViewport: UIViewRepresentable {
         /// own on High (to compare), then merged meshes on Auto.
         private var benchmarkPhase = 0
         private var benchmarkStart: Double?
-        private static let benchmarkPhases = ["merged-high", "single-high", "detached-high", "merged-auto"]
+        private static let benchmarkPhases = ["merged-high", "single-high", "merged-auto"]
         /// Time in each part of `tick` over the last second: the world,
         /// moving, the camera and sky, the words and names, the rest.
         private var sectionSeconds = [Double](repeating: 0, count: 5)
@@ -838,7 +838,7 @@ public struct GameViewport: UIViewRepresentable {
 
         func setGraphics(quality: GraphicsQuality, showFrameRate: Bool) {
             // The frame-rate run sets its own level for each of its parts.
-            let quality = reportsFrameRate ? (benchmarkPhase == 3 ? GraphicsQuality.auto : .high) : quality
+            let quality = reportsFrameRate ? (benchmarkPhase == 2 ? GraphicsQuality.auto : .high) : quality
             if quality != graphicsQuality || appliedProfile == nil {
                 graphicsQuality = quality
                 // Auto starts from the top and steps down if it has to.
@@ -912,8 +912,7 @@ public struct GameViewport: UIViewRepresentable {
 
         /// The frame-rate run: 40 seconds of merged meshes on High (sampled
         /// from the outside at 26 to 34), 20 with every part drawn on its
-        /// own, 20 with baked parts' entities out of the scene rather than
-        /// switched off, then merged meshes on Auto.
+        /// own, then merged meshes on Auto.
         private func runBenchmarkPhases() {
             watchMainThread()
             let now = CACurrentMediaTime()
@@ -922,11 +921,10 @@ public struct GameViewport: UIViewRepresentable {
             // Looking round the town, as a player does.
             parent.controls.cameraYaw = normalizeDegrees(Float(now - start) * 24)
             let seconds = now - start
-            let phase = seconds < 40 ? 0 : (seconds < 60 ? 1 : (seconds < 80 ? 2 : 3))
+            let phase = seconds < 40 ? 0 : (seconds < 60 ? 1 : 2)
             guard phase != benchmarkPhase else { return }
             benchmarkPhase = phase
             worldScene.bakesStillParts = phase != 1
-            worldScene.detachesBakedParts = phase == 2
             setGraphics(quality: parent.graphicsQuality, showFrameRate: parent.showFrameRate)
         }
 
@@ -1132,8 +1130,17 @@ public struct GameViewport: UIViewRepresentable {
             if world.blockRevision.value != placedFrom {
                 let previous = placedFrom
                 placedFrom = world.blockRevision.value
-                elevatorHomes = world.blocks.compactMap { block in
-                    block.behavior == .elevator ? (id: block.id, home: block.position, gimmick: block.gimmick) : nil
+                let changed = previous.flatMap { world.blocksChanged(since: $0) }
+                let blocks = world.blocks
+                if let changed, !changed.contains(where: { $0 >= blocks.count || Self.mayBeElevator(blocks[$0], among: elevatorHomes) }) {
+                    // Only blocks changed one at a time, none of them a moving
+                    // platform: the list stands. Reading every block for it,
+                    // ten times a second while characters walked, cost more
+                    // than the rest of the frame's own work together.
+                } else {
+                    elevatorHomes = blocks.compactMap { block in
+                        block.behavior == .elevator ? (id: block.id, home: block.position, gimmick: block.gimmick) : nil
+                    }
                 }
                 if elevatorHomes.isEmpty {
                     placedWorld = nil
@@ -1141,7 +1148,7 @@ public struct GameViewport: UIViewRepresentable {
                     // Only what changed, so the index looks at those alone
                     // rather than at every block of a copy made afresh.
                     var caughtUp = false
-                    if var placed = placedWorld, let previous, let changed = world.blocksChanged(since: previous) {
+                    if var placed = placedWorld, let changed {
                         // Let go of the stored copy first, so this one is
                         // changed in place rather than copied.
                         placedWorld = nil
@@ -1176,6 +1183,11 @@ public struct GameViewport: UIViewRepresentable {
             platformOffsets = offsets
             placedWorld = placed
             return placed
+        }
+
+        /// Whether a changed block is, or was, a moving platform.
+        private static func mayBeElevator(_ block: BlockData, among homes: [(id: UUID, home: Vec3, gimmick: GimmickSettings)]) -> Bool {
+            block.behavior == .elevator || homes.contains { $0.id == block.id }
         }
 
         /// Brings a copy up to date with the blocks of `world` at `orders`,

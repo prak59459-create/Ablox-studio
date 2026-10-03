@@ -165,6 +165,15 @@ public enum RenderMerging {
             && a.animation == b.animation
     }
 
+    /// Whether the only difference is where the block is, how it is turned
+    /// and how big it is: then its entity is only moved.
+    public static func onlyMoved(_ a: BlockData, _ b: BlockData) -> Bool {
+        guard a.transform != b.transform else { return false }
+        var moved = a
+        moved.transform = b.transform
+        return moved == b
+    }
+
     /// Whether a block draws nothing at all: see-through to the end, like the
     /// root a character's parts hang from. Such a block keeps its place in
     /// the scene but is not handed to the GPU.

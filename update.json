@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "2.8",
-  "build": 19,
+  "version": "2.9",
+  "build": 20,
   "protocol": 8,
   "date": "2026-10-03",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shares Ablox 3.0's engine (a more detailed frame-rate test for the developers); everything from 2.6 is still here"
+      "Shares Ablox 3.1's engine: moving blocks in the game preview are only moved, nothing else about them is looked at again; everything from 2.6 is still here"
     ],
     "ja": [
-      "Ablox 3.0 と同じエンジン（開発用の速さのテストを くわしく）。2.6 の内容もそのまま"
+      "Ablox 3.1 と同じエンジン: ゲームのプレビューで 動くブロックは 場所を変えるだけにしました。2.6 の内容もそのまま"
     ]
   }
 }

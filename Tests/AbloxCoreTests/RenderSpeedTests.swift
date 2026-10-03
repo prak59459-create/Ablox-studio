@@ -420,3 +420,19 @@ final class BlockOrderTests: XCTestCase {
         XCTAssertEqual(journal.orders(since: UInt64(21 + BlockJournal.capacity * 2)).map(Array.init), [])
     }
 }
+
+final class MovedBlockTests: XCTestCase {
+    func testABlockThatOnlyMovedIsToldApart() {
+        let block = BlockData(name: "Walker")
+        var moved = block
+        moved.position.x += 1
+        XCTAssertTrue(RenderMerging.onlyMoved(block, moved))
+        XCTAssertFalse(RenderMerging.onlyMoved(block, block), "not moved at all")
+        var painted = moved
+        painted.color.g = 0
+        XCTAssertFalse(RenderMerging.onlyMoved(block, painted), "moved and painted")
+        var turned = block
+        turned.rotationDegrees = Vec3(0, 90, 0)
+        XCTAssertTrue(RenderMerging.onlyMoved(block, turned))
+    }
+}
