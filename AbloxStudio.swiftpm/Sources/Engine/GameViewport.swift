@@ -894,8 +894,9 @@ public struct GameViewport: UIViewRepresentable {
             }
         }
 
-        /// The frame-rate run: 25 seconds of merged meshes on High, 25 with
-        /// every part drawn on its own, then merged meshes on Auto.
+        /// The frame-rate run: 40 seconds of merged meshes on High (sampled
+        /// from the outside at 26 to 34), 20 with every part drawn on its
+        /// own, then merged meshes on Auto.
         private func runBenchmarkPhases() {
             watchMainThread()
             let now = CACurrentMediaTime()
@@ -903,7 +904,7 @@ public struct GameViewport: UIViewRepresentable {
             benchmarkStart = start
             // Looking round the town, as a player does.
             parent.controls.cameraYaw = normalizeDegrees(Float(now - start) * 24)
-            let phase = now - start < 25 ? 0 : (now - start < 50 ? 1 : 2)
+            let phase = now - start < 40 ? 0 : (now - start < 60 ? 1 : 2)
             guard phase != benchmarkPhase else { return }
             benchmarkPhase = phase
             worldScene.bakesStillParts = phase != 1

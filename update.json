@@ -1,18 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "2.6",
-  "build": 17,
+  "version": "2.7",
+  "build": 18,
   "protocol": 8,
   "date": "2026-10-03",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shares Ablox 2.8's engine: the 3D view reads the stick and camera every frame without SwiftUI redrawing anything",
-      "Everything from 2.4 and 2.5: still parts drawn together in the game preview, faster scripts, and quicker editing of big worlds"
+      "Shares Ablox 2.9's engine (a longer frame-rate test for the developers); everything from 2.6 is still here"
     ],
     "ja": [
-      "Ablox 2.8 と同じエンジン: 3D の画面が スティックとカメラを 毎フレーム読み、SwiftUI の作りなおしを 起こしません",
-      "2.4・2.5 の内容もそのまま: プレビューで動かないパーツを まとめて描く、スクリプトが速い、大きなワールドの編集が速い"
+      "Ablox 2.9 と同じエンジン（開発用の速さのテストを長く）。2.6 の内容もそのまま"
     ]
   }
 }
