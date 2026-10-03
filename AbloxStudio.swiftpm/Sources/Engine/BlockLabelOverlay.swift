@@ -18,8 +18,9 @@ final class BlockLabelOverlay: UIView {
         let distance: Float
     }
 
-    /// More than this at once would cost frames and say nothing more.
-    static let maximumShown = 48
+    /// More than this at once would cost frames and say nothing more. The
+    /// graphics level lowers it (`GraphicsProfile.labelLimit`).
+    var maximumShown = 48
 
     private var views: [UUID: BlockLabelView] = [:]
 
@@ -36,7 +37,7 @@ final class BlockLabelOverlay: UIView {
 
     /// Exactly these labels this frame.
     func update(_ items: [Item]) {
-        let nearest = items.sorted { $0.distance < $1.distance }.prefix(Self.maximumShown)
+        let nearest = items.sorted { $0.distance < $1.distance }.prefix(maximumShown)
         var seen = Set<UUID>()
         for item in nearest {
             seen.insert(item.id)

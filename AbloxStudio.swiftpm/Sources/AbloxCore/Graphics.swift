@@ -83,23 +83,46 @@ public struct GraphicsProfile: Equatable, Sendable {
     public var sphereRings: Int
     /// HDR, soft contact shadows and depth of field.
     public var postEffects: Bool
+    /// Blocks that move by themselves (`BlockAnimation`) further than this
+    /// from the camera stand still: too far to see the difference.
+    public var animationRange: Float
+    /// The most words over blocks drawn at once, nearest first.
+    public var labelLimit: Int
+
+    public init(level: Level, shadowDistance: Float?, resolutionScale: Float, viewDistance: Float?, smoothShapes: Bool,
+                roundSegments: Int, sphereRings: Int, postEffects: Bool, animationRange: Float = 80, labelLimit: Int = 48) {
+        self.level = level
+        self.shadowDistance = shadowDistance
+        self.resolutionScale = resolutionScale
+        self.viewDistance = viewDistance
+        self.smoothShapes = smoothShapes
+        self.roundSegments = roundSegments
+        self.sphereRings = sphereRings
+        self.postEffects = postEffects
+        self.animationRange = animationRange
+        self.labelLimit = labelLimit
+    }
 
     public static func profile(for level: Level) -> GraphicsProfile {
         switch level {
         case .high:
             return GraphicsProfile(level: .high, shadowDistance: 40, resolutionScale: 1, viewDistance: nil,
-                                   smoothShapes: true, roundSegments: 24, sphereRings: 16, postEffects: true)
+                                   smoothShapes: true, roundSegments: 24, sphereRings: 16, postEffects: true,
+                                   animationRange: 80, labelLimit: 48)
         case .medium:
             return GraphicsProfile(level: .medium, shadowDistance: 20, resolutionScale: 0.85, viewDistance: 140,
-                                   smoothShapes: false, roundSegments: 16, sphereRings: 10, postEffects: true)
+                                   smoothShapes: false, roundSegments: 16, sphereRings: 10, postEffects: true,
+                                   animationRange: 60, labelLimit: 40)
         case .low:
             return GraphicsProfile(level: .low, shadowDistance: nil, resolutionScale: 0.7, viewDistance: 80,
-                                   smoothShapes: false, roundSegments: 10, sphereRings: 6, postEffects: false)
+                                   smoothShapes: false, roundSegments: 10, sphereRings: 6, postEffects: false,
+                                   animationRange: 42, labelLimit: 30)
         case .lightest:
             // Fewer pixels and a nearer horizon do most of the work. Parts
             // out of view still collide, move and run their scripts.
             return GraphicsProfile(level: .lightest, shadowDistance: nil, resolutionScale: 0.55, viewDistance: 55,
-                                   smoothShapes: false, roundSegments: 8, sphereRings: 4, postEffects: false)
+                                   smoothShapes: false, roundSegments: 8, sphereRings: 4, postEffects: false,
+                                   animationRange: 30, labelLimit: 22)
         }
     }
 }
@@ -108,9 +131,15 @@ public struct GraphicsProfile: Equatable, Sendable {
 /// game stays above 30 fps, without flickering between two levels.
 ///
 /// Frame times are gathered into one-second windows. Two slow windows in a
-/// row step down straight away — a stutter is what people notice. Stepping
-/// back up waits for a long run of fast windows, and never goes back to a
-/// level that was too slow in the last minute.
+/// row step down straight away — a stutter is what people notice — and one
+/// very slow window is enough. Stepping back up waits for a long run of fast
+/// windows, and never goes back to a level that was too slow in the last
+/// minute.
+///
+/// Within a level it aims for a smooth 60: a window under 50 fps draws a
+/// little fewer pixels (`resolutionFactor`, down to 80 %), which on an iPad's
+/// screen is hard to see, before any shadow or shape is given up. Fast
+/// windows give the pixels back first, then try the level above.
 public struct FrameRateGovernor: Sendable {
 
     public private(set) var level: GraphicsProfile.Level
@@ -121,11 +150,23 @@ public struct FrameRateGovernor: Sendable {
     /// Below this, a window counts as slow. A little under 30, so a game
     /// that sits at exactly 30 is not pushed around by rounding.
     static let slowFPS: Double = 28
+    /// Below this, one window is enough to step down.
+    static let verySlowFPS: Double = 16
+    /// Below this (but not slow), a few pixels are given up to stay smooth.
+    static let smoothFPS: Double = 50
     /// At or above this, a window counts as having room to spare.
     static let fastFPS: Double = 55
     static let slowWindowsToStepDown = 2
     static let fastWindowsToStepUp = 10
+    /// Fast windows before a step of resolution is given back.
+    static let fastWindowsToSharpen = 3
     static let noReturnSeconds: Double = 60
+    public static let lowestResolutionFactor: Float = 0.8
+    static let resolutionStep: Float = 0.05
+
+    /// The share of the level's resolution being drawn: 1, or a little less
+    /// to stay smooth. Multiply it into `GraphicsProfile.resolutionScale`.
+    public private(set) var resolutionFactor: Float = 1
 
     private var clock: Double = 0
     private var windowTime: Double = 0
@@ -147,6 +188,7 @@ public struct FrameRateGovernor: Sendable {
         level = cap
         slowWindows = 0
         fastWindows = 0
+        resolutionFactor = 1
     }
 
     /// Adds one frame. Returns the new level when it changes.
@@ -176,12 +218,27 @@ public struct FrameRateGovernor: Sendable {
             fastWindows = 0
         }
 
-        if slowWindows >= Self.slowWindowsToStepDown, let lower = level.lower {
+        let verySlow = framesPerSecond < Self.verySlowFPS
+        if slowWindows >= Self.slowWindowsToStepDown || verySlow, let lower = level.lower {
             tooSlowAt[level] = clock
             level = lower
             slowWindows = 0
             fastWindows = 0
+            resolutionFactor = 1
             return level
+        }
+
+        // Smooth, not just playable: a few pixels before a whole level.
+        if framesPerSecond < Self.smoothFPS, framesPerSecond >= Self.slowFPS || level.lower == nil {
+            resolutionFactor = Swift.max(Self.lowestResolutionFactor, resolutionFactor - Self.resolutionStep)
+            return nil
+        }
+        if framesPerSecond >= Self.fastFPS, resolutionFactor < 1 {
+            if fastWindows >= Self.fastWindowsToSharpen {
+                resolutionFactor = Swift.min(1, resolutionFactor + Self.resolutionStep)
+                fastWindows = 0
+            }
+            return nil
         }
 
         if fastWindows >= Self.fastWindowsToStepUp, let higher = level.higher {

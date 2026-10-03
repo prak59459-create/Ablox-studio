@@ -105,23 +105,43 @@ public enum BlockEntityFactory {
     }
 
     public static func material(for block: BlockData, picture: WorldImage? = nil) -> RealityKit.Material {
+        material(for: block, picture: picture, merged: false).material
+    }
+
+    /// The material for a block drawn as part of a merged mesh, and a key
+    /// that is the same for every block that can share it. The pattern
+    /// repeats once: each block's own repeats are baked into its texture
+    /// coordinates (`textureRepeats`), so a long wall and a small crate of
+    /// the same brick share one material.
+    public static func mergedMaterial(for block: BlockData) -> (key: AnyHashable, material: RealityKit.Material) {
+        let made = material(for: block, picture: nil, merged: true)
+        return (AnyHashable(made.key), made.material)
+    }
+
+    /// How many times a block's pattern repeats across it.
+    public static func textureRepeats(for block: BlockData) -> Float {
+        let marked = marksMeaning && MeaningMark.mark(for: block.behavior) != nil
+        return Float(tileCount(for: block, marked: marked))
+    }
+
+    private static func material(for block: BlockData, picture: WorldImage?, merged: Bool) -> (key: MaterialKey, material: RealityKit.Material) {
         let alpha: Float = block.color.a * block.material.alphaScale
         // Read before the cache lock: `marksMeaning` takes the same lock.
         let mark: MeaningMark? = picture == nil && marksMeaning ? MeaningMark.mark(for: block.behavior) : nil
-        let tiles: UInt8 = tileCount(for: block, marked: mark != nil)
+        let tiles: UInt8 = merged ? 1 : tileCount(for: block, marked: mark != nil)
         let key = MaterialKey(r: byte(block.color.r), g: byte(block.color.g), b: byte(block.color.b), a: byte(alpha),
                               kind: block.material, tiles: tiles, picture: picture?.id, mark: mark)
 
         cacheLock.lock()
         defer { cacheLock.unlock() }
-        if let cached = materialCache[key] { return cached }
+        if let cached = materialCache[key] { return (key, cached) }
 
         let made = makeMaterial(for: block, alpha: alpha, tiles: tiles, picture: picture, mark: mark)
         // A script recolouring blocks every tick could otherwise grow this
         // forever; a few thousand colours is far more than any world uses.
         if materialCache.count > 4096 { materialCache.removeAll() }
         materialCache[key] = made
-        return made
+        return (key, made)
     }
 
     private static func byte(_ value: Float) -> UInt8 {

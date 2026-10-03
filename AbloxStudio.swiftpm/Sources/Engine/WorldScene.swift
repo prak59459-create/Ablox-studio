@@ -9,7 +9,9 @@ import AbloxCore
 /// diff-and-patch approach rather than rebuild-from-scratch, because the
 /// Studio calls `sync` on every frame of a drag and multiplayer calls it on
 /// every delta — tearing down and re-adding two hundred entities at 60 Hz
-/// would drop frames and lose RealityKit's internal caches.
+/// would drop frames and lose RealityKit's internal caches. A game goes
+/// further: it looks only at the blocks that changed (`WorldChangeLog`), and
+/// draws the parts that stay put as a few merged meshes (`StillPartBaker`).
 public final class WorldScene {
 
     public let root = Entity()
@@ -44,11 +46,18 @@ public final class WorldScene {
     private var labels: [UUID: BlockLabel] = [:]
     /// Blocks that move by themselves (`BlockAnimation`).
     private var animated: [UUID: BlockAnimation] = [:]
+    /// The ones near enough to be seen moving, looked for a few times a second.
+    private var animatedNearby: [UUID] = []
+    private var animatedLookedAt: Double = -.infinity
+    /// A game's still parts, drawn as a few merged meshes. Nil in the
+    /// Studio, where every part is picked and dragged on its own.
+    private var baker: StillPartBaker?
 
     public init(collisionShapes: Bool = true) {
         self.collisionShapes = collisionShapes
         root.name = "ablox.world"
         lightingAnchor.addChild(root)
+        if !collisionShapes { baker = StillPartBaker(scene: self) }
     }
 
     /// The anchor to add to `ARView.scene`.
@@ -56,7 +65,7 @@ public final class WorldScene {
 
     // MARK: Sync
 
-    /// Reconciles the scene against `world`.
+    /// Reconciles the scene against `world`, looking at every block.
     ///
     /// - Parameter physicsEnabled: true in Play mode. In Edit mode blocks must
     ///   not fall over while you are arranging them, so physics bodies are
@@ -64,54 +73,149 @@ public final class WorldScene {
     public func sync(to world: WorldDocument, physicsEnabled: Bool) {
         let physicsChanged = physicsEnabled != self.physicsEnabled
         self.physicsEnabled = physicsEnabled
+        if physicsChanged, physicsEnabled { baker?.dissolveAll() }
 
         syncEnvironment(world.environment)
 
-        var seen = Set<UUID>()
+        // Nothing drawn yet: the world as it comes can be baked at once.
+        let fresh = entities.isEmpty
+        let blocks = world.blocks
 
-        // Children grouped by parent once, rather than asking the document
-        // for each block's children — that was a search of every block, per
-        // block, on every change.
-        var children: [UUID?: [BlockData]] = [:]
-        let known = Set(world.blocks.map(\.id))
-        for block in world.blocks {
-            let parent = block.parentID.flatMap { known.contains($0) ? $0 : nil }
-            children[parent, default: []].append(block)
+        // Children grouped by parent once, by position in the list rather
+        // than by copying blocks about — that was a search of every block,
+        // per block, on every change, and then a copy of each.
+        var orderByID: [UUID: Int] = [:]
+        orderByID.reserveCapacity(blocks.count)
+        for (order, block) in blocks.enumerated() { orderByID[block.id] = order }
+        var children: [Int: [Int]] = [:]
+        var topLevel: [Int] = []
+        for (order, block) in blocks.enumerated() {
+            if let parentID = block.parentID, let parent = orderByID[parentID] {
+                children[parent, default: []].append(order)
+            } else {
+                topLevel.append(order)
+            }
         }
-        parentIDs = Set(children.keys.compactMap { $0 })
+        let parents = Set(children.keys.map { blocks[$0].id })
+        if let baker {
+            // A block with children draws on its own; one that lost its
+            // last child may be baked again.
+            for id in parents where !parentIDs.contains(id) { baker.forget(id) }
+            for id in parentIDs where !parents.contains(id) && orderByID[id] != nil { baker.reconsider(id) }
+        }
+        parentIDs = parents
 
         // Parents must exist before children can be attached to them, so walk
         // the tree top-down rather than iterating the flat array.
-        var queue: [BlockData] = children[nil] ?? []
+        var reached = [Bool](repeating: false, count: blocks.count)
+        var queue = topLevel
         var next = 0
         while next < queue.count {
-            let block = queue[next]
+            let order = queue[next]
             next += 1
-            guard seen.insert(block.id).inserted else { continue }
-            upsert(block, in: world, physicsChanged: physicsChanged)
-            queue.append(contentsOf: children[block.id] ?? [])
+            guard !reached[order] else { continue }
+            reached[order] = true
+            upsert(blocks[order], in: world, physicsChanged: physicsChanged, fresh: fresh)
+            if let kids = children[order] { queue.append(contentsOf: kids) }
         }
 
         // Any block in the flat array we never reached is orphaned by a
         // dangling parent link or a parent cycle. Render it at the top level
         // rather than silently dropping it — an invisible block is a
         // confusing bug, a misplaced one is an obvious `validate()` warning.
-        for block in world.blocks where !seen.contains(block.id) {
-            seen.insert(block.id)
-            upsert(block, in: world, physicsChanged: physicsChanged, forceTopLevel: true)
+        for order in blocks.indices where !reached[order] {
+            upsert(blocks[order], in: world, physicsChanged: physicsChanged, forceTopLevel: true, fresh: fresh)
         }
 
-        for (id, entity) in entities where !seen.contains(id) {
-            entity.removeFromParent()
-            entities.removeValue(forKey: id)
-            lastAppliedBlocks.removeValue(forKey: id)
-            effectHidden.remove(id)
-            culled.remove(id)
-            pictures.removeValue(forKey: id)
-            lamps.removeValue(forKey: id)
-            labels.removeValue(forKey: id)
-            animated.removeValue(forKey: id)
+        if !fresh {
+            let gone = entities.keys.filter { orderByID[$0] == nil }
+            for id in gone { removeBlock(id) }
         }
+    }
+
+    /// Reconciles only the blocks the world says changed (`WorldChangeLog`),
+    /// found through `index`, which must be of this same world. Anything only
+    /// a full look catches — a block removed or hung elsewhere — falls back
+    /// to `sync(to:physicsEnabled:)`.
+    public func sync(to world: WorldDocument, changes: WorldChangeLog, index: WorldIndex, physicsEnabled: Bool) {
+        guard !changes.isEmpty || physicsEnabled != self.physicsEnabled else {
+            syncEnvironment(world.environment)
+            return
+        }
+        guard !changes.everything, physicsEnabled == self.physicsEnabled, !entities.isEmpty else {
+            sync(to: world, physicsEnabled: physicsEnabled)
+            return
+        }
+        syncEnvironment(world.environment)
+        let blocks = world.blocks
+        // Blocks removed, with everything hung from them: found through
+        // their entities, which hang the same way.
+        for id in changes.removed {
+            guard let entity = entities[id] else { continue }
+            let parentID = lastAppliedBlocks[id]?.parentID
+            var doomed: [UUID] = []
+            Self.collectBlocks(under: entity, into: &doomed)
+            for gone in doomed { removeBlock(gone) }
+            if let parentID, let parent = entities[parentID],
+               !parent.children.contains(where: { $0.components.has(BlockComponent.self) }) {
+                // It lost its last child: it may be baked again.
+                parentIDs.remove(parentID)
+                baker?.forgetModel(parentID)
+                baker?.reconsider(parentID)
+            }
+        }
+        var orders: [Int] = []
+        orders.reserveCapacity(changes.blocks.count)
+        for id in changes.blocks {
+            // Added and taken away again since the last frame.
+            if changes.removed.contains(id), index.entry(for: id) == nil { continue }
+            guard let entry = index.entry(for: id), entry.order < blocks.count, blocks[entry.order].id == id,
+                  lastAppliedBlocks[id].map({ $0.parentID == blocks[entry.order].parentID }) ?? true else {
+                sync(to: world, physicsEnabled: physicsEnabled)
+                return
+            }
+            orders.append(entry.order)
+        }
+        orders.sort()
+        for order in orders {
+            upsert(blocks[order], in: world, physicsChanged: false, fresh: false)
+        }
+        // A part can come before its parent in the list: hang each from the
+        // right entity once all of them exist.
+        for order in orders {
+            let block = blocks[order]
+            guard let entity = entities[block.id] else { continue }
+            if let parentID = block.parentID, entities[parentID] != nil, parentIDs.insert(parentID).inserted {
+                // Something was hung from it: it draws on its own from now,
+                // and is never hidden for distance.
+                baker?.forget(parentID)
+                if culled.remove(parentID) != nil { refreshShown(parentID) }
+            }
+            reparentIfNeeded(entity, block: block, forceTopLevel: false)
+        }
+    }
+
+    /// Every block drawn by `entity` or hung under it.
+    private static func collectBlocks(under entity: Entity, into ids: inout [UUID]) {
+        if let component = entity.components[BlockComponent.self] as BlockComponent? {
+            ids.append(component.blockID)
+        }
+        for child in entity.children {
+            collectBlocks(under: child, into: &ids)
+        }
+    }
+
+    private func removeBlock(_ id: UUID) {
+        entities.removeValue(forKey: id)?.removeFromParent()
+        lastAppliedBlocks.removeValue(forKey: id)
+        effectHidden.remove(id)
+        culled.remove(id)
+        pictures.removeValue(forKey: id)
+        lamps.removeValue(forKey: id)
+        labels.removeValue(forKey: id)
+        animated.removeValue(forKey: id)
+        if parentIDs.remove(id) != nil { baker?.forgetModel(id) }
+        baker?.forget(id)
     }
 
     /// Puts a lamp or spotlight in the block, or takes it out.
@@ -150,13 +254,15 @@ public final class WorldScene {
         lamps[block.id] = lamp
     }
 
-    private func upsert(_ block: BlockData, in world: WorldDocument, physicsChanged: Bool, forceTopLevel: Bool = false) {
+    private func upsert(_ block: BlockData, in world: WorldDocument, physicsChanged: Bool, forceTopLevel: Bool = false,
+                        fresh: Bool) {
         let entity: ModelEntity
+        let previous = lastAppliedBlocks[block.id]
         if let existing = entities[block.id] {
             entity = existing
             // Skip untouched blocks: the common case during a drag is that
             // one block changed and the rest did not.
-            if !physicsChanged, lastAppliedBlocks[block.id] == block, entity.parent != nil {
+            if !physicsChanged, previous == block, entity.parent != nil {
                 reparentIfNeeded(entity, block: block, forceTopLevel: forceTopLevel)
                 return
             }
@@ -166,7 +272,7 @@ public final class WorldScene {
             entities[block.id] = entity
         }
 
-        if let previous = lastAppliedBlocks[block.id], previous.shape != block.shape {
+        if let previous, previous.shape != block.shape {
             entity.model?.mesh = BlockEntityFactory.mesh(for: block.shape, profile: profile)
         }
         let picture = block.imageID.flatMap { world.image(id: $0) }
@@ -176,9 +282,40 @@ public final class WorldScene {
         updateLamp(block, on: entity)
         if let label = block.label, !label.isEmpty { labels[block.id] = label } else { labels.removeValue(forKey: block.id) }
         if let animation = block.animation { animated[block.id] = animation } else { animated.removeValue(forKey: block.id) }
-        if culled.contains(block.id) || effectHidden.contains(block.id) { entity.isEnabled = false }
         lastAppliedBlocks[block.id] = block
+        if let baker {
+            showModel(of: block, on: entity, picture: picture)
+            // A new name or tag is not a reason to rebuild a mesh.
+            if previous.map({ !RenderMerging.looksTheSame($0, block) }) ?? true {
+                baker.changed(block, fresh: fresh && previous == nil)
+            }
+        }
+        entity.isEnabled = shouldShow(block.id)
         reparentIfNeeded(entity, block: block, forceTopLevel: forceTopLevel)
+    }
+
+    /// A block see-through to the end — a character's root — is not handed
+    /// to the GPU at all; one that can be seen gets its mesh back.
+    private func showModel(of block: BlockData, on entity: ModelEntity, picture: WorldImage?) {
+        if RenderMerging.drawsNothing(block) {
+            if entity.model != nil { entity.model = nil }
+        } else if entity.model == nil {
+            entity.model = ModelComponent(mesh: BlockEntityFactory.mesh(for: block.shape, profile: profile),
+                                          materials: [BlockEntityFactory.material(for: block, picture: picture)])
+        }
+    }
+
+    /// Whether a block's own entity is drawn: seen in the world, not hidden
+    /// by an effect or for distance, and not drawn by a merged mesh instead.
+    private func shouldShow(_ id: UUID) -> Bool {
+        (lastAppliedBlocks[id]?.isVisible ?? true) && !effectHidden.contains(id) && !culled.contains(id)
+            && !(baker?.isBaked(id) ?? false)
+    }
+
+    private func refreshShown(_ id: UUID) {
+        guard let entity = entities[id] else { return }
+        let show = shouldShow(id)
+        if entity.isEnabled != show { entity.isEnabled = show }
     }
 
     private func reparentIfNeeded(_ entity: ModelEntity, block: BlockData, forceTopLevel: Bool) {
@@ -271,6 +408,7 @@ public final class WorldScene {
                 guard let block = lastAppliedBlocks[id] else { continue }
                 entity.model?.mesh = BlockEntityFactory.mesh(for: block.shape, profile: profile)
             }
+            baker?.shapesChanged()
         }
         if profile.viewDistance == nil { showAllCulled() }
     }
@@ -304,21 +442,67 @@ public final class WorldScene {
         guard let distance = profile.viewDistance else { return }
         let limit = distance * distance
         for (id, entity) in entities {
-            guard !parentIDs.contains(id), let bounds = index.bounds(of: id) else { continue }
+            // Baked parts are hidden with their mesh, below.
+            guard !parentIDs.contains(id), baker?.isBaked(id) != true, let bounds = index.bounds(of: id) else { continue }
             let far = bounds.distanceSquared(to: eye) > limit
             if far {
                 if culled.insert(id).inserted { entity.isEnabled = false }
             } else if culled.remove(id) != nil {
-                entity.isEnabled = (lastAppliedBlocks[id]?.isVisible ?? true) && !effectHidden.contains(id)
+                entity.isEnabled = shouldShow(id)
             }
         }
+        baker?.cull(from: eye, limit: limit, index: index)
     }
 
     private func showAllCulled() {
-        for id in culled {
-            entities[id]?.isEnabled = (lastAppliedBlocks[id]?.isVisible ?? true) && !effectHidden.contains(id)
-        }
+        let shown = culled
         culled.removeAll()
+        for id in shown { refreshShown(id) }
+        baker?.showAll()
+    }
+
+    // MARK: Merged meshes
+
+    /// Builds a few merged meshes, within a slice of the frame. The game
+    /// calls this every frame.
+    public func update() {
+        baker?.update()
+    }
+
+    /// Meshes drawn for many parts, and how many parts they draw.
+    public var mergedSummary: (meshes: Int, parts: Int) {
+        baker?.summary ?? (0, 0)
+    }
+
+    func appliedBlock(_ id: UUID) -> BlockData? {
+        lastAppliedBlocks[id]
+    }
+
+    /// Which merged mesh a part can be drawn by, or nil if it must be drawn
+    /// on its own.
+    func bakingPlace(for id: UUID) -> StillPartBaker.Place? {
+        guard !physicsEnabled, let block = lastAppliedBlocks[id], let entity = entities[id], !effectHidden.contains(id),
+              RenderMerging.canMerge(block, hasChildren: parentIDs.contains(id)) else { return nil }
+        if let parentID = block.parentID {
+            // Hung from its parent's entity, so a mesh under it moves with it.
+            guard let parent = entities[parentID], entity.parent === parent else { return nil }
+            return .model(parentID)
+        }
+        guard entity.parent === root else { return nil }
+        return .patch(RenderMerging.patch(containing: block.position))
+    }
+
+    /// The entity a merged mesh hangs from.
+    func bakingParent(for place: StillPartBaker.Place) -> Entity? {
+        switch place {
+        case .patch: return root
+        case let .model(parentID): return entities[parentID]
+        }
+    }
+
+    /// A part went into a mesh or came out of one: its own entity off or on.
+    func bakedStateChanged(_ id: UUID) {
+        refreshShown(id)
     }
 
     // MARK: Lookup
@@ -333,16 +517,29 @@ public final class WorldScene {
     }
 
     /// Turns and stretches each block that moves by itself, for `time`
-    /// seconds: only those within `range` of `eye`, since a far one would not
-    /// be seen moving. Never moves a block, so a `move_to` carries on. Nothing
-    /// goes over the network: every iPad does this for itself.
-    public func animateBlocks(time: Double, eye: Vec3, range: Float = 90) {
-        guard !animated.isEmpty else { return }
-        let limit = range * range
-        for (id, animation) in animated {
-            guard let entity = entities[id], entity.isEnabled, let block = lastAppliedBlocks[id] else { continue }
-            let offset = Vec3(entity.position(relativeTo: nil)) - eye
-            guard offset.lengthSquared < limit else { continue }
+    /// seconds: only those within `range` of `eye` (the graphics level's
+    /// `animationRange` when nil), since a far one would not be seen moving.
+    /// Which ones are near is looked at four times a second, not every
+    /// frame. Never moves a block, so a `move_to` carries on. Nothing goes
+    /// over the network: every iPad does this for itself.
+    public func animateBlocks(time: Double, eye: Vec3, range: Float? = nil) {
+        guard !animated.isEmpty else {
+            animatedNearby.removeAll()
+            return
+        }
+        if time - animatedLookedAt >= 0.25 || time < animatedLookedAt {
+            animatedLookedAt = time
+            let reach = range ?? profile.animationRange
+            let limit = reach * reach
+            animatedNearby.removeAll(keepingCapacity: true)
+            for id in animated.keys {
+                guard let entity = entities[id], entity.isEnabled else { continue }
+                let offset = Vec3(entity.position(relativeTo: nil)) - eye
+                if offset.lengthSquared < limit { animatedNearby.append(id) }
+            }
+        }
+        for id in animatedNearby {
+            guard let animation = animated[id], let entity = entities[id], let block = lastAppliedBlocks[id] else { continue }
             // Each block starts its own way through, so a row of them is not in step.
             let phase = Double(id.uuid.0) / 255 + Double(id.uuid.1) / 65_025
             let pose = animation.pose(at: time, phase: phase)
@@ -375,15 +572,18 @@ public final class WorldScene {
     }
 
     public func removeAll() {
+        baker?.removeAll()
         for entity in entities.values { entity.removeFromParent() }
         entities.removeAll()
         lastAppliedBlocks.removeAll()
         effectHidden.removeAll()
         culled.removeAll()
         parentIDs.removeAll()
+        pictures.removeAll()
         lamps.removeAll()
         labels.removeAll()
         animated.removeAll()
+        animatedNearby.removeAll()
     }
 
     // MARK: Runtime effects
@@ -395,6 +595,9 @@ public final class WorldScene {
         switch effect {
         case let .tint(blockID, color, duration):
             guard let entity = entities[blockID] else { return }
+            // Coloured on its own, not in a merged mesh, until the world
+            // next changes it.
+            baker?.pin(blockID)
             guard duration > 0 else {
                 applyInstantTint(color, to: entity)
                 return
@@ -403,6 +606,7 @@ public final class WorldScene {
 
         case let .move(blockID, offset, duration):
             guard let entity = entities[blockID] else { return }
+            baker?.pin(blockID)
             var target = entity.transform
             target.translation += SIMD3<Float>(offset)
             if duration > 0 {
@@ -412,8 +616,14 @@ public final class WorldScene {
             }
 
         case let .setVisible(blockID, visible):
-            if visible { effectHidden.remove(blockID) } else { effectHidden.insert(blockID) }
-            entities[blockID]?.isEnabled = visible && !culled.contains(blockID)
+            if visible {
+                effectHidden.remove(blockID)
+                baker?.reconsider(blockID)
+            } else {
+                effectHidden.insert(blockID)
+                baker?.pin(blockID)
+            }
+            refreshShown(blockID)
             // A door or a vanishing platform faded before it went; it comes
             // back looking as it was built, texture and all.
             if visible, let entity = entities[blockID], let block = lastAppliedBlocks[blockID] {

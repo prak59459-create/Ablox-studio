@@ -980,7 +980,9 @@ public final class GameRuntime {
     }
 
     func blockID(_ object: ScriptObject) -> UUID? {
-        guard object.kind == "block", let uuid = UUID(uuidString: object.id), worldIndex.entry(for: uuid) != nil else { return nil }
+        // The world's own lookup, not the index: after every change the
+        // index has to check every block before it can answer.
+        guard object.kind == "block", let uuid = UUID(uuidString: object.id), world.index(of: uuid) != nil else { return nil }
         return uuid
     }
 }

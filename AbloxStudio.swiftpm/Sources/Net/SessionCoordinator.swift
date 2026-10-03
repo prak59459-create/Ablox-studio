@@ -40,7 +40,31 @@ public final class SessionCoordinator: ObservableObject {
 
     @Published public private(set) var role: Role = .offline
     @Published public private(set) var status: Status = .idle
-    @Published public private(set) var world: WorldDocument = .blank()
+    /// The world being played, as it is right now.
+    ///
+    /// Changes from the game are applied to it in place as they arrive, many
+    /// a second in a busy game. SwiftUI is told at most ten times a second —
+    /// the play screen only shows its name and its map — while the 3D view
+    /// reads it, and which blocks changed (`takeWorldChanges`), every frame.
+    /// It used to be published on every change, which copied the whole world
+    /// and rebuilt the whole play screen each time.
+    public private(set) var world: WorldDocument {
+        get { liveWorld }
+        set {
+            objectWillChange.send()
+            liveWorld = newValue
+            worldChanges.noteEverything()
+        }
+    }
+    private var liveWorld: WorldDocument = .blank()
+    /// Which blocks changed since the 3D view last looked.
+    private var worldChanges = WorldChangeLog()
+    /// Changes and movement from the network's queue, applied in one go.
+    private let deltaInbox = WorldDeltaInbox()
+    private let transformInbox = TransformInbox()
+    /// Telling SwiftUI about the world and where everyone is: ten times a second.
+    private var quietPublishing = PublishThrottle(interval: 0.1)
+    private var rosterIsBehind = false
     @Published public private(set) var roster: [PlayerSnapshot] = []
     @Published public private(set) var discoveredPeers: [DiscoveredPeer] = []
     @Published public private(set) var chatLog: [ChatEntry] = []
@@ -53,8 +77,10 @@ public final class SessionCoordinator: ObservableObject {
     @Published public private(set) var browserUnavailableReason: String?
 
     /// Effects the local renderer still has to apply (tints, moves, sounds).
-    /// The viewport drains this each frame.
-    @Published public private(set) var pendingEffects: [EventAction] = []
+    /// The viewport drains this each frame. Not published: nothing on screen
+    /// is drawn from it, and publishing it made SwiftUI rebuild the play
+    /// screen every frame when the viewport emptied it.
+    public private(set) var pendingEffects: [EventAction] = []
 
     /// What the world's script has given this player: screen GUI, camera,
     /// weapon, health, ammo. Only ever changed by effects from the host.
@@ -331,8 +357,10 @@ public final class SessionCoordinator: ObservableObject {
         // The host used to receive every joined player's movement and never
         // show it: its screen only refreshed on join, leave and score, so a
         // guest stood frozen at their spawn point on the host's iPad.
+        let hostTransforms = transformInbox
         host.onRemoteTransform = { [weak self] payload in
-            Task { @MainActor in self?.applyRemoteTransform(payload) }
+            guard hostTransforms.add(payload) else { return }
+            Task { @MainActor in self?.receiveTransforms() }
         }
 
         host.onChat = { [weak self] sender, payload in
@@ -366,13 +394,10 @@ public final class SessionCoordinator: ObservableObject {
             Task { @MainActor in self?.receiveWhisper(from: sender, name: name, text: text) }
         }
 
+        let deltas = deltaInbox
         host.onRemoteDelta = { [weak self] delta in
-            Task { @MainActor in
-                guard let self else { return }
-                var world = self.world
-                delta.apply(to: &world)
-                self.world = world
-            }
+            guard deltas.add(delta) else { return }
+            Task { @MainActor in self?.receiveWorldChanges() }
         }
 
         let boards = LeaderboardStore()
@@ -477,21 +502,20 @@ public final class SessionCoordinator: ObservableObject {
             }
         }
 
+        let clientDeltas = deltaInbox
         client.onDelta = { [weak self] delta in
-            Task { @MainActor in
-                guard let self else { return }
-                var world = self.world
-                delta.apply(to: &world)
-                self.world = world
-            }
+            guard clientDeltas.add(delta) else { return }
+            Task { @MainActor in self?.receiveWorldChanges() }
         }
 
         client.onRoster = { [weak self] roster in
             Task { @MainActor in self?.replaceRoster(roster) }
         }
 
+        let clientTransforms = transformInbox
         client.onTransform = { [weak self] payload in
-            Task { @MainActor in self?.applyRemoteTransform(payload) }
+            guard clientTransforms.add(payload) else { return }
+            Task { @MainActor in self?.receiveTransforms() }
         }
 
         client.onEffects = { [weak self] payload in
@@ -624,8 +648,13 @@ public final class SessionCoordinator: ObservableObject {
         status = .idle
         rosterState.reset()
         roster = []
+        rosterIsBehind = false
         pingMilliseconds = nil
         pendingEffects = []
+        // Whatever was still on its way belonged to the last game.
+        _ = deltaInbox.take()
+        _ = transformInbox.take()
+        worldChanges.noteEverything()
         scripted.reset()
         scriptLog = []
         // The last game's chat and speech bubbles belong to that game.
@@ -696,7 +725,7 @@ public final class SessionCoordinator: ObservableObject {
     /// allows it.
     public func warp(to target: PeerID) {
         guard role == .hosting || roomState.allowsWarp,
-              let player = roster.first(where: { $0.peerID == target }) else { return }
+              let player = rosterState.players.first(where: { $0.peerID == target }) else { return }
         let side = Vec3(sin(player.yawDegrees * .pi / 180), 0, cos(player.yawDegrees * .pi / 180))
         pendingEffects.append(.teleportPlayer(to: player.position + side * 1.6 + Vec3(0, 0.5, 0)))
     }
@@ -901,7 +930,9 @@ public final class SessionCoordinator: ObservableObject {
     }
 
     public func publish(delta: WorldDelta) {
-        delta.apply(to: &world)
+        objectWillChange.send()
+        delta.apply(to: &liveWorld)
+        worldChanges.note(delta)
         switch role {
         case .hosting: host?.publish(delta: delta)
         case .joined: client?.publish(delta: delta)
@@ -917,14 +948,21 @@ public final class SessionCoordinator: ObservableObject {
     // MARK: Effects
 
     private func apply(effects: [EventAction]) {
+        // Changes sent before these effects come first: a move or a fade is
+        // for a block that may have only just been made.
+        receiveWorldChanges()
         for action in effects {
             switch action {
             case let .announce(message, duration):
                 show(announcement: message, for: duration)
             case let .setVisible(blockID, visible):
-                world.mutate(id: blockID) { $0.isVisible = visible }
+                liveWorld.mutate(id: blockID) { $0.isVisible = visible }
+                worldChanges.note(block: blockID)
+                publishQuietly()
             case let .setCollision(blockID, enabled):
-                world.mutate(id: blockID) { $0.hasCollision = enabled }
+                liveWorld.mutate(id: blockID) { $0.hasCollision = enabled }
+                worldChanges.note(block: blockID)
+                publishQuietly()
             case let .endRound(message):
                 show(announcement: message, for: 5)
             case let .script(.chat(line)):
@@ -993,9 +1031,68 @@ public final class SessionCoordinator: ObservableObject {
 
     /// Called by the viewport once it has consumed the queue.
     public func drainEffects() -> [EventAction] {
+        guard !pendingEffects.isEmpty else { return [] }
         let effects = pendingEffects
         pendingEffects = []
         return effects
+    }
+
+    // MARK: Live state for the 3D view
+
+    /// Applies every world change waiting, in place and in order. The
+    /// viewport calls this each frame too, so a change is never a frame late.
+    public func receiveWorldChanges() {
+        let deltas = deltaInbox.take()
+        guard !deltas.isEmpty else { return }
+        for delta in deltas {
+            delta.apply(to: &liveWorld)
+            worldChanges.note(delta)
+        }
+        publishQuietly()
+    }
+
+    /// Everyone's newest position, waiting from the network.
+    public func receiveTransforms() {
+        let payloads = transformInbox.take()
+        guard !payloads.isEmpty else { return }
+        for payload in payloads { rosterState.apply(payload) }
+        rosterIsBehind = true
+        publishQuietly()
+    }
+
+    /// Which blocks changed since the last call. The viewport's alone to take.
+    public func takeWorldChanges() -> WorldChangeLog {
+        worldChanges.take()
+    }
+
+    /// Everyone as they are this moment; `roster` catches up ten times a second.
+    public var livePlayers: [PlayerSnapshot] {
+        rosterState.players
+    }
+
+    /// Tells SwiftUI about the world and positions, at most ten times a second.
+    private func publishQuietly() {
+        switch quietPublishing.changed(at: ProcessInfo.processInfo.systemUptime) {
+        case .now:
+            publishLiveState()
+        case let .after(seconds):
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
+                self?.publishLiveState()
+            }
+        case .alreadyScheduled:
+            break
+        }
+    }
+
+    private func publishLiveState() {
+        quietPublishing.published(at: ProcessInfo.processInfo.systemUptime)
+        if rosterIsBehind {
+            rosterIsBehind = false
+            roster = rosterState.players
+        } else {
+            objectWillChange.send()
+        }
     }
 
     private func show(announcement message: String, for duration: Double) {
@@ -1041,14 +1138,10 @@ public final class SessionCoordinator: ObservableObject {
         }
     }
 
-    /// Another player moved. Host and client both come through here.
-    private func applyRemoteTransform(_ payload: PlayerTransformPayload) {
-        rosterState.apply(payload)
-        roster = rosterState.players
-    }
-
     /// A full roster from the host (or, when hosting, from our own host).
     private func replaceRoster(_ incoming: [PlayerSnapshot]) {
+        // Positions still waiting are older than this roster.
+        receiveTransforms()
         for event in rosterState.replace(with: incoming) {
             switch event {
             case let .placeLocalPlayer(at: position):
@@ -1060,6 +1153,7 @@ public final class SessionCoordinator: ObservableObject {
                 pendingEffects.append(.teleportPlayer(to: position))
             }
         }
+        rosterIsBehind = false
         roster = rosterState.players
     }
 

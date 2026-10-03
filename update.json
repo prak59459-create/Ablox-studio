@@ -1,18 +1,20 @@
 {
   "app": "Ablox Studio",
-  "version": "2.3",
-  "build": 14,
+  "version": "2.4",
+  "build": 15,
   "protocol": 8,
-  "date": "2026-10-02",
+  "date": "2026-10-03",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "The game preview has the new \"Lightest\" graphics from Ablox 2.5, and characters keep looking ahead while running",
-      "Everything from 2.2: faster editing of worlds with lots of parts"
+      "The game preview has Ablox 2.6's faster engine: parts that stay put are drawn as a few merged pieces, and only the blocks that changed are looked at each frame",
+      "Scripts that move many blocks run up to 30 times faster in the game preview",
+      "Finding a part no longer reads through every part, so editing big worlds is quicker; the editor still draws and picks every part on its own"
     ],
     "ja": [
-      "ゲームのプレビューに Ablox 2.5 の新しい画質「最軽量」が入り、走るときも キャラクターが 前を見るようになりました",
-      "2.2 の内容もそのまま: パーツの多いワールドの編集が速い"
+      "ゲームのプレビューに Ablox 2.6 の速いエンジンが入りました: 動かないパーツを まとめて描き、毎フレーム 変わったブロックだけを見ます",
+      "たくさんのブロックを動かすスクリプトが、ゲームのプレビューで 最大30倍 速く動きます",
+      "パーツを探すとき 全部を順に見なくなり、大きなワールドの編集が 速くなりました（エディタでは これまでどおり パーツを1つずつ 描いて えらべます）"
     ]
   }
 }

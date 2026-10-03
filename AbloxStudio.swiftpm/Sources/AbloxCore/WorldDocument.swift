@@ -182,18 +182,27 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
     public var blocks: [BlockData] {
         get { storedBlocks }
         _modify {
-            defer { blockRevision = BlockRevision.next() }
+            defer {
+                blockRevision = BlockRevision.next()
+                blockJournal = BlockJournal()
+            }
             yield &storedBlocks
         }
         set {
             storedBlocks = newValue
             blockRevision = BlockRevision.next()
+            blockJournal = BlockJournal()
         }
     }
     private var storedBlocks: [BlockData]
     /// Different after every change to `blocks`, so a cache can tell at
     /// once that nothing has changed (see `BlockRevision`).
     public private(set) var blockRevision = BlockRevision.next()
+    /// Where each block is in `blocks`, for finding one by its id.
+    private var orders = BlockOrders()
+    /// Which blocks the last changes were to, so a cache can look at those
+    /// alone (see `BlockJournal`).
+    private(set) var blockJournal = BlockJournal()
     public var rules: [EventRule]
     /// The world's `.absc` script files. Empty for a world run by rules alone.
     public var scripts: [ScriptFile]
@@ -306,11 +315,11 @@ public struct WorldDocument: Codable, Hashable, Identifiable, Sendable {
 
 public extension WorldDocument {
     func block(id: UUID) -> BlockData? {
-        blocks.first { $0.id == id }
+        index(of: id).map { blocks[$0] }
     }
 
     func index(of id: UUID) -> Int? {
-        blocks.firstIndex { $0.id == id }
+        orders.order(of: id, in: storedBlocks, revision: blockRevision.value, journal: blockJournal)
     }
 
     /// Direct children of `parent` (or the top level when `parent` is nil),
@@ -436,7 +445,9 @@ public extension WorldDocument {
 public extension WorldDocument {
     /// Inserts a block, keeping `modifiedAt` honest.
     mutating func insert(_ block: BlockData) {
-        blocks.append(block)
+        let before = blockRevision.value
+        storedBlocks.append(block)
+        noteChange(at: storedBlocks.count - 1, after: before)
         modifiedAt = Date()
     }
 
@@ -445,7 +456,9 @@ public extension WorldDocument {
     @discardableResult
     mutating func update(_ block: BlockData) -> Bool {
         guard let i = index(of: block.id) else { return false }
-        blocks[i] = block
+        let before = blockRevision.value
+        storedBlocks[i] = block
+        noteChange(at: i, after: before)
         modifiedAt = Date()
         return true
     }
@@ -454,9 +467,17 @@ public extension WorldDocument {
     @discardableResult
     mutating func mutate(id: UUID, _ body: (inout BlockData) -> Void) -> Bool {
         guard let i = index(of: id) else { return false }
-        body(&blocks[i])
+        let before = blockRevision.value
+        body(&storedBlocks[i])
+        noteChange(at: i, after: before)
         modifiedAt = Date()
         return true
+    }
+
+    /// One block changed or added: a new revision, written in the journal.
+    private mutating func noteChange(at order: Int, after before: UInt64) {
+        blockRevision = BlockRevision.next()
+        blockJournal.note(order: order, from: before, to: blockRevision.value)
     }
 
     /// Removes a block **and its whole subtree** — orphaned children would

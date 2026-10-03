@@ -138,11 +138,11 @@ public struct GameViewport: UIViewRepresentable {
         context.coordinator.setFeedbackEnabled(sound: soundEnabled && preferences.effectsVolume > 0.02, haptics: hapticsEnabled)
         context.coordinator.setPreferences(preferences)
         context.coordinator.setGraphics(quality: graphicsQuality, showFrameRate: showFrameRate)
-        context.coordinator.syncWorld(session.world)
-        context.coordinator.syncRoster(session.roster, localPeerID: session.localPeerID)
-        // Effects are drained in the render loop, not here: `drainEffects()`
-        // mutates published state, and doing that inside `updateUIView` means
-        // changing SwiftUI state while SwiftUI is mid-update.
+        context.coordinator.syncRoster(session.livePlayers, localPeerID: session.localPeerID)
+        // The world's blocks and effects are taken in the render loop, not
+        // here: SwiftUI is told about them only ten times a second, and
+        // `drainEffects()` changes the session, which must not happen while
+        // SwiftUI is mid-update.
     }
 
     public func makeCoordinator() -> Coordinator {
@@ -200,7 +200,6 @@ public struct GameViewport: UIViewRepresentable {
         /// Sound and haptics. `playSound` effects have been arriving and going
         /// nowhere since the first phase; this is what finally plays them.
         private let feedback = FeedbackPlayer()
-        private var lastWorldRevision: Date?
         private var lastWorldID: UUID?
 
         /// Blocks currently overlapped, so a touch is reported on entry rather
@@ -249,6 +248,21 @@ public struct GameViewport: UIViewRepresentable {
         /// The best graphics level the battery and the iPad's heat allow.
         private var powerCap: GraphicsProfile.Level?
         private var powerClock: Float = 5
+        /// Whether RealityKit physics is needed: only for parts that can fall.
+        private var physicsNeeded = false
+        /// The moving platforms, and where each was built, for the world
+        /// revision they were found in.
+        private var placedFrom: UInt64?
+        private var elevatorHomes: [(id: UUID, home: Vec3, gimmick: GimmickSettings)] = []
+        /// Labelled blocks near enough to show, looked for four times a second.
+        private var labelCandidates: [UUID] = []
+        private var labelClock: Float = 1
+        /// The share of the screen's pixels drawn, as last set.
+        private var appliedScale: CGFloat?
+        /// The launch check's frame-rate run prints how fast it draws.
+        private let reportsFrameRate = UserDefaults.standard.bool(forKey: "AbloxPlayBenchmark")
+        private var reportedFrames: Double = 0
+        private var reportedLevel: GraphicsProfile.Level?
 
         init(parent: GameViewport) {
             self.parent = parent
@@ -389,28 +403,51 @@ public struct GameViewport: UIViewRepresentable {
 
         // MARK: Sync
 
-        func syncWorld(_ world: WorldDocument) {
-            // `modifiedAt` is the cheap revision check; a full diff of every
-            // block on every SwiftUI update would be wasteful, and WorldScene
-            // does its own per-block diffing anyway.
-            //
-            // The world's id is checked too. Every catalogue game carries the
-            // same `modifiedAt` — the day the catalogue was built — and the
-            // viewport is made before the session switches to the new game,
-            // so a date-only check kept drawing the previous game's map while
-            // the player walked (and collided) in the new one.
-            guard world.id != lastWorldID || world.modifiedAt != lastWorldRevision else { return }
-            lastWorldID = world.id
-            lastWorldRevision = world.modifiedAt
+        /// Brings the 3D world up to date with the blocks that changed since
+        /// the last frame: only those, unless something only a full look
+        /// catches happened (`WorldChangeLog`).
+        private func syncWorldChanges(_ world: WorldDocument, index: WorldIndex) {
+            let changes = parent.session.takeWorldChanges()
+            // The world's id, not only its blocks: the viewport is made before
+            // the session switches to the new game, and every catalogue game
+            // carries the same dates, so a new game must be drawn from scratch.
+            if world.id != lastWorldID {
+                lastWorldID = world.id
+                worldScene.removeAll()
+                physicsNeeded = world.blocks.contains { !$0.isAnchored }
+                worldScene.sync(to: world, physicsEnabled: physicsNeeded)
+                platformOffsets.removeAll()
+                emitterClock = 1
+                labelClock = 1
+                return
+            }
+            guard !changes.isEmpty else { return }
             // RealityKit physics only matters for parts that can fall. The
             // players' own movement never used it, and a static body per part
             // was simulated every frame for nothing.
-            worldScene.sync(to: world, physicsEnabled: world.blocks.contains { !$0.isAnchored })
-            // The sky (and a script repainting it) is the atmosphere's job,
-            // every frame; moving platforms are put back where the clock
-            // says on the next one.
-            platformOffsets.removeAll()
-            emitterClock = 1
+            if changes.everything {
+                physicsNeeded = world.blocks.contains { !$0.isAnchored }
+                platformOffsets.removeAll()
+                emitterClock = 1
+            } else if !physicsNeeded {
+                physicsNeeded = changes.blocks.contains { id in
+                    guard let entry = index.entry(for: id), entry.order < world.blocks.count else { return false }
+                    return !world.blocks[entry.order].isAnchored
+                }
+            }
+            worldScene.sync(to: world, changes: changes, index: index, physicsEnabled: physicsNeeded)
+        }
+
+        /// Where everyone else is this frame. Their looks, arrivals and
+        /// leavings are seen to ten times a second (`syncRoster`).
+        private func followPlayers() {
+            let session = parent.session
+            let local = session.localPeerID
+            for player in session.livePlayers where player.peerID != local {
+                guard let avatar = avatars[player.peerID] else { continue }
+                avatar.targetPosition = player.position
+                avatar.targetYawDegrees = player.yawDegrees
+            }
         }
 
         func syncRoster(_ roster: [PlayerSnapshot], localPeerID: PeerID) {
@@ -543,8 +580,15 @@ public struct GameViewport: UIViewRepresentable {
 
         private func tick(deltaTime: Float) {
             let dt = min(deltaTime, 1.0 / 20)
-            let world = placeMovingParts(in: parent.session.world)
+            // Everything the game changed since the last frame, in one go.
+            let session = parent.session
+            session.receiveWorldChanges()
+            session.receiveTransforms()
+            let world = placeMovingParts(in: session.world)
             let index = indexCache.index(for: world)
+            syncWorldChanges(session.world, index: index)
+            followPlayers()
+            worldScene.update()
             elapsed += Double(dt)
             watchFrameRate(deltaTime)
 
@@ -639,6 +683,7 @@ public struct GameViewport: UIViewRepresentable {
             updateBlockLabels()
             animationClock += Double(dt)
             worldScene.animateBlocks(time: animationClock, eye: Vec3(camera.position(relativeTo: nil)))
+            labelClock += dt
             updateWeapons(dt: dt)
             if parent.isFiring { fireIfReady(index: index) }
             fadeTracers(dt: dt)
@@ -757,11 +802,7 @@ public struct GameViewport: UIViewRepresentable {
             }
             guard let view else { return }
 
-            // Fewer pixels: the biggest single saving on an iPad's screen.
-            let native = view.window?.windowScene?.screen.scale ?? view.traitCollection.displayScale
-            if native > 0 {
-                view.contentScaleFactor = native * CGFloat(profile.resolutionScale)
-            }
+            applyResolution()
 
             let effects: ARView.RenderOptions = [.disableHDR, .disableGroundingShadows, .disableDepthOfField]
             if profile.postEffects {
@@ -772,11 +813,32 @@ public struct GameViewport: UIViewRepresentable {
             cullClock = 1
         }
 
+        /// Fewer pixels: the biggest single saving on an iPad's screen. The
+        /// level's share, and on Auto a little less while the game is not
+        /// quite smooth (`FrameRateGovernor.resolutionFactor`).
+        private func applyResolution() {
+            guard let view, let profile = appliedProfile else { return }
+            let native = view.window?.windowScene?.screen.scale ?? view.traitCollection.displayScale
+            guard native > 0 else { return }
+            let factor = graphicsQuality == .auto ? governor.resolutionFactor : 1
+            let scale = native * CGFloat(profile.resolutionScale * factor)
+            guard scale != appliedScale else { return }
+            appliedScale = scale
+            view.contentScaleFactor = scale
+        }
+
         /// Feeds the frame time to the governor, which on Auto may pick
-        /// another level, and keeps the counter up to date.
+        /// another level or draw a few pixels fewer, and keeps the counter
+        /// up to date.
         private func watchFrameRate(_ frameTime: Float) {
+            let windows = governor.framesPerSecond
             if let level = governor.record(frameTime: Double(frameTime)), graphicsQuality == .auto {
                 apply(profile: .profile(for: capped(level)))
+            }
+            if governor.framesPerSecond != windows {
+                // A window of frames has been counted.
+                applyResolution()
+                if reportsFrameRate { reportFrameRate() }
             }
             fpsClock += frameTime
             if fpsClock >= 0.5, let fpsLabel, !fpsLabel.isHidden {
@@ -787,6 +849,22 @@ public struct GameViewport: UIViewRepresentable {
                 if graphicsQuality == .auto { text += " (" + GraphicsQuality.auto.displayName + ")" }
                 fpsLabel.text = text
                 fpsLabel.textColor = fps >= Int(FrameRateGovernor.minimumFPS) ? .white : UIColor(red: 1, green: 0.55, blue: 0.5, alpha: 1)
+            }
+        }
+
+        /// One line a second for the launch check (stderr, which is not held
+        /// back in a buffer): frames per second, level, pixels and meshes.
+        private func reportFrameRate() {
+            reportedFrames += 1
+            let merged = worldScene.mergedSummary
+            let level = appliedProfile?.level ?? governor.level
+            let line = String(format: "AbloxFPS %.1f level=%@ pixels=%.2f meshes=%ld baked=%ld second=%.0f\n",
+                              governor.framesPerSecond, level.displayName, Double(governor.resolutionFactor),
+                              merged.meshes, merged.parts, reportedFrames)
+            FileHandle.standardError.write(Data(line.utf8))
+            if let profile = appliedProfile, profile.level != reportedLevel {
+                reportedLevel = profile.level
+                FileHandle.standardError.write(Data("AbloxShapes \(profile.level.displayName): \(UnitShapes.describe(profile))\n".utf8))
             }
         }
 
@@ -944,19 +1022,30 @@ public struct GameViewport: UIViewRepresentable {
         /// along with it. Every iPad counts on its own clock (they agree to
         /// a few hundredths of a second), so nothing is sent while they move.
         private func placeMovingParts(in world: WorldDocument) -> WorldDocument {
-            guard world.blocks.contains(where: { $0.behavior == .elevator }) else {
-                placedWorld = nil
+            // Looked for again only when the blocks change: every block was
+            // checked, and the whole world copied, every frame.
+            if world.blockRevision.value != placedFrom {
+                placedFrom = world.blockRevision.value
+                elevatorHomes = world.blocks.compactMap { block in
+                    block.behavior == .elevator ? (id: block.id, home: block.position, gimmick: block.gimmick) : nil
+                }
+                placedWorld = elevatorHomes.isEmpty ? nil : world
+            }
+            guard var placed = placedWorld else {
                 platformOffsets.removeAll()
                 return world
             }
+            // Let go of the stored copy, so the one changed is the only one.
+            placedWorld = nil
             let now = Date().timeIntervalSince1970
-            var placed = world
             var offsets: [UUID: Vec3] = [:]
-            for index in placed.blocks.indices where placed.blocks[index].behavior == .elevator {
-                let offset = MovingParts.offset(for: placed.blocks[index].gimmick, at: now)
-                placed.blocks[index].position += offset
-                offsets[placed.blocks[index].id] = offset
-                worldScene.place(placed.blocks[index].id, at: placed.blocks[index].position)
+            for platform in elevatorHomes {
+                let offset = MovingParts.offset(for: platform.gimmick, at: now)
+                let position = platform.home + offset
+                // One block at a time, so the index looks at these alone.
+                placed.mutate(id: platform.id) { $0.position = position }
+                offsets[platform.id] = offset
+                worldScene.place(platform.id, at: position)
             }
             if let standingOn, let before = platformOffsets[standingOn], let after = offsets[standingOn] {
                 let carried = after - before
@@ -1105,18 +1194,39 @@ public struct GameViewport: UIViewRepresentable {
         // MARK: Words over blocks
 
         /// Each labelled block's words just above it, if it is in front of
-        /// the camera and within the label's range.
+        /// the camera and within the label's range. Which labels are near
+        /// enough is looked at four times a second, and only the nearest few
+        /// dozen are followed every frame: a game with hundreds of labelled
+        /// characters measured every one of them every frame.
         private func updateBlockLabels() {
             guard let view, let overlay = blockLabels else { return }
             let labelled = worldScene.labeledBlocks
             guard !labelled.isEmpty, !parent.photoMode else {
+                if !labelCandidates.isEmpty { labelCandidates.removeAll() }
                 overlay.update([])
                 return
             }
             let eye = Vec3(camera.position(relativeTo: nil))
+            let limit = appliedProfile?.labelLimit ?? 48
+            overlay.maximumShown = limit
+            if labelClock >= 0.25 {
+                labelClock = 0
+                var near: [(id: UUID, label: BlockLabel, distance: Float)] = []
+                for (id, label) in labelled {
+                    guard let entity = worldScene.entity(for: id), entity.isEnabled, entity.parent != nil else { continue }
+                    let distance = Vec3(entity.position(relativeTo: nil)).distance(to: eye)
+                    // A little further than the label reaches: it may come
+                    // into range before the next look.
+                    if distance < label.range + 8 { near.append((id, label, distance)) }
+                }
+                near.sort { $0.distance < $1.distance }
+                labelCandidates = near.prefix(limit * 2).map { $0.id }
+            }
             var items: [BlockLabelOverlay.Item] = []
-            for (id, label) in labelled {
-                guard let entity = worldScene.entity(for: id), entity.isEnabled, entity.parent != nil else { continue }
+            for id in labelCandidates {
+                // The words as they are now: a price or a count changes often.
+                guard let label = labelled[id], let entity = worldScene.entity(for: id), entity.isEnabled,
+                      entity.parent != nil else { continue }
                 let half = entity.scale(relativeTo: nil).y / 2
                 let top = Vec3(entity.position(relativeTo: nil)) + Vec3(0, half + label.height, 0)
                 let toTop = top - eye

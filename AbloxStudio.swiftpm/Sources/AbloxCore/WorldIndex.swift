@@ -314,7 +314,16 @@ public final class WorldIndexCache: @unchecked Sendable {
             var changed: [Int] = []
             var tidy = true
             let limit = Swift.max(8, keys.count / 8)
-            for order in keys.indices where !keys[order].matches(now[order]) {
+            // Only the blocks the world's journal says were changed, when it
+            // goes back far enough: a script moving one block used to make
+            // the next look at the index check every block in the world.
+            let suspects: [Int]
+            if let revision, let journal = world.blockJournal.orders(since: revision) {
+                suspects = Set(journal).filter { $0 < keys.count }.sorted()
+            } else {
+                suspects = Array(keys.indices)
+            }
+            for order in suspects where !keys[order].matches(now[order]) {
                 // A block replaced or hung from something else: start again.
                 guard keys[order].id == now[order].id, keys[order].parentID == now[order].parentID else {
                     tidy = false
@@ -344,6 +353,99 @@ public final class WorldIndexCache: @unchecked Sendable {
         cached = index
         revision = world.blockRevision.value
         return index
+    }
+}
+
+/// Where each block is in a world's list, by id. A script moving sixty
+/// characters a tick looked each one up by reading through every block, and
+/// that was most of the host's time in a big world.
+///
+/// Copies of a world share one, and every answer is checked against the
+/// list it is asked about, so it is never wrong: at worst it is built again.
+/// Two worlds are equal or not whatever theirs hold.
+struct BlockOrders: Hashable, Sendable {
+    private let storage = Storage()
+
+    static func == (lhs: BlockOrders, rhs: BlockOrders) -> Bool { true }
+    func hash(into hasher: inout Hasher) {}
+
+    func order(of id: UUID, in blocks: [BlockData], revision: UInt64, journal: BlockJournal) -> Int? {
+        storage.order(of: id, in: blocks, revision: revision, journal: journal)
+    }
+
+    private final class Storage: @unchecked Sendable {
+        private let lock = NSLock()
+        private var orders: [UUID: Int] = [:]
+        /// The blocks it was last built from, so a block that is not there
+        /// does not build it again until something changes.
+        private var builtFor: UInt64?
+
+        func order(of id: UUID, in blocks: [BlockData], revision: UInt64, journal: BlockJournal) -> Int? {
+            lock.lock()
+            defer { lock.unlock() }
+            if let order = orders[id], order < blocks.count, blocks[order].id == id { return order }
+            // Small worlds are quicker to read through than to map.
+            guard blocks.count > 32 else { return blocks.firstIndex { $0.id == id } }
+            if builtFor == revision { return nil }
+            if let builtFor, let changed = journal.orders(since: builtFor) {
+                // Only blocks added or changed one at a time since: a script
+                // making a hundred blocks does not map the world a hundred times.
+                for order in changed where order < blocks.count {
+                    orders[blocks[order].id] = order
+                }
+            } else {
+                orders.removeAll(keepingCapacity: true)
+                orders.reserveCapacity(blocks.count)
+                for (order, block) in blocks.enumerated() where orders[block.id] == nil {
+                    orders[block.id] = order
+                }
+            }
+            builtFor = revision
+            guard let order = orders[id], order < blocks.count, blocks[order].id == id else { return nil }
+            return order
+        }
+    }
+}
+
+/// The blocks changed one at a time since some revision, in order: what a
+/// cache built at that revision has to look at again, instead of every
+/// block. Anything else done to the blocks (a removal, a whole new list)
+/// clears it, and then a cache looks at everything as before.
+///
+/// Revisions are never reused, even between copies of a world, so a cache
+/// built from one copy never mistakes another copy's journal for its own.
+struct BlockJournal: Hashable, Sendable {
+    /// The revision before the first change written down.
+    private var base: UInt64?
+    private var revisions: [UInt64] = []
+    private var orders: [Int] = []
+
+    static let capacity = 256
+
+    static func == (lhs: BlockJournal, rhs: BlockJournal) -> Bool { true }
+    func hash(into hasher: inout Hasher) {}
+
+    mutating func note(order: Int, from before: UInt64, to after: UInt64) {
+        if base == nil || (revisions.last ?? base) != before {
+            base = before
+            revisions.removeAll(keepingCapacity: true)
+            orders.removeAll(keepingCapacity: true)
+        } else if revisions.count >= Self.capacity {
+            let dropped = Self.capacity / 2
+            base = revisions[dropped - 1]
+            revisions.removeFirst(dropped)
+            orders.removeFirst(dropped)
+        }
+        revisions.append(after)
+        orders.append(order)
+    }
+
+    /// The blocks changed since `revision`, or nil when the journal does not
+    /// go back that far (or is another world's).
+    func orders(since revision: UInt64) -> ArraySlice<Int>? {
+        if revision == base { return orders[...] }
+        guard let at = revisions.lastIndex(of: revision) else { return nil }
+        return orders[(at + 1)...]
     }
 }
 
