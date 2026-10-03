@@ -263,6 +263,15 @@ public struct GameViewport: UIViewRepresentable {
         private let reportsFrameRate = UserDefaults.standard.bool(forKey: "AbloxPlayBenchmark")
         private var reportedFrames: Double = 0
         private var reportedLevel: GraphicsProfile.Level?
+        /// The run's three parts: merged meshes on High, every part on its
+        /// own on High (to compare), then merged meshes on Auto.
+        private var benchmarkPhase = 0
+        private var benchmarkStart: Double?
+        private static let benchmarkPhases = ["merged-high", "single-high", "merged-auto"]
+        /// Time spent in `tick` over the last second, for the run's report.
+        private var tickSeconds: Double = 0
+        private var tickLongest: Double = 0
+        private var tickCount = 0
 
         init(parent: GameViewport) {
             self.parent = parent
@@ -579,6 +588,9 @@ public struct GameViewport: UIViewRepresentable {
         }
 
         private func tick(deltaTime: Float) {
+            let started = reportsFrameRate ? CACurrentMediaTime() : 0
+            defer { if reportsFrameRate { noteTickTime(CACurrentMediaTime() - started) } }
+            if reportsFrameRate { runBenchmarkPhases() }
             let dt = min(deltaTime, 1.0 / 20)
             // Everything the game changed since the last frame, in one go.
             let session = parent.session
@@ -781,6 +793,8 @@ public struct GameViewport: UIViewRepresentable {
         // MARK: Graphics
 
         func setGraphics(quality: GraphicsQuality, showFrameRate: Bool) {
+            // The frame-rate run sets its own level for each of its parts.
+            let quality = reportsFrameRate ? (benchmarkPhase == 2 ? GraphicsQuality.auto : .high) : quality
             if quality != graphicsQuality || appliedProfile == nil {
                 graphicsQuality = quality
                 // Auto starts from the top and steps down if it has to.
@@ -852,15 +866,41 @@ public struct GameViewport: UIViewRepresentable {
             }
         }
 
+        /// The frame-rate run: 25 seconds of merged meshes on High, 25 with
+        /// every part drawn on its own, then merged meshes on Auto.
+        private func runBenchmarkPhases() {
+            let now = CACurrentMediaTime()
+            let start = benchmarkStart ?? now
+            benchmarkStart = start
+            let phase = now - start < 25 ? 0 : (now - start < 50 ? 1 : 2)
+            guard phase != benchmarkPhase else { return }
+            benchmarkPhase = phase
+            worldScene.bakesStillParts = phase != 1
+            setGraphics(quality: parent.graphicsQuality, showFrameRate: parent.showFrameRate)
+        }
+
+        private func noteTickTime(_ seconds: Double) {
+            tickSeconds += seconds
+            tickLongest = max(tickLongest, seconds)
+            tickCount += 1
+        }
+
         /// One line a second for the launch check (stderr, which is not held
-        /// back in a buffer): frames per second, level, pixels and meshes.
+        /// back in a buffer): frames per second, the run's part, level,
+        /// pixels, time in `tick` (mean and longest), merged meshes, the
+        /// parts in them and the parts drawn on their own.
         private func reportFrameRate() {
             reportedFrames += 1
             let merged = worldScene.mergedSummary
             let level = appliedProfile?.level ?? governor.level
-            let line = String(format: "AbloxFPS %.1f level=%@ pixels=%.2f meshes=%ld baked=%ld second=%.0f\n",
-                              governor.framesPerSecond, level.displayName, Double(governor.resolutionFactor),
-                              merged.meshes, merged.parts, reportedFrames)
+            let mean = tickCount > 0 ? tickSeconds / Double(tickCount) * 1000 : 0
+            let line = String(format: "AbloxFPS %.1f phase=%@ level=%@ pixels=%.2f cpu=%.1f/%.1fms meshes=%ld baked=%ld single=%ld second=%.0f\n",
+                              governor.framesPerSecond, Self.benchmarkPhases[benchmarkPhase], level.displayName,
+                              Double(governor.resolutionFactor), mean, tickLongest * 1000,
+                              merged.meshes, merged.parts, worldScene.partsDrawnOnTheirOwn, reportedFrames)
+            tickSeconds = 0
+            tickLongest = 0
+            tickCount = 0
             FileHandle.standardError.write(Data(line.utf8))
             if let profile = appliedProfile, profile.level != reportedLevel {
                 reportedLevel = profile.level
@@ -1025,11 +1065,26 @@ public struct GameViewport: UIViewRepresentable {
             // Looked for again only when the blocks change: every block was
             // checked, and the whole world copied, every frame.
             if world.blockRevision.value != placedFrom {
+                let previous = placedFrom
                 placedFrom = world.blockRevision.value
                 elevatorHomes = world.blocks.compactMap { block in
                     block.behavior == .elevator ? (id: block.id, home: block.position, gimmick: block.gimmick) : nil
                 }
-                placedWorld = elevatorHomes.isEmpty ? nil : world
+                if elevatorHomes.isEmpty {
+                    placedWorld = nil
+                } else {
+                    // Only what changed, so the index looks at those alone
+                    // rather than at every block of a copy made afresh.
+                    var caughtUp = false
+                    if var placed = placedWorld, let previous, let changed = world.blocksChanged(since: previous) {
+                        // Let go of the stored copy first, so this one is
+                        // changed in place rather than copied.
+                        placedWorld = nil
+                        caughtUp = Self.catchUp(&placed, with: world, at: changed)
+                        if caughtUp { placedWorld = placed }
+                    }
+                    if !caughtUp { placedWorld = world }
+                }
             }
             guard var placed = placedWorld else {
                 platformOffsets.removeAll()
@@ -1056,6 +1111,23 @@ public struct GameViewport: UIViewRepresentable {
             platformOffsets = offsets
             placedWorld = placed
             return placed
+        }
+
+        /// Brings a copy up to date with the blocks of `world` at `orders`,
+        /// one at a time. False when the two do not line up.
+        private static func catchUp(_ copy: inout WorldDocument, with world: WorldDocument, at orders: [Int]) -> Bool {
+            let blocks = world.blocks
+            for order in orders {
+                guard order < blocks.count else { return false }
+                if order < copy.blocks.count {
+                    guard copy.blocks[order].id == blocks[order].id else { return false }
+                    copy.update(blocks[order])
+                } else {
+                    guard order == copy.blocks.count else { return false }
+                    copy.insert(blocks[order])
+                }
+            }
+            return copy.blocks.count == blocks.count
         }
 
         /// The moving platform under the feet, if any.

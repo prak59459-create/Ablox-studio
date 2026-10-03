@@ -53,6 +53,20 @@ public final class WorldScene {
     /// Studio, where every part is picked and dragged on its own.
     private var baker: StillPartBaker?
 
+    /// Whether still parts are baked into merged meshes (a game only). The
+    /// launch check's frame-rate run turns it off for a while, to compare.
+    public var bakesStillParts = true {
+        didSet {
+            guard bakesStillParts != oldValue, let baker else { return }
+            if bakesStillParts { baker.wake(lastAppliedBlocks.keys) } else { baker.dissolveAll() }
+        }
+    }
+
+    /// Parts drawn by an entity of their own, for the launch check.
+    public var partsDrawnOnTheirOwn: Int {
+        entities.values.reduce(0) { $0 + ($1.isEnabled && $1.model != nil ? 1 : 0) }
+    }
+
     public init(collisionShapes: Bool = true) {
         self.collisionShapes = collisionShapes
         root.name = "ablox.world"
@@ -481,7 +495,7 @@ public final class WorldScene {
     /// Which merged mesh a part can be drawn by, or nil if it must be drawn
     /// on its own.
     func bakingPlace(for id: UUID) -> StillPartBaker.Place? {
-        guard !physicsEnabled, let block = lastAppliedBlocks[id], let entity = entities[id], !effectHidden.contains(id),
+        guard bakesStillParts, !physicsEnabled, let block = lastAppliedBlocks[id], let entity = entities[id], !effectHidden.contains(id),
               RenderMerging.canMerge(block, hasChildren: parentIDs.contains(id)) else { return nil }
         if let parentID = block.parentID {
             // Hung from its parent's entity, so a mesh under it moves with it.

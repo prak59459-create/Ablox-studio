@@ -151,6 +151,12 @@ final class StillPartBaker {
         }
     }
 
+    /// Every part may be baked again from now (baking was switched back on).
+    func wake<Parts: Sequence>(_ ids: Parts) where Parts.Element == UUID {
+        let time = now
+        for id in ids where groupOf[id] == nil && !pinned.contains(id) { waiting[id] = time }
+    }
+
     /// The graphics setting changed the shapes: every mesh again, soon.
     func shapesChanged() {
         for key in groups.keys { joining.insert(key) }

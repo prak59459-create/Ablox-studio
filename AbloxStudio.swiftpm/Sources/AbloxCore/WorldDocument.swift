@@ -322,6 +322,15 @@ public extension WorldDocument {
         orders.order(of: id, in: storedBlocks, revision: blockRevision.value, journal: blockJournal)
     }
 
+    /// Where the blocks changed or added one at a time since `revision` are,
+    /// in order, or nil when that is not known (something else happened, or
+    /// `revision` is not in this world's past). A copy kept in step with
+    /// this world can take just those.
+    func blocksChanged(since revision: UInt64) -> [Int]? {
+        guard revision != blockRevision.value else { return [] }
+        return blockJournal.orders(since: revision).map { Array(Set($0)).sorted() }
+    }
+
     /// Direct children of `parent` (or the top level when `parent` is nil),
     /// in document order.
     func children(of parent: UUID?) -> [BlockData] {

@@ -388,6 +388,19 @@ final class BlockOrderTests: XCTestCase {
         XCTAssertNil(cache.index(for: other).entry(for: id))
     }
 
+    func testACopyCanBeKeptInStepWithTheBlocksThatChanged() {
+        var world = world(100)
+        let start = world.blockRevision.value
+        XCTAssertEqual(world.blocksChanged(since: start), [])
+        world.mutate(id: world.blocks[40].id) { $0.color.r = 0 }
+        world.insert(BlockData(name: "New"))
+        world.mutate(id: world.blocks[3].id) { $0.color.g = 0 }
+        world.mutate(id: world.blocks[40].id) { $0.color.b = 0 }
+        XCTAssertEqual(world.blocksChanged(since: start), [3, 40, 100])
+        world.remove(id: world.blocks[0].id)
+        XCTAssertNil(world.blocksChanged(since: start), "a removal is not written down")
+    }
+
     func testTheJournalOnlyAnswersForItsOwnPast() {
         var journal = BlockJournal()
         journal.note(order: 4, from: 10, to: 11)

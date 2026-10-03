@@ -1,20 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "2.4",
-  "build": 15,
+  "version": "2.5",
+  "build": 16,
   "protocol": 8,
   "date": "2026-10-03",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "The game preview has Ablox 2.6's faster engine: parts that stay put are drawn as a few merged pieces, and only the blocks that changed are looked at each frame",
-      "Scripts that move many blocks run up to 30 times faster in the game preview",
-      "Finding a part no longer reads through every part, so editing big worlds is quicker; the editor still draws and picks every part on its own"
+      "The game preview has Ablox 2.7's engine: worlds with moving platforms no longer copy the whole world at every change",
+      "Everything from 2.4: still parts drawn together in the game preview, faster scripts, and quicker editing of big worlds"
     ],
     "ja": [
-      "ゲームのプレビューに Ablox 2.6 の速いエンジンが入りました: 動かないパーツを まとめて描き、毎フレーム 変わったブロックだけを見ます",
-      "たくさんのブロックを動かすスクリプトが、ゲームのプレビューで 最大30倍 速く動きます",
-      "パーツを探すとき 全部を順に見なくなり、大きなワールドの編集が 速くなりました（エディタでは これまでどおり パーツを1つずつ 描いて えらべます）"
+      "ゲームのプレビューに Ablox 2.7 のエンジンが入りました: 動く床のあるワールドで、変わるたびに ワールドぜんぶを コピーしなくなりました",
+      "2.4 の内容もそのまま: プレビューで動かないパーツを まとめて描く、スクリプトが速い、大きなワールドの編集が速い"
     ]
   }
 }
