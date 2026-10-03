@@ -1,18 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "2.5",
-  "build": 16,
+  "version": "2.6",
+  "build": 17,
   "protocol": 8,
   "date": "2026-10-03",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "The game preview has Ablox 2.7's engine: worlds with moving platforms no longer copy the whole world at every change",
-      "Everything from 2.4: still parts drawn together in the game preview, faster scripts, and quicker editing of big worlds"
+      "Shares Ablox 2.8's engine: the 3D view reads the stick and camera every frame without SwiftUI redrawing anything",
+      "Everything from 2.4 and 2.5: still parts drawn together in the game preview, faster scripts, and quicker editing of big worlds"
     ],
     "ja": [
-      "ゲームのプレビューに Ablox 2.7 のエンジンが入りました: 動く床のあるワールドで、変わるたびに ワールドぜんぶを コピーしなくなりました",
-      "2.4 の内容もそのまま: プレビューで動かないパーツを まとめて描く、スクリプトが速い、大きなワールドの編集が速い"
+      "Ablox 2.8 と同じエンジン: 3D の画面が スティックとカメラを 毎フレーム読み、SwiftUI の作りなおしを 起こしません",
+      "2.4・2.5 の内容もそのまま: プレビューで動かないパーツを まとめて描く、スクリプトが速い、大きなワールドの編集が速い"
     ]
   }
 }

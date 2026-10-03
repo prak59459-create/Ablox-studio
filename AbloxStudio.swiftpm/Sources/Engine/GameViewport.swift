@@ -41,17 +41,14 @@ public final class ViewportLink {
 public struct GameViewport: UIViewRepresentable {
 
     @ObservedObject var session: SessionCoordinator
-    @Binding var input: MovementInput
-    /// Camera orbit, driven by dragging on the right half of the screen.
-    @Binding var cameraYaw: Float
-    @Binding var cameraPitch: Float
+    /// The stick, the buttons and the camera, read every frame. The camera
+    /// is turned by the player and, now and then, by the game.
+    let controls: PlayControls
     var onBlockTapped: ((UUID) -> Void)?
     /// Mirrors the Settings toggles, which had nothing to switch off until
     /// sound existed.
     var soundEnabled: Bool
     var hapticsEnabled: Bool
-    /// The fire button is held. Shots go out at the weapon's rate while it is.
-    var isFiring: Bool
     /// Settings → Graphics. `auto` steps down by itself below 30 fps.
     var graphicsQuality: GraphicsQuality
     /// A small frame-rate counter at the top of the screen.
@@ -73,12 +70,9 @@ public struct GameViewport: UIViewRepresentable {
 
     public init(
         session: SessionCoordinator,
-        input: Binding<MovementInput>,
-        cameraYaw: Binding<Float>,
-        cameraPitch: Binding<Float>,
+        controls: PlayControls,
         soundEnabled: Bool = true,
         hapticsEnabled: Bool = true,
-        isFiring: Bool = false,
         graphicsQuality: GraphicsQuality = .auto,
         showFrameRate: Bool = false,
         preferences: PlayPreferences = PlayPreferences(),
@@ -90,12 +84,9 @@ public struct GameViewport: UIViewRepresentable {
         onBlockTapped: ((UUID) -> Void)? = nil
     ) {
         self.session = session
-        self._input = input
-        self._cameraYaw = cameraYaw
-        self._cameraPitch = cameraPitch
+        self.controls = controls
         self.soundEnabled = soundEnabled
         self.hapticsEnabled = hapticsEnabled
-        self.isFiring = isFiring
         self.graphicsQuality = graphicsQuality
         self.showFrameRate = showFrameRate
         self.preferences = preferences
@@ -133,6 +124,7 @@ public struct GameViewport: UIViewRepresentable {
 
     public func updateUIView(_ view: ARView, context: Context) {
         context.coordinator.parent = self
+        context.coordinator.noteSwiftUIUpdate()
         link?.coordinator = context.coordinator
         context.coordinator.listenForSounds()
         context.coordinator.setFeedbackEnabled(sound: soundEnabled && preferences.effectsVolume > 0.02, haptics: hapticsEnabled)
@@ -272,6 +264,12 @@ public struct GameViewport: UIViewRepresentable {
         private var tickSeconds: Double = 0
         private var tickLongest: Double = 0
         private var tickCount = 0
+        /// How long the main thread was awake over the last second, and how
+        /// often SwiftUI asked the view to update.
+        private var mainThreadWatch: CFRunLoopObserver?
+        private var mainAwakeSince: Double?
+        private var mainAwake: Double = 0
+        private var swiftUIUpdates = 0
 
         init(parent: GameViewport) {
             self.parent = parent
@@ -366,6 +364,8 @@ public struct GameViewport: UIViewRepresentable {
         func detach() {
             updateSubscription?.cancel()
             updateSubscription = nil
+            if let mainThreadWatch { CFRunLoopRemoveObserver(CFRunLoopGetMain(), mainThreadWatch, .commonModes) }
+            mainThreadWatch = nil
             worldScene.removeAll()
             avatars.removeAll()
             chatBubbles?.removeAll()
@@ -546,7 +546,7 @@ public struct GameViewport: UIViewRepresentable {
                         localSnapshot.yawDegrees = yaw
                         // The camera turns with them, or the next frame's
                         // "face where the camera looks" would undo it.
-                        parent.cameraYaw = -yaw
+                        parent.controls.cameraYaw = -yaw
                         publisher.reset()
                     case let .gesture(speaker, wire):
                         switch Gesture(wire: wire) {
@@ -607,8 +607,8 @@ public struct GameViewport: UIViewRepresentable {
             // 1. Intent → velocity, scaled by whatever the script allows.
             let scripted = parent.session.scripted
             let scale = scripted.movement
-            var input = parent.input
-            input.cameraYawDegrees = parent.cameraYaw
+            let controls = parent.controls
+            var input = controls.movementInput
             if scale.frozen {
                 input.stick = .zero
                 input.isJumping = false
@@ -641,7 +641,7 @@ public struct GameViewport: UIViewRepresentable {
             if scripted.camera.mode == .firstPerson || scripted.weapon != nil {
                 // Aiming: the body faces where the camera looks, so walking
                 // sideways strafes instead of turning away from the target.
-                let forward = Quat.yaw(degrees: parent.cameraYaw).act(Vec3(0, 0, -1))
+                let forward = Quat.yaw(degrees: controls.cameraYaw).act(Vec3(0, 0, -1))
                 localSnapshot.yawDegrees = atan2(forward.x, -forward.z) * 180 / .pi
             } else {
                 followCamera(stick: input.stick, dt: dt)
@@ -687,6 +687,8 @@ public struct GameViewport: UIViewRepresentable {
             if !effects.isEmpty { apply(effects: effects) }
 
             updateCamera(dt: dt, index: index)
+            // The compass and a turning map catch up a few times a second.
+            controls.showBearing(at: CACurrentMediaTime())
             updateAtmosphere(world: world, index: index, dt: dt)
             updateWaypoint()
             updateMusic(world: world)
@@ -697,7 +699,7 @@ public struct GameViewport: UIViewRepresentable {
             worldScene.animateBlocks(time: animationClock, eye: Vec3(camera.position(relativeTo: nil)))
             labelClock += dt
             updateWeapons(dt: dt)
-            if parent.isFiring { fireIfReady(index: index) }
+            if controls.wantsToFire { fireIfReady(index: index) }
             fadeTracers(dt: dt)
             publishIfDue()
 
@@ -717,7 +719,7 @@ public struct GameViewport: UIViewRepresentable {
         /// walks on, but leaves it be for a moment after they turn it
         /// themselves.
         private func followCamera(stick: Vec3, dt: Float) {
-            let yaw = parent.cameraYaw
+            let yaw = parent.controls.cameraYaw
             var seen = yaw
             defer { followSeenYaw = seen }
             guard preferences.hud.cameraFollows, !parent.photoMode, parent.spectating == nil, !parent.preferFirstPerson,
@@ -732,7 +734,7 @@ public struct GameViewport: UIViewRepresentable {
             let turn = CameraHabits.followTurn(cameraYaw: yaw, bodyYaw: localSnapshot.yawDegrees, stick: stick, seconds: dt)
             guard turn != 0 else { return }
             seen = normalizeDegrees(yaw + turn)
-            parent.cameraYaw = seen
+            parent.controls.cameraYaw = seen
         }
 
         /// Low Power Mode, the battery saver and a hot iPad all cap the
@@ -791,6 +793,32 @@ public struct GameViewport: UIViewRepresentable {
         }
 
         // MARK: Graphics
+
+        /// Counted for the frame-rate run.
+        func noteSwiftUIUpdate() {
+            if reportsFrameRate { swiftUIUpdates += 1 }
+        }
+
+        /// Measures how long the main thread is awake: between waking and
+        /// going back to sleep, it runs this view, SwiftUI and UIKit.
+        private func watchMainThread() {
+            guard reportsFrameRate, mainThreadWatch == nil else { return }
+            let activities = CFRunLoopActivity.beforeWaiting.rawValue | CFRunLoopActivity.afterWaiting.rawValue
+            let observer = CFRunLoopObserverCreateWithHandler(kCFAllocatorDefault, activities, true, 0) { [weak self] _, activity in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    let now = CACurrentMediaTime()
+                    if activity == .afterWaiting {
+                        self.mainAwakeSince = now
+                    } else if let since = self.mainAwakeSince {
+                        self.mainAwake += now - since
+                        self.mainAwakeSince = nil
+                    }
+                }
+            }
+            CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
+            mainThreadWatch = observer
+        }
 
         func setGraphics(quality: GraphicsQuality, showFrameRate: Bool) {
             // The frame-rate run sets its own level for each of its parts.
@@ -869,9 +897,12 @@ public struct GameViewport: UIViewRepresentable {
         /// The frame-rate run: 25 seconds of merged meshes on High, 25 with
         /// every part drawn on its own, then merged meshes on Auto.
         private func runBenchmarkPhases() {
+            watchMainThread()
             let now = CACurrentMediaTime()
             let start = benchmarkStart ?? now
             benchmarkStart = start
+            // Looking round the town, as a player does.
+            parent.controls.cameraYaw = normalizeDegrees(Float(now - start) * 24)
             let phase = now - start < 25 ? 0 : (now - start < 50 ? 1 : 2)
             guard phase != benchmarkPhase else { return }
             benchmarkPhase = phase
@@ -894,13 +925,15 @@ public struct GameViewport: UIViewRepresentable {
             let merged = worldScene.mergedSummary
             let level = appliedProfile?.level ?? governor.level
             let mean = tickCount > 0 ? tickSeconds / Double(tickCount) * 1000 : 0
-            let line = String(format: "AbloxFPS %.1f phase=%@ level=%@ pixels=%.2f cpu=%.1f/%.1fms meshes=%ld baked=%ld single=%ld second=%.0f\n",
+            let line = String(format: "AbloxFPS %.1f phase=%@ level=%@ pixels=%.2f cpu=%.1f/%.1fms main=%.0f%% ui=%ld meshes=%ld baked=%ld single=%ld second=%.0f\n",
                               governor.framesPerSecond, Self.benchmarkPhases[benchmarkPhase], level.displayName,
-                              Double(governor.resolutionFactor), mean, tickLongest * 1000,
-                              merged.meshes, merged.parts, worldScene.partsDrawnOnTheirOwn, reportedFrames)
+                              Double(governor.resolutionFactor), mean, tickLongest * 1000, min(100, mainAwake * 100),
+                              swiftUIUpdates, merged.meshes, merged.parts, worldScene.partsDrawnOnTheirOwn, reportedFrames)
             tickSeconds = 0
             tickLongest = 0
             tickCount = 0
+            mainAwake = 0
+            swiftUIUpdates = 0
             FileHandle.standardError.write(Data(line.utf8))
             if let profile = appliedProfile, profile.level != reportedLevel {
                 reportedLevel = profile.level
@@ -988,8 +1021,8 @@ public struct GameViewport: UIViewRepresentable {
 
             switch settings.mode {
             case .firstPerson:
-                let pitch = max(-80, min(80, parent.cameraPitch))
-                let look = Quat.euler(degrees: Vec3(pitch, parent.cameraYaw, 0)).act(Vec3(0, 0, -1))
+                let pitch = max(-80, min(80, parent.controls.cameraPitch))
+                let look = Quat.euler(degrees: Vec3(pitch, parent.controls.cameraYaw, 0)).act(Vec3(0, 0, -1))
                 let eye = localSnapshot.position + Vec3(0, PlayerHitBody.eyeHeight * size, 0) + jitter
                 // No easing: in first person any lag between thumb and view
                 // reads as the game being slow.
@@ -1003,7 +1036,7 @@ public struct GameViewport: UIViewRepresentable {
                 // Tipped slightly, and turned with the camera yaw, so "up" on
                 // the stick is still "away from the camera".
                 let height = settings.distance * preferences.cameraZoom
-                let offset = Quat.yaw(degrees: parent.cameraYaw).act(Vec3(0, height, height * 0.3))
+                let offset = Quat.yaw(degrees: parent.controls.cameraYaw).act(Vec3(0, height, height * 0.3))
                 let eye = focus + offset + jitter
                 cameraAnchor.position = Vec3.lerp(Vec3(cameraAnchor.position), eye, 1 - exp(-12 * dt)).simd
                 camera.look(at: focus.simd, from: cameraAnchor.position, relativeTo: nil)
@@ -1024,8 +1057,9 @@ public struct GameViewport: UIViewRepresentable {
                 break
             }
 
-            let pitch = parent.photoMode ? max(-85, min(60, parent.cameraPitch)) : max(-75, min(20, parent.cameraPitch))
-            let orbit = Quat.euler(degrees: Vec3(pitch, parent.cameraYaw, 0))
+            let held = parent.controls
+            let pitch = parent.photoMode ? max(-85, min(60, held.cameraPitch)) : max(-75, min(20, held.cameraPitch))
+            let orbit = Quat.euler(degrees: Vec3(pitch, held.cameraYaw, 0))
 
             let focus = subjectPosition + Vec3(0, 1.4 * size, 0) + jitter
             // Pinch-to-zoom (and Settings) scale the game's own distance.
