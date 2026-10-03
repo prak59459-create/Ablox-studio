@@ -264,6 +264,10 @@ public struct GameViewport: UIViewRepresentable {
         /// moving, the camera and sky, the words and names, the rest.
         private var sectionSeconds = [Double](repeating: 0, count: 5)
         private var sectionMark: Double = 0
+        /// The same view drawn merged and drawn part by part, to show they
+        /// look the same.
+        private var mergedLook: [UInt8]?
+        private var looksTaken = 0
         /// Time spent in `tick` over the last second, for the run's report.
         private var tickSeconds: Double = 0
         private var tickLongest: Double = 0
@@ -918,14 +922,68 @@ public struct GameViewport: UIViewRepresentable {
             let now = CACurrentMediaTime()
             let start = benchmarkStart ?? now
             benchmarkStart = start
-            // Looking round the town, as a player does.
-            parent.controls.cameraYaw = normalizeDegrees(Float(now - start) * 24)
+            // Looking round the town, as a player does — but held still for
+            // the two pictures compared below.
             let seconds = now - start
+            let holding = (36..<38.6).contains(seconds) || (56..<58.6).contains(seconds)
+            parent.controls.cameraYaw = holding ? 30 : normalizeDegrees(Float(seconds) * 24)
+            if looksTaken == 0, seconds >= 38.3 {
+                looksTaken = 1
+                takeLook { [weak self] pixels in self?.mergedLook = pixels }
+            } else if looksTaken == 1, seconds >= 58.3 {
+                looksTaken = 2
+                takeLook { [weak self] pixels in self?.compareLooks(pixels) }
+            }
             let phase = seconds < 40 ? 0 : (seconds < 60 ? 1 : 2)
             guard phase != benchmarkPhase else { return }
             benchmarkPhase = phase
             worldScene.bakesStillParts = phase != 1
             setGraphics(quality: parent.graphicsQuality, showFrameRate: parent.showFrameRate)
+        }
+
+        /// The view as a small picture's pixels, RGBA.
+        private func takeLook(_ done: @escaping ([UInt8]?) -> Void) {
+            snapshot { image in
+                guard let cgImage = image?.cgImage else { return done(nil) }
+                let width = 160, height = 120
+                var bytes = [UInt8](repeating: 0, count: width * height * 4)
+                let drawn: Bool = bytes.withUnsafeMutableBytes { buffer in
+                    guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                                                  bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+                    context.interpolationQuality = .medium
+                    context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+                    return true
+                }
+                done(drawn ? bytes : nil)
+            }
+        }
+
+        /// How far apart the merged and the part-by-part pictures are: the
+        /// mean difference, and the share of pixels that differ clearly
+        /// (characters walk and signs spin between the two).
+        private func compareLooks(_ single: [UInt8]?) {
+            guard let merged = mergedLook, let single, merged.count == single.count else {
+                FileHandle.standardError.write(Data("AbloxLook could not take both pictures\n".utf8))
+                return
+            }
+            var total = 0
+            var changed = 0
+            var pixels = 0
+            var i = 0
+            while i + 3 < merged.count {
+                let dr = abs(Int(merged[i]) - Int(single[i]))
+                let dg = abs(Int(merged[i + 1]) - Int(single[i + 1]))
+                let db = abs(Int(merged[i + 2]) - Int(single[i + 2]))
+                total += dr + dg + db
+                if max(dr, dg, db) > 25 { changed += 1 }
+                pixels += 1
+                i += 4
+            }
+            let mean = Double(total) / Double(max(pixels * 3, 1)) / 255 * 100
+            let share = Double(changed) / Double(max(pixels, 1)) * 100
+            let line = String(format: "AbloxLook merged-vs-single mean=%.2f%% changed=%.2f%%\n", mean, share)
+            FileHandle.standardError.write(Data(line.utf8))
         }
 
         /// The run's report: time since the last mark goes to `section`.

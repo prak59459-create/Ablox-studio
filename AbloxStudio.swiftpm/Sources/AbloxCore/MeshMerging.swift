@@ -64,11 +64,16 @@ extension MeshGeometry {
         /// How many times a pattern repeats across it: the material of a
         /// merged mesh repeats once, so each block's own count is baked in.
         public var textureRepeats: Float
+        /// One spot of the texture for every vertex instead: the block's
+        /// colour in a palette (`ColorPalette`).
+        public var paletteCoordinate: TexCoord?
 
-        public init(geometry: MeshGeometry, transform: Transform3D, textureRepeats: Float = 1) {
+        public init(geometry: MeshGeometry, transform: Transform3D, textureRepeats: Float = 1,
+                    paletteCoordinate: TexCoord? = nil) {
             self.geometry = geometry
             self.transform = transform
             self.textureRepeats = textureRepeats
+            self.paletteCoordinate = paletteCoordinate
         }
     }
 
@@ -105,9 +110,13 @@ extension MeshGeometry {
                 let length = turned.length
                 normals.append(length > 1e-6 ? turned * (1 / length) : n)
             }
-            let repeats = placement.textureRepeats
-            for c in geometry.textureCoordinates {
-                textures.append(TexCoord(u: c.u * repeats, v: c.v * repeats))
+            if let spot = placement.paletteCoordinate {
+                textures.append(contentsOf: repeatElement(spot, count: geometry.textureCoordinates.count))
+            } else {
+                let repeats = placement.textureRepeats
+                for c in geometry.textureCoordinates {
+                    textures.append(TexCoord(u: c.u * repeats, v: c.v * repeats))
+                }
             }
             var i = 0
             let source = geometry.indices
@@ -199,5 +208,75 @@ public enum RenderMerging {
             return Int32(Swift.max(-100_000, Swift.min(100_000, scaled)))
         }
         return Patch(x: cell(point.x), z: cell(point.z))
+    }
+}
+
+/// Plain colours as spots on one texture, so parts of many colours can share
+/// one material and be drawn together: a character of six colours was six
+/// meshes, and is one. The material is the same kind a part on its own has
+/// (same roughness, same metal), its colour read from the palette instead
+/// of given as a tint, so it looks the same.
+///
+/// One row of spots: texture coordinates' up and down differ between
+/// conventions, and with one row it does not matter which is used.
+public struct ColorPalette: Sendable, Equatable {
+
+    /// Spots in the row, and so the most colours.
+    public static let width = 4096
+
+    /// Red, green and blue of each spot, in order.
+    public private(set) var colors: [UInt32] = []
+    private var slots: [UInt32: Int] = [:]
+
+    public init() {}
+
+    public var isFull: Bool { colors.count >= Self.width }
+
+    /// The colour as stored: 8 bits a channel, as materials already round it.
+    public static func packed(_ color: ColorRGBA) -> UInt32 {
+        func byte(_ value: Float) -> UInt32 {
+            guard value.isFinite else { return 0 }
+            return UInt32(Swift.max(0, Swift.min(255, (value * 255).rounded())))
+        }
+        return byte(color.r) << 16 | byte(color.g) << 8 | byte(color.b)
+    }
+
+    /// The colour's spot, added if new. Nil when the palette is full.
+    public mutating func slot(for color: ColorRGBA) -> Int? {
+        let key = Self.packed(color)
+        if let slot = slots[key] { return slot }
+        guard !isFull else { return nil }
+        slots[key] = colors.count
+        colors.append(key)
+        return colors.count - 1
+    }
+
+    public func existingSlot(for color: ColorRGBA) -> Int? {
+        slots[Self.packed(color)]
+    }
+
+    /// The middle of the spot, so a sample never reaches the next one.
+    public static func textureCoordinate(ofSlot slot: Int) -> MeshGeometry.TexCoord {
+        MeshGeometry.TexCoord(u: (Float(slot) + 0.5) / Float(width), v: 0.5)
+    }
+
+    /// The row as RGBA bytes, unused spots black.
+    public func pixels() -> [UInt8] {
+        var bytes = [UInt8](repeating: 0, count: Self.width * 4)
+        for (slot, color) in colors.enumerated() {
+            bytes[slot * 4] = UInt8(color >> 16 & 0xFF)
+            bytes[slot * 4 + 1] = UInt8(color >> 8 & 0xFF)
+            bytes[slot * 4 + 2] = UInt8(color & 0xFF)
+            bytes[slot * 4 + 3] = 255
+        }
+        return bytes
+    }
+}
+
+public extension RenderMerging {
+    /// Whether a block's colour can come from the palette: a plain material
+    /// (no pattern drawn on it) and nothing else drawn on it either.
+    static func usesPalette(_ block: BlockData, marked: Bool) -> Bool {
+        block.material.pattern == .none && !marked && block.imageID == nil
     }
 }

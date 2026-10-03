@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "2.9",
-  "build": 20,
+  "version": "3.0",
+  "build": 21,
   "protocol": 8,
   "date": "2026-10-03",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shares Ablox 3.1's engine: moving blocks in the game preview are only moved, nothing else about them is looked at again; everything from 2.6 is still here"
+      "Shares Ablox 3.2's engine: in the game preview, plain parts of any colour are drawn together and look the same; everything from 2.6 is still here"
     ],
     "ja": [
-      "Ablox 3.1 と同じエンジン: ゲームのプレビューで 動くブロックは 場所を変えるだけにしました。2.6 の内容もそのまま"
+      "Ablox 3.2 と同じエンジン: ゲームのプレビューで、ふつうの素材のパーツは 色がちがっても まとめて描きます（見た目はそのまま）。2.6 の内容もそのまま"
     ]
   }
 }

@@ -436,3 +436,55 @@ final class MovedBlockTests: XCTestCase {
         XCTAssertTrue(RenderMerging.onlyMoved(block, turned))
     }
 }
+
+final class ColorPaletteTests: XCTestCase {
+
+    func testColoursGetSpotsOnceEachAndKeepThem() {
+        var palette = ColorPalette()
+        let red = ColorRGBA(r: 1, g: 0, b: 0)
+        let blue = ColorRGBA(r: 0, g: 0, b: 1)
+        XCTAssertEqual(palette.slot(for: red), 0)
+        XCTAssertEqual(palette.slot(for: blue), 1)
+        XCTAssertEqual(palette.slot(for: ColorRGBA(r: 1, g: 0.0001, b: 0)), 0, "the same once rounded to bytes")
+        XCTAssertEqual(palette.existingSlot(for: blue), 1)
+        XCTAssertNil(palette.existingSlot(for: ColorRGBA(r: 0, g: 1, b: 0)))
+        let pixels = palette.pixels()
+        XCTAssertEqual(pixels.count, ColorPalette.width * 4)
+        XCTAssertEqual(Array(pixels[0..<8]), [255, 0, 0, 255, 0, 0, 255, 255])
+    }
+
+    func testAFullPaletteSaysSo() {
+        var palette = ColorPalette()
+        for i in 0..<ColorPalette.width {
+            XCTAssertNotNil(palette.slot(for: ColorRGBA(r: Float(i % 256) / 255, g: Float(i / 256) / 255, b: 0.5)))
+        }
+        XCTAssertTrue(palette.isFull)
+        XCTAssertNil(palette.slot(for: ColorRGBA(r: 0.1, g: 0.9, b: 0.2)))
+    }
+
+    func testEachSpotIsSampledInItsMiddle() {
+        let first = ColorPalette.textureCoordinate(ofSlot: 0)
+        let last = ColorPalette.textureCoordinate(ofSlot: ColorPalette.width - 1)
+        XCTAssertEqual(first.u * Float(ColorPalette.width), 0.5, accuracy: 0.001)
+        XCTAssertEqual(last.u * Float(ColorPalette.width), Float(ColorPalette.width) - 0.5, accuracy: 0.01)
+        XCTAssertEqual(first.v, 0.5)
+    }
+
+    func testAPalettePlacementGivesEveryVertexItsSpot() {
+        let spot = ColorPalette.textureCoordinate(ofSlot: 7)
+        let merged = MeshGeometry.merged([MeshGeometry.Placement(geometry: .box(), transform: .identity, textureRepeats: 3,
+                                                                 paletteCoordinate: spot)])
+        XCTAssertEqual(merged.textureCoordinates.count, 24)
+        XCTAssertTrue(merged.textureCoordinates.allSatisfy { $0 == spot })
+    }
+
+    func testOnlyPlainMaterialsUseThePalette() {
+        var block = BlockData(name: "Part")
+        XCTAssertTrue(RenderMerging.usesPalette(block, marked: false))
+        XCTAssertFalse(RenderMerging.usesPalette(block, marked: true))
+        block.material = .brick
+        XCTAssertFalse(RenderMerging.usesPalette(block, marked: false))
+        block.material = .neon
+        XCTAssertTrue(RenderMerging.usesPalette(block, marked: false))
+    }
+}

@@ -1,5 +1,8 @@
 import Foundation
 import RealityKit
+import UIKit
+import CoreGraphics
+import Metal
 import simd
 import QuartzCore
 import AbloxCore
@@ -33,7 +36,11 @@ final class StillPartBaker {
 
     final class Group {
         let key: GroupKey
-        let material: RealityKit.Material
+        /// The colour's material, or for parts coloured from the palette,
+        /// their kind's palette material (set again when the palette grows).
+        var material: RealityKit.Material
+        /// Parts of any plain colour, coloured from the palette.
+        let paletteKind: MaterialKind?
         /// Drawn by the mesh once it is next built.
         var members: Set<UUID> = []
         /// Drawn by the mesh as it stands.
@@ -43,9 +50,10 @@ final class StillPartBaker {
         var bounds: BoundingBox?
         var isCulled = false
 
-        init(key: GroupKey, material: RealityKit.Material) {
+        init(key: GroupKey, material: RealityKit.Material, paletteKind: MaterialKind? = nil) {
             self.key = key
             self.material = material
+            self.paletteKind = paletteKind
         }
     }
 
@@ -70,6 +78,15 @@ final class StillPartBaker {
     private var leaving: Set<GroupKey> = []
     private var joining: Set<GroupKey> = []
     private var lastLook: Double = -.infinity
+    /// Plain colours as spots on one texture, so a character of six colours
+    /// is one mesh rather than six (`ColorPalette`).
+    private var palette = ColorPalette()
+    /// How many colours the palette texture has, and the materials made
+    /// from it, by kind.
+    private var paletteShown = -1
+    private var paletteMaterials: [MaterialKind: RealityKit.Material] = [:]
+    /// The texture could not be made: every colour gets its own mesh again.
+    private var paletteFailed = false
 
     /// Seconds a part must stay the same before it is baked: longer on the
     /// map, where a rebuild is bigger, than on a character.
@@ -173,6 +190,10 @@ final class StillPartBaker {
         pinned.removeAll()
         leaving.removeAll()
         joining.removeAll()
+        palette = ColorPalette()
+        paletteShown = -1
+        paletteMaterials.removeAll()
+        paletteFailed = false
     }
 
     private func takeOut(_ id: UUID, hold: Bool) {
@@ -200,6 +221,7 @@ final class StillPartBaker {
                 waiting.removeValue(forKey: id)
                 join(id)
             }
+            refreshPalette()
         }
         guard !leaving.isEmpty || !joining.isEmpty else { return }
         let start = CACurrentMediaTime()
@@ -223,10 +245,30 @@ final class StillPartBaker {
     private func join(_ id: UUID) {
         guard groupOf[id] == nil, !pinned.contains(id), let place = scene.bakingPlace(for: id),
               let block = scene.appliedBlock(id) else { return }
-        let made = BlockEntityFactory.mergedMaterial(for: block)
-        let key = GroupKey(place: place, material: made.key)
+        let key: GroupKey
+        let material: RealityKit.Material
+        var paletteKind: MaterialKind?
+        if !paletteFailed, RenderMerging.usesPalette(block, marked: BlockEntityFactory.isMarked(block)),
+           palette.slot(for: block.color) != nil {
+            // Any plain colour: one mesh per kind of material, its colours
+            // read from the palette.
+            key = GroupKey(place: place, material: AnyHashable("palette." + block.material.rawValue))
+            if let made = paletteMaterials[block.material] {
+                material = made
+            } else {
+                // The first of its kind: its material is made with the next
+                // palette painting, before anything of it is drawn.
+                material = SimpleMaterial()
+                paletteShown = -1
+            }
+            paletteKind = block.material
+        } else {
+            let made = BlockEntityFactory.mergedMaterial(for: block)
+            key = GroupKey(place: place, material: made.key)
+            material = made.material
+        }
         let group = groups[key] ?? {
-            let group = Group(key: key, material: made.material)
+            let group = Group(key: key, material: material, paletteKind: paletteKind)
             groups[key] = group
             return group
         }()
@@ -247,10 +289,18 @@ final class StillPartBaker {
             placements.reserveCapacity(group.members.count)
             for id in group.members {
                 guard let block = scene.appliedBlock(id) else { continue }
+                var spot: MeshGeometry.TexCoord?
+                if group.paletteKind != nil {
+                    // Its colour's spot; a colour new to the palette is
+                    // painted into the texture before the mesh is shown.
+                    guard let slot = palette.slot(for: block.color) else { continue }
+                    spot = ColorPalette.textureCoordinate(ofSlot: slot)
+                }
                 wanted.insert(id)
                 placements.append(MeshGeometry.Placement(geometry: UnitShapes.geometry(for: block.shape, profile: scene.profile),
                                                          transform: block.transform,
-                                                         textureRepeats: BlockEntityFactory.textureRepeats(for: block)))
+                                                         textureRepeats: BlockEntityFactory.textureRepeats(for: block),
+                                                         paletteCoordinate: spot))
                 if case .patch = key.place {
                     let box = WorldDocument.bounds(of: block, at: block.transform)
                     bounds = bounds.map { BoundingBox(min: $0.min.componentMin(box.min), max: $0.max.componentMax(box.max)) } ?? box
@@ -258,6 +308,13 @@ final class StillPartBaker {
             }
             mesh = wanted.count >= 2 ? Self.makeMesh(placements) : nil
             if mesh == nil { wanted = [] }
+            if group.paletteKind != nil {
+                refreshPalette()
+                if paletteFailed {
+                    mesh = nil
+                    wanted = []
+                }
+            }
         }
 
         if let mesh {
@@ -319,6 +376,76 @@ final class StillPartBaker {
         flush()
         guard !descriptors.isEmpty else { return nil }
         return try? MeshResource.generate(from: descriptors)
+    }
+
+    // MARK: The palette
+
+    /// Paints the palette texture again when colours were added, and gives
+    /// every palette mesh the new materials.
+    private func refreshPalette() {
+        guard !paletteFailed, palette.colors.count != paletteShown, !palette.colors.isEmpty else { return }
+        guard let texture = Self.paletteTexture(palette) else {
+            // Never drawn with a stand-in material: those parts go back to a
+            // mesh per colour.
+            paletteFailed = true
+            for (key, group) in groups where group.paletteKind != nil {
+                for id in group.members {
+                    groupOf.removeValue(forKey: id)
+                    waiting[id] = now
+                }
+                group.members.removeAll()
+                leaving.insert(key)
+            }
+            return
+        }
+        paletteShown = palette.colors.count
+        let spots = MaterialParameters.Texture(texture, sampler: Self.paletteSampler())
+        paletteMaterials.removeAll()
+        for group in groups.values {
+            guard let kind = group.paletteKind else { continue }
+            let material = paletteMaterials[kind] ?? Self.paletteMaterial(kind, spots: spots)
+            paletteMaterials[kind] = material
+            group.material = material
+            group.entity?.model?.materials = [material]
+        }
+    }
+
+    /// The same material a part of this kind has on its own — the same
+    /// roughness, the same metal, lit or not — its colour read from the
+    /// palette instead of given as a tint.
+    private static func paletteMaterial(_ kind: MaterialKind, spots: MaterialParameters.Texture) -> RealityKit.Material {
+        if kind.isUnlit {
+            var unlit = UnlitMaterial()
+            unlit.color = .init(tint: .white, texture: spots)
+            return unlit
+        }
+        var material = SimpleMaterial()
+        material.color = .init(tint: .white, texture: spots)
+        material.roughness = .init(floatLiteral: kind.roughness)
+        material.metallic = .init(floatLiteral: kind.isMetallic ? 1.0 : 0.0)
+        return material
+    }
+
+    /// Each spot exactly: no blending with the next, no smaller copies.
+    private static func paletteSampler() -> MaterialParameters.Texture.Sampler {
+        let descriptor = MTLSamplerDescriptor()
+        descriptor.minFilter = .nearest
+        descriptor.magFilter = .nearest
+        descriptor.mipFilter = .notMipmapped
+        descriptor.sAddressMode = .clampToEdge
+        descriptor.tAddressMode = .clampToEdge
+        return MaterialParameters.Texture.Sampler(descriptor)
+    }
+
+    private static func paletteTexture(_ palette: ColorPalette) -> TextureResource? {
+        let width = ColorPalette.width
+        let bytes = palette.pixels()
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let provider = CGDataProvider(data: Data(bytes) as CFData),
+              let image = CGImage(width: width, height: 1, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
+                                  space: space, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
+                                  provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else { return nil }
+        return try? TextureResource.generate(from: image, options: .init(semantic: .color))
     }
 
     // MARK: Distance

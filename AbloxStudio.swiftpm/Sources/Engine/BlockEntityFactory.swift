@@ -118,6 +118,11 @@ public enum BlockEntityFactory {
         return (AnyHashable(made.key), made.material)
     }
 
+    /// Whether what the block does is drawn on it (Settings → Colour vision).
+    public static func isMarked(_ block: BlockData) -> Bool {
+        marksMeaning && MeaningMark.mark(for: block.behavior) != nil
+    }
+
     /// How many times a block's pattern repeats across it.
     public static func textureRepeats(for block: BlockData) -> Float {
         let marked = marksMeaning && MeaningMark.mark(for: block.behavior) != nil
