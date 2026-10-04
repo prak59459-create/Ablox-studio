@@ -307,14 +307,8 @@ public final class WorldScene {
         lastAppliedBlocks[block.id] = block
         if let baker {
             showModel(of: block, on: entity, picture: picture)
-            // A new name or tag is not a reason to rebuild a mesh, and a new
-            // colour on a part drawn from the palette only paints its spot.
-            if let previous, RenderMerging.looksTheSame(previous, block) {
-                // Drawn as it was.
-            } else if let previous, RenderMerging.onlyRecoloured(previous, block, marked: BlockEntityFactory.isMarked(block)),
-                      baker.recoloured(block) {
-                // Still drawn by its mesh, in the new colour.
-            } else {
+            // A new name, tag or words are not a reason to rebuild a mesh.
+            if previous.map({ !RenderMerging.looksTheSame($0, block) }) ?? true {
                 baker.changed(block, fresh: fresh && previous == nil)
             }
         }

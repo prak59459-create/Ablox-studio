@@ -487,45 +487,4 @@ final class ColorPaletteTests: XCTestCase {
         block.material = .neon
         XCTAssertTrue(RenderMerging.usesPalette(block, marked: false))
     }
-
-    func testAPartsOwnSpotIsNeverSharedAndCanBePaintedAgain() {
-        var palette = ColorPalette()
-        let red = ColorRGBA(r: 1, g: 0, b: 0)
-        let green = ColorRGBA(r: 0, g: 1, b: 0)
-        XCTAssertEqual(palette.slot(for: red), 0)
-        let own = palette.ownSlot(red)
-        XCTAssertEqual(own, 1)
-        XCTAssertEqual(palette.slot(for: red), 0, "the shared spot is still the one found")
-        XCTAssertTrue(palette.repaint(slot: 1, to: green))
-        XCTAssertFalse(palette.repaint(slot: 1, to: green), "already that colour")
-        XCTAssertNil(palette.existingSlot(for: green), "an own spot is never found by colour")
-        XCTAssertEqual(Array(palette.pixels()[4..<8]), [0, 255, 0, 255])
-        XCTAssertFalse(palette.repaint(slot: 0, to: green), "a shared spot keeps its colour")
-        XCTAssertEqual(Array(palette.pixels()[0..<4]), [255, 0, 0, 255])
-        XCTAssertFalse(palette.repaint(slot: 99, to: green))
-    }
-
-    func testOnlyANewColourOnAPlainSolidPartIsARecolour() {
-        var before = BlockData(name: "Disco")
-        before.color = ColorRGBA(r: 0.6, g: 0.3, b: 0.9)
-        var after = before
-        after.color = ColorRGBA(r: 1, g: 0, b: 0)
-        XCTAssertTrue(RenderMerging.onlyRecoloured(before, after, marked: false))
-        XCTAssertFalse(RenderMerging.onlyRecoloured(before, before, marked: false), "nothing changed")
-        XCTAssertFalse(RenderMerging.onlyRecoloured(before, after, marked: true), "something is drawn on it")
-
-        var moved = after
-        moved.transform.position = Vec3(1, 0, 0)
-        XCTAssertFalse(RenderMerging.onlyRecoloured(before, moved, marked: false))
-
-        var fainter = after
-        fainter.color.a = 0.5
-        XCTAssertFalse(RenderMerging.onlyRecoloured(before, fainter, marked: false))
-
-        var brick = before
-        brick.material = .brick
-        var redBrick = brick
-        redBrick.color = after.color
-        XCTAssertFalse(RenderMerging.onlyRecoloured(brick, redBrick, marked: false), "a pattern's colour is its material's")
-    }
 }

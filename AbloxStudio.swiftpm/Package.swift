@@ -29,8 +29,8 @@ let package = Package(
             targets: ["AbloxStudioApp"],
             bundleIdentifier: "com.ablox.studio",
             teamIdentifier: "",
-            displayVersion: "3.3",
-            bundleVersion: "24",
+            displayVersion: "3.4",
+            bundleVersion: "25",
             // No `appIcon:` on purpose, matching the client: the parameter is
             // optional, and a wrong `PlaceholderIcon` member name stops the
             // manifest compiling rather than falling back to a default icon.

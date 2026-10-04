@@ -184,17 +184,6 @@ public enum RenderMerging {
         return moved == b
     }
 
-    /// Whether the only difference is the colour, the part as solid as
-    /// before and coloured from the palette (`usesPalette`): then it keeps
-    /// its place in its mesh and only its spot on the palette is painted
-    /// again — a dance floor changing colour on every beat stays one mesh.
-    public static func onlyRecoloured(_ a: BlockData, _ b: BlockData, marked: Bool) -> Bool {
-        guard a.color != b.color, a.color.a == b.color.a, usesPalette(b, marked: marked) else { return false }
-        var recoloured = a
-        recoloured.color = b.color
-        return recoloured == b
-    }
-
     /// Whether a block draws nothing at all: see-through to the end, like the
     /// root a character's parts hang from. Such a block keeps its place in
     /// the scene but is not handed to the GPU.
@@ -265,27 +254,6 @@ public struct ColorPalette: Sendable, Equatable {
 
     public func existingSlot(for color: ColorRGBA) -> Int? {
         slots[Self.packed(color)]
-    }
-
-    /// A spot of a part's own, for a part whose colour keeps changing: it is
-    /// painted again with each change (`repaint`) instead of the part's mesh
-    /// being built again. Never shared, so never found by `slot(for:)`. Nil
-    /// when the palette is full.
-    public mutating func ownSlot(_ color: ColorRGBA) -> Int? {
-        guard !isFull else { return nil }
-        colors.append(Self.packed(color))
-        return colors.count - 1
-    }
-
-    /// Paints a spot of a part's own (`ownSlot`) again; a shared spot is
-    /// left as it is. True when its colour changed.
-    @discardableResult
-    public mutating func repaint(slot: Int, to color: ColorRGBA) -> Bool {
-        guard colors.indices.contains(slot) else { return false }
-        let packed = Self.packed(color)
-        guard colors[slot] != packed, slots[colors[slot]] != slot else { return false }
-        colors[slot] = packed
-        return true
     }
 
     /// The middle of the spot, so a sample never reaches the next one.

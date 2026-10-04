@@ -87,20 +87,8 @@ final class StillPartBaker {
     private var paletteMaterials: [MaterialKind: RealityKit.Material] = [:]
     /// The texture could not be made: every colour gets its own mesh again.
     private var paletteFailed = false
-    /// Meshes with a part whose own spot changed colour (`recoloured`): they
-    /// are given a newly painted palette, at most `repaintsPerSecond` times
-    /// a second. The other meshes keep theirs, whose spots are still right.
-    private var repainted: Set<GroupKey> = []
-    private var lastRepaint: Double = -.infinity
-    static let repaintsPerSecond: Double = 30
     /// Time spent painting palettes, for the frame-rate run.
     private(set) var paintingSeconds: Double = 0
-    /// Spots of parts' own, the ones free to give out again, and the ones
-    /// freed but perhaps still drawn by a mesh until it is rebuilt.
-    private var ownSlots: [UUID: Int] = [:]
-    private var freeSlots: [Int] = []
-    private var releasing: [Int] = []
-    static let mostOwnSlots = 1_024
 
     /// Seconds a part must stay the same before it is baked: longer on the
     /// map, where a rebuild is bigger, than on a character.
@@ -128,29 +116,6 @@ final class StillPartBaker {
         let settle = block.parentID == nil ? Self.patchSettle : Self.modelSettle
         let time = now
         waiting[id] = fresh ? time : Swift.max(time + settle, heldUntil[id] ?? 0)
-    }
-
-    /// Only its colour changed (`RenderMerging.onlyRecoloured`): a part in
-    /// a palette mesh stays in it and its own spot is painted again, at
-    /// once and without building the mesh again after the first time.
-    /// False when it cannot be — not in a palette mesh, or no spot left —
-    /// and then it is `changed` as any other.
-    func recoloured(_ block: BlockData) -> Bool {
-        let id = block.id
-        guard !paletteFailed, let key = groupOf[id], groups[key]?.paletteKind != nil else { return false }
-        if let slot = ownSlots[id] {
-            if palette.repaint(slot: slot, to: block.color) { repainted.insert(key) }
-            return true
-        }
-        guard ownSlots.count < Self.mostOwnSlots, let slot = freeSlots.popLast() ?? palette.ownSlot(block.color) else {
-            return false
-        }
-        palette.repaint(slot: slot, to: block.color)
-        ownSlots[id] = slot
-        repainted.insert(key)
-        // Its vertices point at its own spot from the next build, straight away.
-        leaving.insert(key)
-        return true
     }
 
     /// Something not in the world changed how a part looks — a tint, a
@@ -186,7 +151,6 @@ final class StillPartBaker {
             group.entity?.removeFromParent()
             for id in group.members.union(group.drawn) {
                 groupOf.removeValue(forKey: id)
-                releaseSlot(of: id)
                 if baked.remove(id) != nil { scene.bakedStateChanged(id) }
             }
             groups.removeValue(forKey: key)
@@ -200,10 +164,7 @@ final class StillPartBaker {
     func dissolveAll() {
         waiting.removeAll()
         for (key, group) in groups {
-            for id in group.members {
-                groupOf.removeValue(forKey: id)
-                releaseSlot(of: id)
-            }
+            for id in group.members { groupOf.removeValue(forKey: id) }
             group.members.removeAll()
             leaving.insert(key)
         }
@@ -235,28 +196,17 @@ final class StillPartBaker {
         paletteShown = -1
         paletteMaterials.removeAll()
         paletteFailed = false
-        repainted.removeAll()
-        ownSlots.removeAll()
-        freeSlots.removeAll()
-        releasing.removeAll()
     }
 
     private func takeOut(_ id: UUID, hold: Bool) {
         guard let key = groupOf.removeValue(forKey: id), let group = groups[key] else { return }
         group.members.remove(id)
-        releaseSlot(of: id)
         leaving.insert(key)
         if hold {
             let times = (timesTakenOut[id] ?? 0) + 1
             timesTakenOut[id] = times
             heldUntil[id] = now + Swift.min(120, 8 * pow(2, Double(times - 1)))
         }
-    }
-
-    /// A part's own spot may be given out again once no mesh draws it: when
-    /// every mesh it left has been rebuilt.
-    private func releaseSlot(of id: UUID) {
-        if let slot = ownSlots.removeValue(forKey: id) { releasing.append(slot) }
     }
 
     // MARK: Every frame
@@ -274,13 +224,6 @@ final class StillPartBaker {
                 join(id)
             }
             refreshPalette()
-        }
-        defer {
-            if leaving.isEmpty, !releasing.isEmpty {
-                freeSlots.append(contentsOf: releasing)
-                releasing.removeAll()
-            }
-            if !repainted.isEmpty, time - lastRepaint >= 1 / Self.repaintsPerSecond { repaintPalette() }
         }
         guard !leaving.isEmpty || !joining.isEmpty else { return }
         let start = CACurrentMediaTime()
@@ -352,7 +295,7 @@ final class StillPartBaker {
                 if group.paletteKind != nil {
                     // Its colour's spot; a colour new to the palette is
                     // painted into the texture before the mesh is shown.
-                    guard let slot = ownSlots[id] ?? palette.slot(for: block.color) else { continue }
+                    guard let slot = palette.slot(for: block.color) else { continue }
                     spot = ColorPalette.textureCoordinate(ofSlot: slot)
                 }
                 wanted.insert(id)
@@ -445,8 +388,10 @@ final class StillPartBaker {
         guard !paletteFailed, palette.colors.count != paletteShown, !palette.colors.isEmpty else { return }
         let started = CACurrentMediaTime()
         defer { paintingSeconds += CACurrentMediaTime() - started }
+        // No smaller copies: the spots are read exactly, never shrunk, and
+        // making them would be more work for the GPU to finish first.
         guard let image = Self.paletteImage(palette),
-              let texture = try? TextureResource.generate(from: image, options: .init(semantic: .color)) else {
+              let texture = try? TextureResource.generate(from: image, options: .init(semantic: .color, mipmapsMode: .none)) else {
             // Never drawn with a stand-in material: those parts go back to a
             // mesh per colour.
             paletteFailed = true
@@ -461,46 +406,10 @@ final class StillPartBaker {
             return
         }
         paletteShown = palette.colors.count
-        // Every mesh has every colour now.
-        repainted.removeAll()
         let spots = MaterialParameters.Texture(texture, sampler: Self.paletteSampler())
         paletteMaterials.removeAll()
         for group in groups.values {
             guard let kind = group.paletteKind else { continue }
-            let material = paletteMaterials[kind] ?? Self.paletteMaterial(kind, spots: spots)
-            paletteMaterials[kind] = material
-            group.material = material
-            group.entity?.model?.materials = [material]
-        }
-    }
-
-    /// Parts' own spots painted again: a new palette texture, given to the
-    /// meshes whose parts changed colour. Not painted into the texture in
-    /// use, which would wait for the frame being drawn with it.
-    private func repaintPalette() {
-        let keys = repainted
-        repainted.removeAll()
-        guard !paletteFailed else { return }
-        lastRepaint = CACurrentMediaTime()
-        guard palette.colors.count == paletteShown else {
-            // More colours as well: every mesh gets the new texture.
-            refreshPalette()
-            return
-        }
-        let started = CACurrentMediaTime()
-        defer { paintingSeconds += CACurrentMediaTime() - started }
-        guard let image = Self.paletteImage(palette),
-              let texture = try? TextureResource.generate(from: image, options: .init(semantic: .color)) else {
-            paletteShown = -1
-            refreshPalette()
-            return
-        }
-        let spots = MaterialParameters.Texture(texture, sampler: Self.paletteSampler())
-        var materials: [MaterialKind: RealityKit.Material] = [:]
-        for kind in paletteMaterials.keys { materials[kind] = Self.paletteMaterial(kind, spots: spots) }
-        paletteMaterials = materials
-        for key in keys {
-            guard let group = groups[key], let kind = group.paletteKind else { continue }
             let material = paletteMaterials[kind] ?? Self.paletteMaterial(kind, spots: spots)
             paletteMaterials[kind] = material
             group.material = material
