@@ -1,18 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "3.9",
-  "build": 30,
+  "version": "4.0",
+  "build": 31,
   "protocol": 8,
   "date": "2026-10-04",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shares Ablox 4.9's core: a player's identity and looks have files of their own, so a change to movement no longer rebuilds most of the editor after an update",
-      "From 3.8: comparisons and additions to everyday types live in a few files that seldom change"
+      "Shares Ablox 5.0's core: blocks' shapes, materials, behaviours and lights, and a world's particles, music, sounds and panels each have a file of their own, so a change to one rebuilds only what uses it after an update",
+      "From 3.9: a player's identity and looks have files of their own"
     ],
     "ja": [
-      "Ablox 4.9 と 同じ core: プレイヤーの ID と 見た目を それぞれ 自分の ファイルに 分けたので、動きの しくみを 変えても アップデートの あとに エディタの 大部分を 作りなおしません",
-      "3.8 の内容: くらべ方と、みんなが 使う 型への 追加を 少しの ファイルに まとめました"
+      "Ablox 5.0 と 同じ core: ブロックの 形・素材・動き・明かりと、ワールドの パーティクル・音楽・音・パネルを それぞれ 自分の ファイルに 分けたので、1つを 変えても アップデートの あとに それを 使う ファイルだけを 作りなおします",
+      "3.9 の内容: プレイヤーの ID と 見た目を それぞれ 自分の ファイルに 分けました"
     ]
   }
 }
