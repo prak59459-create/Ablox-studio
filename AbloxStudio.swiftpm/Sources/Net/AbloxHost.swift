@@ -722,7 +722,7 @@ public final class AbloxHost {
         sendWorldChanges()
         defer { sendNPCMovement() }
         guard !effects.isEmpty else { return }
-        let (broadcastPayload, targeted) = effects.groupedIntoPayloads()
+        let (broadcastPayload, targeted) = EventMachine.payloads(grouping: effects)
 
         if let broadcastPayload {
             broadcast(.eventEffect, broadcastPayload)

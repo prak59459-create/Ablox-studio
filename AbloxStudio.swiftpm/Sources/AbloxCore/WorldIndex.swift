@@ -363,11 +363,8 @@ public final class WorldIndexCache: @unchecked Sendable {
 /// Copies of a world share one, and every answer is checked against the
 /// list it is asked about, so it is never wrong: at worst it is built again.
 /// Two worlds are equal or not whatever theirs hold.
-struct BlockOrders: Hashable, Sendable {
+struct BlockOrders: Sendable, AlwaysEqual {
     private let storage = Storage()
-
-    static func == (lhs: BlockOrders, rhs: BlockOrders) -> Bool { true }
-    func hash(into hasher: inout Hasher) {}
 
     func order(of id: UUID, in blocks: [BlockData], revision: UInt64, journal: BlockJournal) -> Int? {
         storage.order(of: id, in: blocks, revision: revision, journal: journal)
@@ -414,16 +411,13 @@ struct BlockOrders: Hashable, Sendable {
 ///
 /// Revisions are never reused, even between copies of a world, so a cache
 /// built from one copy never mistakes another copy's journal for its own.
-struct BlockJournal: Hashable, Sendable {
+struct BlockJournal: Sendable, AlwaysEqual {
     /// The revision before the first change written down.
     private var base: UInt64?
     private var revisions: [UInt64] = []
     private var orders: [Int] = []
 
     static let capacity = 256
-
-    static func == (lhs: BlockJournal, rhs: BlockJournal) -> Bool { true }
-    func hash(into hasher: inout Hasher) {}
 
     mutating func note(order: Int, from before: UInt64, to after: UInt64) {
         if base == nil || (revisions.last ?? base) != before {
@@ -453,11 +447,8 @@ struct BlockJournal: Hashable, Sendable {
 /// a world share it until one of them changes, so two worlds with the same
 /// number have the same blocks. Never saved, and two worlds are equal or not
 /// whatever theirs are.
-public struct BlockRevision: Hashable, Sendable {
+public struct BlockRevision: Sendable, AlwaysEqual {
     public let value: UInt64
-
-    public static func == (lhs: BlockRevision, rhs: BlockRevision) -> Bool { true }
-    public func hash(into hasher: inout Hasher) {}
 
     static func next() -> BlockRevision {
         BlockRevision(value: counter.next())

@@ -519,7 +519,7 @@ final class EventMachineTests: XCTestCase {
             .init(ruleID: nil, targetPeerID: alice, action: .playSound(name: "ding")),
             .init(ruleID: nil, targetPeerID: bob, action: .teleportPlayer(to: .zero))
         ]
-        let (broadcast, targeted) = effects.groupedIntoPayloads()
+        let (broadcast, targeted) = EventMachine.payloads(grouping: effects)
 
         XCTAssertEqual(broadcast?.actions.count, 1)
         XCTAssertEqual(targeted[alice]?.actions.count, 2)
@@ -528,7 +528,7 @@ final class EventMachineTests: XCTestCase {
     }
 
     func testGroupingAnEmptyListProducesNothing() {
-        let (broadcast, targeted) = [EventMachine.Effect]().groupedIntoPayloads()
+        let (broadcast, targeted) = EventMachine.payloads(grouping: [])
         XCTAssertNil(broadcast)
         XCTAssertTrue(targeted.isEmpty)
     }

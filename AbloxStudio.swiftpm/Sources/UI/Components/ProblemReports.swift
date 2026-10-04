@@ -136,13 +136,15 @@ enum CrashCatcher {
 
 /// Set once by `CrashCatcher.install`, read by the handler.
 private var crashDescriptor: Int32 = -1
-private let crashLines = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: 32).initialized()
+private let crashLines = emptyCrashLines()
 
-private extension UnsafeMutablePointer where Pointee == UnsafeMutablePointer<CChar>? {
-    func initialized() -> Self {
-        initialize(repeating: nil, count: 32)
-        return self
-    }
+/// 32 empty lines, one for each signal. A function rather than an extension
+/// of `UnsafeMutablePointer`, which would make every file that uses a pointer
+/// depend on this one.
+private func emptyCrashLines() -> UnsafeMutablePointer<UnsafeMutablePointer<CChar>?> {
+    let lines = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: 32)
+    lines.initialize(repeating: nil, count: 32)
+    return lines
 }
 
 private func abloxCrashHandler(_ signal: Int32) {

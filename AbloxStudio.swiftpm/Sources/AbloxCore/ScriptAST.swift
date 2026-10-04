@@ -12,6 +12,20 @@ public struct ScriptExpr: Equatable, Sendable {
     }
 }
 
+/// One `name: value` of a map literal. A struct rather than a pair so the
+/// expression kinds get their `==` from the compiler: a `==` written by hand
+/// would make every file that compares anything depend on this one
+/// (AbloxCore/Comparisons.swift says why).
+public struct ScriptMapEntry: Equatable, Sendable {
+    public let key: String
+    public let value: ScriptExpr
+
+    public init(_ key: String, _ value: ScriptExpr) {
+        self.key = key
+        self.value = value
+    }
+}
+
 public indirect enum ScriptExprKind: Equatable, Sendable {
     case number(Double)
     case string(String)
@@ -20,7 +34,7 @@ public indirect enum ScriptExprKind: Equatable, Sendable {
     case list([ScriptExpr])
     /// `{ hp: 100, name: "Mika" }` — keys are always names, never expressions,
     /// which keeps a map literal readable and rules out a class of confusion.
-    case map([(key: String, value: ScriptExpr)])
+    case map([ScriptMapEntry])
     case variable(String)
     case unary(UnaryOperator, ScriptExpr)
     case binary(BinaryOperator, ScriptExpr, ScriptExpr)
@@ -30,27 +44,6 @@ public indirect enum ScriptExprKind: Equatable, Sendable {
     case member(ScriptExpr, String)
     case index(ScriptExpr, ScriptExpr)
     case function(parameters: [String], body: [ScriptStmt])
-
-    public static func == (a: ScriptExprKind, b: ScriptExprKind) -> Bool {
-        switch (a, b) {
-        case let (.number(x), .number(y)): return x == y
-        case let (.string(x), .string(y)): return x == y
-        case let (.bool(x), .bool(y)): return x == y
-        case (.null, .null): return true
-        case let (.list(x), .list(y)): return x == y
-        case let (.map(x), .map(y)):
-            return x.count == y.count && zip(x, y).allSatisfy { $0.key == $1.key && $0.value == $1.value }
-        case let (.variable(x), .variable(y)): return x == y
-        case let (.unary(o1, e1), .unary(o2, e2)): return o1 == o2 && e1 == e2
-        case let (.binary(o1, l1, r1), .binary(o2, l2, r2)): return o1 == o2 && l1 == l2 && r1 == r2
-        case let (.logical(a1, l1, r1), .logical(a2, l2, r2)): return a1 == a2 && l1 == l2 && r1 == r2
-        case let (.call(c1, a1), .call(c2, a2)): return c1 == c2 && a1 == a2
-        case let (.member(e1, n1), .member(e2, n2)): return e1 == e2 && n1 == n2
-        case let (.index(e1, i1), .index(e2, i2)): return e1 == e2 && i1 == i2
-        case let (.function(p1, b1), .function(p2, b2)): return p1 == p2 && b1 == b2
-        default: return false
-        }
-    }
 }
 
 public enum UnaryOperator: String, Sendable {

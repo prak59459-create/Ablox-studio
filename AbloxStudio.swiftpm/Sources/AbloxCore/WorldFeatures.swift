@@ -150,17 +150,9 @@ public enum DayCycle {
     }
 }
 
-public extension ColorRGBA {
-    /// Part of the way from this colour to `other`.
-    func mixed(with other: ColorRGBA, amount: Float) -> ColorRGBA {
-        let t = Swift.max(0, Swift.min(1, amount))
-        return ColorRGBA(r: r + (other.r - r) * t, g: g + (other.g - g) * t, b: b + (other.b - b) * t, a: a + (other.a - a) * t)
-    }
-}
-
 // MARK: - Particles
 
-public enum ParticleKind: String, Codable, CaseIterable, Sendable {
+public enum ParticleKind: String, Codable, CaseIterable, Sendable, ComparedByCase {
     case fire, smoke, sparkles, confetti, rain, snow, bubbles, hearts, stars, leaves, magic, dust
 
     public var displayName: String {

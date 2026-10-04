@@ -47,10 +47,8 @@ public enum GraphicsQuality: String, Codable, CaseIterable, Sendable {
 /// of what each level trades away is written down in one testable place.
 public struct GraphicsProfile: Equatable, Sendable {
 
-    public enum Level: Int, Comparable, CaseIterable, Sendable {
+    public enum Level: Int, CaseIterable, Sendable, RankedByRawValue {
         case lightest = 0, low, medium, high
-
-        public static func < (lhs: Level, rhs: Level) -> Bool { lhs.rawValue < rhs.rawValue }
 
         public var lower: Level? { Level(rawValue: rawValue - 1) }
         public var higher: Level? { Level(rawValue: rawValue + 1) }

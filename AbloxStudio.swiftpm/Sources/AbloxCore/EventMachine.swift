@@ -588,13 +588,16 @@ public struct EventMachine: Sendable {
 
 // MARK: - Effect grouping
 
-public extension Array where Element == EventMachine.Effect {
+// A static function rather than an extension of `Array`: every file that
+// uses an array would depend on this one (AbloxCore/Comparisons.swift says
+// why).
+public extension EventMachine {
     /// Splits effects into the broadcast payloads the host should send:
     /// one shared payload plus one per targeted player.
-    func groupedIntoPayloads() -> (broadcast: EventEffectPayload?, targeted: [PeerID: EventEffectPayload]) {
-        let shared = filter { $0.targetPeerID == nil }
+    static func payloads(grouping effects: [Effect]) -> (broadcast: EventEffectPayload?, targeted: [PeerID: EventEffectPayload]) {
+        let shared = effects.filter { $0.targetPeerID == nil }
         var perPeer: [PeerID: [EventMachine.Effect]] = [:]
-        for effect in self {
+        for effect in effects {
             guard let peer = effect.targetPeerID else { continue }
             perPeer[peer, default: []].append(effect)
         }

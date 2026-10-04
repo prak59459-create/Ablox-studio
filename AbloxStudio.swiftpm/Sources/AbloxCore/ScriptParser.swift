@@ -434,7 +434,7 @@ public struct ScriptParser {
             return ScriptExpr(.list(items), line: at)
 
         case .symbol(.leftBrace):
-            var entries: [(key: String, value: ScriptExpr)] = []
+            var entries: [ScriptMapEntry] = []
             if !check(.rightBrace) {
                 repeat {
                     if check(.rightBrace) { break }
@@ -445,7 +445,7 @@ public struct ScriptParser {
                         key = try identifier(L("Expected a name inside “{ }”."))
                     }
                     try expect(.colon, L("Expected “:” after “{}”.", key))
-                    entries.append((key, try expression()))
+                    entries.append(ScriptMapEntry(key, try expression()))
                 } while match(.comma)
             }
             try expect(.rightBrace, L("Expected “}” to close the map."))

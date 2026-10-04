@@ -134,7 +134,7 @@ public struct SentHistory: Hashable, Sendable {
 /// Stops one player filling everyone's screen: no more than a few lines in
 /// a short while, and not the same line again straight away. Checked before
 /// a message is sent.
-public struct ChatRateLimiter: Hashable, Sendable {
+public struct ChatRateLimiter: Hashable, Sendable, EqualByKey {
     public static let window: TimeInterval = 10
     public static let maximumInWindow = 5
     public static let repeatGap: TimeInterval = 5
@@ -175,8 +175,12 @@ public struct ChatRateLimiter: Hashable, Sendable {
         text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
-    public static func == (lhs: ChatRateLimiter, rhs: ChatRateLimiter) -> Bool {
-        lhs.sent.map(\.0) == rhs.sent.map(\.0) && lhs.sent.map(\.1) == rhs.sent.map(\.1)
+    /// What two limiters are compared by: the lines remembered, in order.
+    public var equalityKey: Key { Key(times: sent.map(\.0), lines: sent.map(\.1)) }
+
+    public struct Key: Equatable, Sendable {
+        let times: [Double]
+        let lines: [String]
     }
 
     public func hash(into hasher: inout Hasher) {

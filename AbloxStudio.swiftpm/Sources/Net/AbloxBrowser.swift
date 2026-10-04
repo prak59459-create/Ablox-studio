@@ -2,7 +2,7 @@ import Foundation
 import Network
 
 /// A session found on the local network, as shown in the Play lobby.
-public struct DiscoveredPeer: Identifiable, Hashable {
+public struct DiscoveredPeer: Hashable, EqualByID {
     public let id: String
     public let endpoint: NWEndpoint
     public let serviceName: String
@@ -42,7 +42,6 @@ public struct DiscoveredPeer: Identifiable, Hashable {
         return "\(playerCount)/\(capacity) players"
     }
 
-    public static func == (lhs: DiscoveredPeer, rhs: DiscoveredPeer) -> Bool { lhs.id == rhs.id }
     public func hash(into hasher: inout Hasher) { hasher.combine(id) }
 
     init?(result: NWBrowser.Result) {

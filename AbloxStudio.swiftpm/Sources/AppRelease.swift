@@ -7,8 +7,8 @@ import Foundation
 /// the three agree — a release where they did not would either never be
 /// offered or be offered forever.
 enum AppRelease {
-    static let version = "3.7"
-    static let build = 28
+    static let version = "3.8"
+    static let build = 29
 
     static let current = InstalledApp(
         app: "Ablox Studio",

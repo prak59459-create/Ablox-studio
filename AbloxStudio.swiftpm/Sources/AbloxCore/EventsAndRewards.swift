@@ -563,25 +563,3 @@ public struct WeekSummary: Equatable, Sendable {
         return summary
     }
 }
-
-public extension AvatarProfile {
-    /// This look without `item` — each slot it filled back to a free choice —
-    /// for when a purchase is undone.
-    func removing(_ item: ShopItem) -> AvatarProfile {
-        var look = self
-        func free(_ kind: ShopItem.Kind) -> ShopItem? { ShopCatalogue.items(of: kind).first(where: \.isFree) }
-        switch item.kind {
-        case .bodyColor: if look.bodyColor == item.color, let c = free(.bodyColor)?.color { look.bodyColor = c }
-        case .headColor: if look.headColor == item.color, let c = free(.headColor)?.color { look.headColor = c }
-        case .accentColor: if look.accentColor == item.color, let c = free(.accentColor)?.color { look.accentColor = c }
-        case .hat: if look.hat == item.hat { look.hat = .none }
-        case .face: if look.face == item.face, let f = free(.face)?.face { look.face = f }
-        case .pet: if look.pet == item.pet { look.pet = .none }
-        case .trail: if look.trail == item.trail { look.trail = .none }
-        case .aura: if look.aura == item.aura { look.aura = .none }
-        case .nameplate: if look.nameplate == item.nameplate { look.nameplate = .classic }
-        case .bubble: if look.bubble == item.bubble { look.bubble = .classic }
-        }
-        return look
-    }
-}

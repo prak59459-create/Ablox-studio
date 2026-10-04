@@ -805,7 +805,7 @@ public final class GameRuntime {
                 report(error)
             }
             if measuresCosts {
-                recordCost(L("timer at {}:{}", fileNames[safe: ScriptLocation.file(timer.line) ?? -1] ?? "", ScriptLocation.line(timer.line)),
+                recordCost(L("timer at {}:{}", ScriptLocation.file(timer.line).flatMap { fileNames.indices.contains($0) ? fileNames[$0] : nil } ?? "", ScriptLocation.line(timer.line)),
                            steps: steps, started: started)
             }
         }

@@ -10,9 +10,8 @@ import Foundation
 public struct WorldCheck: Hashable, Sendable {
 
     public struct Finding: Hashable, Sendable, Identifiable {
-        public enum Level: Int, Comparable, Sendable {
+        public enum Level: Int, Sendable, RankedByRawValue {
             case note, warning, problem
-            public static func < (a: Level, b: Level) -> Bool { a.rawValue < b.rawValue }
         }
 
         public let id: String

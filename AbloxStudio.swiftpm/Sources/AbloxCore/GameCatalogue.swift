@@ -275,14 +275,18 @@ public extension GameCatalogue {
     /// can open a pull request against will eventually contain a typo, and
     /// hiding nine hundred working games because of it would be the wrong
     /// trade — so bad entries are dropped and reported, and the rest are kept.
-    struct ValidationResult: Equatable, Sendable {
+    struct ValidationResult: Sendable, EqualByKey {
         public var accepted: [GameListing]
         public var rejected: [(id: String, reason: CatalogueRejection)]
 
-        public static func == (a: ValidationResult, b: ValidationResult) -> Bool {
-            a.accepted == b.accepted
-                && a.rejected.count == b.rejected.count
-                && zip(a.rejected, b.rejected).allSatisfy { $0.id == $1.id && $0.reason == $1.reason }
+        /// What two results are compared by: the listings kept, and the ids
+        /// and reasons of those dropped, in order.
+        public var equalityKey: Key { Key(accepted: accepted, ids: rejected.map(\.id), reasons: rejected.map(\.reason)) }
+
+        public struct Key: Equatable, Sendable {
+            let accepted: [GameListing]
+            let ids: [String]
+            let reasons: [CatalogueRejection]
         }
     }
 

@@ -10,7 +10,7 @@ import Foundation
 /// an iPad that has not updated shows the block still.
 public struct BlockAnimation: Codable, Hashable, Sendable {
 
-    public enum Kind: String, Codable, CaseIterable, Sendable {
+    public enum Kind: String, Codable, CaseIterable, Sendable, ComparedByCase {
         /// Turning round and round.
         case spin
         /// Rocking from side to side.

@@ -90,10 +90,3 @@ public struct ScriptBundle: Sendable {
         return .success(ScriptBundle(program: .combining(programs), fileNames: names))
     }
 }
-
-public extension WorldDocument {
-    /// True when the world has any script worth running.
-    var hasScript: Bool {
-        scripts.contains { $0.isEnabled && !$0.isBlank }
-    }
-}

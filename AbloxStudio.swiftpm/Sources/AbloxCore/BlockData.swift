@@ -5,7 +5,7 @@ import Foundation
 /// The primitive a block renders as. Deliberately a small closed set: every
 /// case maps to a `MeshResource` generator RealityKit ships with, so worlds
 /// never depend on bundled assets and stay portable between iPads.
-public enum BlockShape: String, Codable, CaseIterable, Sendable {
+public enum BlockShape: String, Codable, CaseIterable, Sendable, ComparedByCase {
     case box
     case sphere
     case cylinder
@@ -51,7 +51,7 @@ public enum BlockShape: String, Codable, CaseIterable, Sendable {
 
 /// A surface preset. Maps to `SimpleMaterial`/`UnlitMaterial` parameters at
 /// render time — see `BlockEntityFactory`.
-public enum MaterialKind: String, Codable, CaseIterable, Sendable {
+public enum MaterialKind: String, Codable, CaseIterable, Sendable, ComparedByCase {
     case plastic
     case metal
     case glass
@@ -150,7 +150,7 @@ public enum SurfacePattern: String, Sendable {
 /// Gameplay meaning attached to a block. This is the bridge between the
 /// Studio's authoring model and the runtime: `EventRuntime` reads it to decide
 /// what a touch actually does, without needing a rule for every common case.
-public enum BlockBehavior: String, Codable, CaseIterable, Sendable {
+public enum BlockBehavior: String, Codable, CaseIterable, Sendable, ComparedByCase {
     /// Inert scenery.
     case none
     /// Players spawn (and respawn) at this block's top face.
@@ -567,7 +567,7 @@ public struct BlockData: Codable, Hashable, Identifiable, Sendable {
 /// Light a block gives off: all round (a lamp) or in a cone (a spotlight,
 /// pointing the way the block's top faces).
 public struct BlockLight: Codable, Hashable, Sendable {
-    public enum Kind: String, Codable, CaseIterable, Sendable {
+    public enum Kind: String, Codable, CaseIterable, Sendable, ComparedByCase {
         case point, spot
 
         public var displayName: String {

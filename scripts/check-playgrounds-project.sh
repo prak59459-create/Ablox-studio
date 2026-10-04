@@ -131,6 +131,37 @@ for root in "${source_roots[@]}"; do
     done < <(find "$root" -name '*.swift' -print0)
 done
 
+# --------------------------------------------------- rebuilds after updates --
+#
+# Two kinds of declaration make their file a dependency of nearly every
+# other file, so that any change to that file rebuilds the whole app after
+# an update (docs/ipad-build.md, "One module again"):
+#
+#   * an operator written for a type (`static func ==`, `<`, `+`, …): the
+#     compiler looks at every one of them to check any `a == b`; and
+#   * an extension of a type every file uses (`View`, `Array`, `Double`, …).
+#
+# Both are allowed only in a few files that seldom change. A type takes its
+# `==` or `<` from a protocol in AbloxCore/Comparisons.swift instead, and a
+# new modifier for every view goes in UI/Components/ViewExtras.swift.
+
+operator_homes='AbloxCore/(Comparisons|Math|AppVersion|ScriptVector)\.swift'
+extension_homes='(UI/Components/(ViewExtras|DesignSystem)|Engine/(AppleBridging|ProceduralMesh)|AbloxCore/ScriptVector)\.swift'
+operator_rule='^[[:space:]]*(@[A-Za-z_]+[[:space:]]+)*((public|internal|fileprivate|private)[[:space:]]+)?(static[[:space:]]+)?func[[:space:]]+(==|!=|<|>|<=|>=|\+|-|\*|/|%|\+=|-=|\*=|/=)[[:space:]]*(<[^>]*>)?[[:space:]]*\('
+extension_rule='^[[:space:]]*((public|internal|fileprivate|private)[[:space:]]+)?extension[[:space:]]+(View|Image|Label|Text|Shape|ButtonStyle|Color|Font|Binding|Array|Dictionary|Set|String|Substring|Character|Double|Float|Int|UInt|Bool|Optional|Collection|Sequence|RandomAccessCollection|SIMD2|SIMD3|SIMD4|CGFloat|CGPoint|CGSize|CGRect|UnsafeMutablePointer|UnsafePointer|Data|Date|URL|UUID|Entity|ModelEntity|MeshResource)\b'
+
+for root in "${source_roots[@]}"; do
+    while IFS= read -r -d '' file; do
+        relative="${file#"$root"/}"
+        if ! [[ "$relative" =~ ^$operator_homes$ ]]; then
+            scan "$file" "$operator_rule"$'\t''an operator written for a type: every file that compares or adds anything would depend on this one. Take it from a protocol in AbloxCore/Comparisons.swift (ComparedByCase, RankedByRawValue, EqualByID, EqualByKey, AlwaysEqual).'
+        fi
+        if ! [[ "$relative" =~ ^$extension_homes$ ]]; then
+            scan "$file" "$extension_rule"$'\t''an extension of a type nearly every file uses makes this file a dependency of them all. Put a view modifier in UI/Components/ViewExtras.swift (or write a ViewModifier), and anything else as a function or a static member of one of the app'"'"'s own types.'
+        fi
+    done < <(find "$root" -name '*.swift' -print0)
+done
+
 # ------------------------------------------------------------ translation --
 #
 # Both apps must be showable in English and Japanese. Delegated to a Python

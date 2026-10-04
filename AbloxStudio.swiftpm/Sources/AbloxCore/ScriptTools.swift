@@ -149,12 +149,6 @@ public struct HandlerCost: Hashable, Sendable, Identifiable {
     }
 }
 
-extension Array {
-    subscript(safe index: Int) -> Element? {
-        indices.contains(index) ? self[index] : nil
-    }
-}
-
 // MARK: - Robots for a test run
 
 /// Two players that play a test run: every half second each walks onto the

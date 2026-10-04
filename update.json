@@ -1,18 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "3.7",
-  "build": 28,
+  "version": "3.8",
+  "build": 29,
   "protocol": 8,
   "date": "2026-10-04",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Quicker builds after an update: Studio is one module again, as Ablox 4.6, so the build after an update compiles only the files that changed and the files that use them",
-      "The first build after this update still builds everything once, because the project's layout changed"
+      "Builds after an update touch fewer files, as in Ablox 4.7: comparisons written by hand and additions to everyday types now live in a few files that seldom change",
+      "From 3.7: Studio is one module again, so the build after an update compiles only the files that changed and those that use them"
     ],
     "ja": [
-      "アップデートの あとの ビルドが 速く なります。Ablox 4.6 と 同じく 1つの モジュールに もどしたので、変わった ファイルと それを 使う ファイルだけを 作りなおします",
-      "この版に してから 最初の 1回だけは、プロジェクトの 組み立てが 変わったため ぜんぶ ビルドします"
+      "Ablox 4.7 と 同じく、アップデートの あとの ビルドで 作りなおす ファイルが 少なく なります（自分で 書いていた くらべ方と、みんなが 使う 型への 追加を、ほとんど 変わらない 少しの ファイルに まとめました）",
+      "3.7 の内容: 1つの モジュールに もどし、アップデートの あとは 変わった ファイルと それを 使う ファイルだけを 作りなおします"
     ]
   }
 }

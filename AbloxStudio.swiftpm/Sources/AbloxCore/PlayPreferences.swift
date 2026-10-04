@@ -42,10 +42,8 @@ public enum TextSize: String, Codable, CaseIterable, Sendable {
 }
 
 /// How hot the iPad is running, from `ProcessInfo.thermalState`.
-public enum DeviceHeat: Int, Comparable, Sendable {
+public enum DeviceHeat: Int, Sendable, RankedByRawValue {
     case nominal, fair, serious, critical
-
-    public static func < (lhs: DeviceHeat, rhs: DeviceHeat) -> Bool { lhs.rawValue < rhs.rawValue }
 }
 
 public struct PlayPreferences: Codable, Hashable, Sendable {

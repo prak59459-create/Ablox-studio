@@ -151,3 +151,58 @@ extension AvatarProfile {
         }
     }
 }
+
+// MARK: - Profiles: safe to send, and without an item
+//
+// What the app adds to a profile is here, beside the type, not in the files
+// that use it: an extension of a type this many files use makes its file a
+// dependency of all of them, so changing a feature file would rebuild them
+// all (AbloxCore/Comparisons.swift says why).
+public extension AvatarProfile {
+    static let maximumNameLength = 24
+    /// What a player may choose for themselves. A script can still make
+    /// someone a giant with `p.size`; the host decides that, not the guest.
+    static let chosenHeightRange: ClosedRange<Float> = 0.5...1.6
+
+    /// The profile as a guest sent it, made safe to show everyone: a short
+    /// single-line name, a sensible size, real colours.
+    func sanitizedForNetwork() -> AvatarProfile {
+        var copy = self
+        let cleaned = displayName.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }
+        let name = String(String.UnicodeScalarView(cleaned)).trimmingCharacters(in: .whitespacesAndNewlines)
+        copy.displayName = ChatModerator().cleanName(String(name.prefix(Self.maximumNameLength)))
+        if copy.displayName.isEmpty { copy.displayName = "Player" }
+        let title = String(String.UnicodeScalarView(title.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        copy.title = ChatModerator().cleanName(String(title.prefix(Self.maximumNameLength)))
+        if copy.title == "Player" { copy.title = "" }
+        copy.height = height.isFinite ? Swift.min(Swift.max(height, Self.chosenHeightRange.lowerBound), Self.chosenHeightRange.upperBound) : 1
+        copy.bodyColor = bodyColor.clamped
+        copy.headColor = headColor.clamped
+        copy.accentColor = accentColor.clamped
+        copy.rideColor = rideColor.clamped
+        return copy
+    }
+}
+
+public extension AvatarProfile {
+    /// This look without `item` — each slot it filled back to a free choice —
+    /// for when a purchase is undone.
+    func removing(_ item: ShopItem) -> AvatarProfile {
+        var look = self
+        func free(_ kind: ShopItem.Kind) -> ShopItem? { ShopCatalogue.items(of: kind).first(where: \.isFree) }
+        switch item.kind {
+        case .bodyColor: if look.bodyColor == item.color, let c = free(.bodyColor)?.color { look.bodyColor = c }
+        case .headColor: if look.headColor == item.color, let c = free(.headColor)?.color { look.headColor = c }
+        case .accentColor: if look.accentColor == item.color, let c = free(.accentColor)?.color { look.accentColor = c }
+        case .hat: if look.hat == item.hat { look.hat = .none }
+        case .face: if look.face == item.face, let f = free(.face)?.face { look.face = f }
+        case .pet: if look.pet == item.pet { look.pet = .none }
+        case .trail: if look.trail == item.trail { look.trail = .none }
+        case .aura: if look.aura == item.aura { look.aura = .none }
+        case .nameplate: if look.nameplate == item.nameplate { look.nameplate = .classic }
+        case .bubble: if look.bubble == item.bubble { look.bubble = .classic }
+        }
+        return look
+    }
+}

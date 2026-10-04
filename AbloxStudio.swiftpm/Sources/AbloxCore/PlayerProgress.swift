@@ -372,10 +372,8 @@ public enum Achievement: String, CaseIterable, Sendable, Identifiable {
 
 // MARK: - Rarity
 
-public enum ItemRarity: Int, Comparable, CaseIterable, Sendable {
+public enum ItemRarity: Int, CaseIterable, Sendable, RankedByRawValue {
     case common, rare, epic, legendary
-
-    public static func < (lhs: ItemRarity, rhs: ItemRarity) -> Bool { lhs.rawValue < rhs.rawValue }
 
     public init(price: Int) {
         switch price {

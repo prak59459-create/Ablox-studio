@@ -758,3 +758,10 @@ public extension WorldDocument {
         return world
     }
 }
+
+public extension WorldDocument {
+    /// True when the world has any script worth running.
+    var hasScript: Bool {
+        scripts.contains { $0.isEnabled && !$0.isBlank }
+    }
+}

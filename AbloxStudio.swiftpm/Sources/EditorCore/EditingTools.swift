@@ -436,9 +436,8 @@ public extension EditorDocument {
 
 /// A quick look at what makes a world slow on an older iPad.
 public struct WorldWeight: Hashable, Sendable {
-    public enum Level: Int, Comparable, Sendable {
+    public enum Level: Int, Sendable, RankedByRawValue {
         case light, fine, heavy, tooHeavy
-        public static func < (a: Level, b: Level) -> Bool { a.rawValue < b.rawValue }
 
         public var displayName: String {
             switch self {
