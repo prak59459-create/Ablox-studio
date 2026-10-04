@@ -502,6 +502,11 @@ public final class WorldScene {
         baker?.summary ?? (0, 0)
     }
 
+    /// Time spent painting colour palettes since the last call.
+    public func takePaintingSeconds() -> Double {
+        baker?.takePaintingSeconds() ?? 0
+    }
+
     func appliedBlock(_ id: UUID) -> BlockData? {
         lastAppliedBlocks[id]
     }

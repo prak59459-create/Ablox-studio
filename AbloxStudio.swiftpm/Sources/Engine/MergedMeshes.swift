@@ -87,10 +87,14 @@ final class StillPartBaker {
     private var paletteMaterials: [MaterialKind: RealityKit.Material] = [:]
     /// The texture could not be made: every colour gets its own mesh again.
     private var paletteFailed = false
-    /// The palette texture as shown, painted again in place when a part's
-    /// own spot changes colour (`recoloured`).
-    private var paletteTexture: TextureResource?
-    private var paletteRepainted = false
+    /// Meshes with a part whose own spot changed colour (`recoloured`): they
+    /// are given a newly painted palette, at most `repaintsPerSecond` times
+    /// a second. The other meshes keep theirs, whose spots are still right.
+    private var repainted: Set<GroupKey> = []
+    private var lastRepaint: Double = -.infinity
+    static let repaintsPerSecond: Double = 30
+    /// Time spent painting palettes, for the frame-rate run.
+    private(set) var paintingSeconds: Double = 0
     /// Spots of parts' own, the ones free to give out again, and the ones
     /// freed but perhaps still drawn by a mesh until it is rebuilt.
     private var ownSlots: [UUID: Int] = [:]
@@ -135,7 +139,7 @@ final class StillPartBaker {
         let id = block.id
         guard !paletteFailed, let key = groupOf[id], groups[key]?.paletteKind != nil else { return false }
         if let slot = ownSlots[id] {
-            if palette.repaint(slot: slot, to: block.color) { paletteRepainted = true }
+            if palette.repaint(slot: slot, to: block.color) { repainted.insert(key) }
             return true
         }
         guard ownSlots.count < Self.mostOwnSlots, let slot = freeSlots.popLast() ?? palette.ownSlot(block.color) else {
@@ -143,7 +147,7 @@ final class StillPartBaker {
         }
         palette.repaint(slot: slot, to: block.color)
         ownSlots[id] = slot
-        paletteRepainted = true
+        repainted.insert(key)
         // Its vertices point at its own spot from the next build, straight away.
         leaving.insert(key)
         return true
@@ -231,8 +235,7 @@ final class StillPartBaker {
         paletteShown = -1
         paletteMaterials.removeAll()
         paletteFailed = false
-        paletteTexture = nil
-        paletteRepainted = false
+        repainted.removeAll()
         ownSlots.removeAll()
         freeSlots.removeAll()
         releasing.removeAll()
@@ -277,7 +280,7 @@ final class StillPartBaker {
                 freeSlots.append(contentsOf: releasing)
                 releasing.removeAll()
             }
-            if paletteRepainted { repaintPalette() }
+            if !repainted.isEmpty, time - lastRepaint >= 1 / Self.repaintsPerSecond { repaintPalette() }
         }
         guard !leaving.isEmpty || !joining.isEmpty else { return }
         let start = CACurrentMediaTime()
@@ -440,6 +443,8 @@ final class StillPartBaker {
     /// every palette mesh the new materials.
     private func refreshPalette() {
         guard !paletteFailed, palette.colors.count != paletteShown, !palette.colors.isEmpty else { return }
+        let started = CACurrentMediaTime()
+        defer { paintingSeconds += CACurrentMediaTime() - started }
         guard let image = Self.paletteImage(palette),
               let texture = try? TextureResource.generate(from: image, options: .init(semantic: .color)) else {
             // Never drawn with a stand-in material: those parts go back to a
@@ -456,8 +461,8 @@ final class StillPartBaker {
             return
         }
         paletteShown = palette.colors.count
-        paletteTexture = texture
-        paletteRepainted = false
+        // Every mesh has every colour now.
+        repainted.removeAll()
         let spots = MaterialParameters.Texture(texture, sampler: Self.paletteSampler())
         paletteMaterials.removeAll()
         for group in groups.values {
@@ -469,21 +474,37 @@ final class StillPartBaker {
         }
     }
 
-    /// Parts' own spots painted again: the texture's contents replaced in
-    /// place, so every material made from it shows the new colours.
+    /// Parts' own spots painted again: a new palette texture, given to the
+    /// meshes whose parts changed colour. Not painted into the texture in
+    /// use, which would wait for the frame being drawn with it.
     private func repaintPalette() {
-        paletteRepainted = false
+        let keys = repainted
+        repainted.removeAll()
         guard !paletteFailed else { return }
-        guard palette.colors.count == paletteShown, let texture = paletteTexture, let image = Self.paletteImage(palette) else {
-            // More colours as well: a new texture, with these in it.
+        lastRepaint = CACurrentMediaTime()
+        guard palette.colors.count == paletteShown else {
+            // More colours as well: every mesh gets the new texture.
             refreshPalette()
             return
         }
-        do {
-            try texture.replace(withImage: image, options: .init(semantic: .color))
-        } catch {
+        let started = CACurrentMediaTime()
+        defer { paintingSeconds += CACurrentMediaTime() - started }
+        guard let image = Self.paletteImage(palette),
+              let texture = try? TextureResource.generate(from: image, options: .init(semantic: .color)) else {
             paletteShown = -1
             refreshPalette()
+            return
+        }
+        let spots = MaterialParameters.Texture(texture, sampler: Self.paletteSampler())
+        var materials: [MaterialKind: RealityKit.Material] = [:]
+        for kind in paletteMaterials.keys { materials[kind] = Self.paletteMaterial(kind, spots: spots) }
+        paletteMaterials = materials
+        for key in keys {
+            guard let group = groups[key], let kind = group.paletteKind else { continue }
+            let material = paletteMaterials[kind] ?? Self.paletteMaterial(kind, spots: spots)
+            paletteMaterials[kind] = material
+            group.material = material
+            group.entity?.model?.materials = [material]
         }
     }
 
@@ -558,6 +579,13 @@ final class StillPartBaker {
             group.isCulled = false
             group.entity?.isEnabled = true
         }
+    }
+
+    /// The time spent painting palettes since the last call, for the
+    /// frame-rate run.
+    func takePaintingSeconds() -> Double {
+        defer { paintingSeconds = 0 }
+        return paintingSeconds
     }
 
     /// For the frame-rate counter: meshes drawn and parts in them.

@@ -1096,10 +1096,11 @@ public struct GameViewport: UIViewRepresentable {
             let frames = Double(max(tickCount, 1))
             let parts = sectionSeconds.map { String(format: "%.1f", $0 / frames * 1000) }.joined(separator: "/")
             sectionSeconds = [Double](repeating: 0, count: sectionSeconds.count)
-            let line = String(format: "AbloxFPS %.1f phase=%@ level=%@ pixels=%.2f cpu=%.1f/%.1fms parts=%@ main=%.0f%% ui=%ld meshes=%ld baked=%ld single=%ld second=%.0f\n",
+            let line = String(format: "AbloxFPS %.1f phase=%@ level=%@ pixels=%.2f cpu=%.1f/%.1fms parts=%@ paint=%.1fms main=%.0f%% ui=%ld meshes=%ld baked=%ld single=%ld second=%.0f\n",
                               governor.framesPerSecond, Self.benchmarkPhases[benchmarkPhase], level.displayName,
-                              Double(governor.resolutionFactor), mean, tickLongest * 1000, parts, min(100, mainAwake * 100),
-                              swiftUIUpdates, merged.meshes, merged.parts, worldScene.partsDrawnOnTheirOwn, reportedFrames)
+                              Double(governor.resolutionFactor), mean, tickLongest * 1000, parts, worldScene.takePaintingSeconds() * 1000,
+                              min(100, mainAwake * 100), swiftUIUpdates, merged.meshes, merged.parts, worldScene.partsDrawnOnTheirOwn,
+                              reportedFrames)
             tickSeconds = 0
             tickLongest = 0
             tickCount = 0

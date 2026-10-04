@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "3.2",
-  "build": 23,
+  "version": "3.3",
+  "build": 24,
   "protocol": 8,
   "date": "2026-10-04",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shares Ablox 3.5's engine: in the game preview, players' faces, hats, pets and rides are drawn as fewer pieces and look the same; parts that only change colour and parts with words over them stay drawn together; everything from 2.6 is still here"
+      "Shares Ablox 3.6's engine: in the game preview, a part changing colour no longer waits for the frame being drawn; players' gear is drawn as fewer pieces and looks the same; everything from 2.6 is still here"
     ],
     "ja": [
-      "Ablox 3.5 と同じエンジン: ゲームのプレビューで、プレイヤーの顔・帽子・ペット・乗り物を 少ない かたまりで描きます（見た目はそのまま）。色だけ変わるパーツや 文字がのったパーツも まとめたまま。2.6 の内容もそのまま"
+      "Ablox 3.6 と同じエンジン: ゲームのプレビューで、パーツの色が変わるとき 描いている途中のフレームを 待たなくなりました。プレイヤーの持ち物も 少ない かたまりで描きます（見た目はそのまま）。2.6 の内容もそのまま"
     ]
   }
 }

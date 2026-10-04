@@ -46,6 +46,8 @@ enum BenchmarkCrowd {
     /// Every hat, face and pet built twice, once with its parts merged
     /// (`RigidParts`): the parts each is drawn as, and the most their
     /// outlines differ by — nothing, if the merged parts are where they were.
+    /// The outline is measured from every vertex, placed by RealityKit's own
+    /// `convert`, not by the matrices the merging uses.
     static func checkMergedPieces() -> String {
         let main = AvatarWardrobe.material(red: 0.9, green: 0.3, blue: 0.3)
         var pieces: [(Entity, Entity, String?)] = []
@@ -69,11 +71,32 @@ enum BenchmarkCrowd {
             RigidParts.merge(merged, keeping: keeping)
             before += drawnParts(plain)
             after += drawnParts(merged)
-            let a = plain.visualBounds(relativeTo: plain)
-            let b = merged.visualBounds(relativeTo: merged)
-            furthest = max(furthest, simd_length(a.min - b.min), simd_length(a.max - b.max))
+            guard let a = outline(of: plain), let b = outline(of: merged) else { continue }
+            furthest = max(furthest, simd_length(a.low - b.low), simd_length(a.high - b.high))
         }
         return String(format: "%d hats, faces and pets: %d parts drawn as %d, outlines differ by %.4f m at most",
                       pieces.count, before, after, furthest)
+    }
+
+    /// The box round every vertex under `root`, in its space.
+    private static func outline(of root: Entity) -> (low: SIMD3<Float>, high: SIMD3<Float>)? {
+        var low = SIMD3<Float>(repeating: .infinity)
+        var high = SIMD3<Float>(repeating: -.infinity)
+        func visit(_ entity: Entity) {
+            if let part = entity as? ModelEntity, let mesh = part.model?.mesh {
+                for model in mesh.contents.models {
+                    for piece in model.parts {
+                        for point in piece.positions.elements {
+                            let placed = root.convert(position: point, from: part)
+                            low = simd_min(low, placed)
+                            high = simd_max(high, placed)
+                        }
+                    }
+                }
+            }
+            for child in entity.children { visit(child) }
+        }
+        for child in root.children { visit(child) }
+        return low.x.isFinite ? (low, high) : nil
     }
 }
