@@ -308,6 +308,14 @@ public struct GameViewport: UIViewRepresentable {
             )
             worldScene.anchor.addChild(local)
             localAvatar = local
+            if reportsFrameRate {
+                // A room's worth of players in every kind of gear, and a check
+                // that their merged parts are where the parts were.
+                let crowd = BenchmarkCrowd.dress(around: parent.session.world.spawnPosition(forPlayerIndex: 0), into: worldScene.anchor)
+                let parts = crowd.reduce(0) { $0 + BenchmarkCrowd.drawnParts($1) }
+                let line = "AbloxCrowd \(crowd.count) players drawn as \(parts) parts; \(BenchmarkCrowd.checkMergedPieces())\n"
+                FileHandle.standardError.write(Data(line.utf8))
+            }
 
             let words = BlockLabelOverlay(frame: view.bounds)
             words.autoresizingMask = [.flexibleWidth, .flexibleHeight]

@@ -185,6 +185,7 @@ public final class AvatarEntity: Entity {
             part(w, h, 0.1, 0.05)
         }
         if let newer = AvatarWardrobe.face(face) {
+            RigidParts.merge(newer)
             head.addChild(newer)
             faceEntity = newer
             return
@@ -238,6 +239,7 @@ public final class AvatarEntity: Entity {
         default:
             break
         }
+        RigidParts.merge(group)
         head.addChild(group)
         faceEntity = group
     }
@@ -255,6 +257,7 @@ public final class AvatarEntity: Entity {
         guard pet != .none else { return }
         let skin = material(color)
         if let newer = AvatarWardrobe.pet(pet, skin: skin) {
+            RigidParts.merge(newer)
             newer.position = petHome
             addChild(newer)
             petEntity = newer
@@ -326,6 +329,7 @@ public final class AvatarEntity: Entity {
             break
         }
         root.name = "ablox.avatar.pet"
+        RigidParts.merge(root)
         root.position = petHome
         addChild(root)
         petEntity = root
@@ -352,6 +356,7 @@ public final class AvatarEntity: Entity {
         spinningHatPart = nil
         guard hat != .none else { return }
         if let newer = AvatarWardrobe.hat(hat, main: material) {
+            RigidParts.merge(newer, keeping: AvatarWardrobe.spinningPart)
             rig.addChild(newer)
             hatEntity = newer
             spinningHatPart = newer.findEntity(named: AvatarWardrobe.spinningPart)
@@ -508,6 +513,7 @@ public final class AvatarEntity: Entity {
             box(SIMD3<Float>(0.8, 0.1, 1.6), at: SIMD3<Float>(0, 0.12, 0), paint, corner: 0.05)
             box(SIMD3<Float>(0.6, 0.02, 1.4), at: SIMD3<Float>(0, 0.05, 0), glow, corner: 0.01)
         }
+        RigidParts.merge(root)
         addChild(root)
         rideEntity = root
     }

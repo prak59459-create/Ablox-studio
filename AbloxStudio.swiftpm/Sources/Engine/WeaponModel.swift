@@ -47,6 +47,7 @@ enum WeaponModel {
             part(SIMD3(0.045, 0.045, 0.2), at: SIMD3(0, 0.04, -0.34), accent)
             part(SIMD3(0.05, 0.13, 0.06), at: SIMD3(0, -0.07, 0), metal)
         }
+        RigidParts.merge(root)
         return root
     }
 
