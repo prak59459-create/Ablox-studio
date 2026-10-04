@@ -1,5 +1,4 @@
 import SwiftUI
-import AbloxCore
 
 /// The thirty characters a room code can contain, as buttons.
 ///

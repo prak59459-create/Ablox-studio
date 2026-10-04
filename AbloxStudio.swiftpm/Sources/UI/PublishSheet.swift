@@ -1,6 +1,5 @@
 import SwiftUI
 import UIKit
-import AbloxCore
 
 /// Preparing a world for the public game list.
 ///

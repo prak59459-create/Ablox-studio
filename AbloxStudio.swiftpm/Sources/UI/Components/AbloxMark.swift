@@ -1,5 +1,4 @@
 import SwiftUI
-import AbloxCore
 
 /// The Ablox cube, drawn rather than bundled.
 ///

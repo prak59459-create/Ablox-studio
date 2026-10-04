@@ -1,5 +1,4 @@
 import Foundation
-import AbloxCore
 
 /// Downloads a world's `.absc` files from its `ScriptSource` on GitHub.
 ///

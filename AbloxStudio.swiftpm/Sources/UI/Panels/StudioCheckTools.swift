@@ -1,5 +1,4 @@
 import SwiftUI
-import AbloxCore
 
 // The world check, what the world is made of, and the building tools that
 // need a few choices first: replacing a colour, scattering copies, naming

@@ -90,10 +90,10 @@ Hard-coding either breaks the other, and only the iPad can report the one it
 breaks. The fix is to depend on neither: the four lines of arithmetic are
 written out inline.
 
-The same trap is why, at the time, **no file under `Sources/` contained
-`import AbloxCore`**: on device there was one module and nothing to import.
-That changed with *Two targets* below — the core is now a module called
-`AbloxCore` in both builds, and every file outside it imports it.
+The same trap is why **no file under `Sources/` contains
+`import AbloxCore`**: on device there is one module and nothing to import.
+(For a while there were two, see *Two targets* below; *One module again*
+says why that ended.)
 
 ### `is only available in iOS 18.0 or newer`
 
@@ -150,9 +150,11 @@ The same round's screen listed these, fixed at the time:
 
 ---
 
-## Two targets
+## Two targets (until Studio 3.7)
 
-Both apps now declare two targets: the library `AbloxCore` (here the
+*Replaced by one module again, below; kept for its measurements.*
+
+Both apps declared two targets: the library `AbloxCore` (here the
 mirrored `Sources/AbloxCore` and Studio's own `Sources/EditorCore`),
 and the app, which depends on it. Each compile job then holds one module's
 source, with the other read back as a small compiled summary, instead of the
@@ -187,15 +189,16 @@ about five times as much code per line as the core's logic, so the cost is
 spread over every view rather than a few slow functions.
 
 - **The core imports Foundation alone** (and `Compression`). Glue to Apple
-  frameworks lives in `Engine/AppleBridging.swift`.
-- **Every file outside the core says `import AbloxCore`.**
+  frameworks lives in `Engine/AppleBridging.swift`. Still the rule with one
+  module: the root package builds the core alone on Linux for the tests.
+- **No file imports `AbloxCore` or names a module** (`AbloxCore.lerp`): on
+  device the core is part of the app's module.
 - **Names the core shares with Apple frameworks** — `Gesture`, `BoundingBox`,
-  `MusicTrack` — are pinned to the core's in `Engine/CoreNames.swift`, so the
-  app's files mean what they meant as one module.
-- **What the app uses from the core is `public`.** An internal member used
-  from the app is a compile error on device, not on Linux, so the macOS CI
-  build (`.github/workflows/ios-build.yml`) is what catches it.
-- **The library target's name differs from the app product's.**
+  `MusicTrack` — mean the core's, because a module's own declarations win
+  over imported ones. SwiftUI's is written `SwiftUI.Gesture`.
+- **What the app uses from the core is `public`**, so the core still builds
+  as a module of its own for the tests.
+- **The target's name differs from the app product's.**
 - **No macros** (`#Preview`, `@Observable`, …). Each needs a plugin run
   during the build, for nothing a player sees.
 - **No debug information**: both targets pass `-Xfrontend -gnone` through
@@ -220,6 +223,20 @@ SwiftPM dependencies are still avoided. Swift Playgrounds can only resolve them
 by git URL, which would mean the project cannot be opened without a network.
 The shared core is mirrored between the two repositories as files, and
 `scripts/sync-core.sh --check` keeps the copies byte-identical.
+
+---
+
+## One module again
+
+Two modules made every update that added a declaration to the core rebuild
+almost the whole app: across modules the compiler can only tell that *the
+core's interface changed*, so every file that uses anything from it is
+compiled again. Within one module it follows each file, and a file whose
+declarations changed rebuilds only the files that use something it
+declares. Measured on the client (Ablox 4.6): a new private function in a
+core file used by three others rebuilt 92 files in 37 s across two modules,
+and 6 files in 9 s as one. A full build and the compilers' memory are about
+the same either way. The client's docs/ipad-build.md has the whole table.
 
 ---
 
@@ -253,8 +270,8 @@ goes on this page.
 
 `scripts/check-playgrounds-project.sh` runs in CI. It cannot type-check the
 manifest or the Apple layers — nothing here can. All it does is refuse the
-spellings this page records as rejected, plus assert the two-target shape, the
-`AppleProductTypes` import, `import AbloxCore` outside the core, a core that
+spellings this page records as rejected, plus assert the one-target shape, the
+`AppleProductTypes` import, no `import AbloxCore` anywhere, a core that
 imports Foundation alone, and no macros.
 
 It is a ratchet on known mistakes, not a substitute for opening the project on

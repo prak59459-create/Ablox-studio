@@ -1,5 +1,4 @@
 import SwiftUI
-import AbloxCore
 
 /// Opening a published game from the game list as a new project.
 ///

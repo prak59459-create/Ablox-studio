@@ -59,7 +59,7 @@ public extension EditorDocument {
     /// Each selected part's colour a little lighter or darker, for ground,
     /// leaves or walls that look less flat. The same seed, the same result.
     mutating func varyColours(amount: Float = 0.12, seed: UInt64) {
-        var random = SeededRandom(seed)
+        var random = EditingRandom(seed)
         let spread = Swift.max(0, Swift.min(0.5, amount))
         mutateSelection(label: "Vary colours") { block in
             let shade = (random.unit() * 2 - 1) * spread
@@ -78,7 +78,7 @@ public extension EditorDocument {
         guard let clip = copySelection(), let bounds = selectionBounds, count > 0, radius > 0 else { return }
         let copies = Swift.min(count, 200)
         guard world.blocks.count + clip.blocks.count * copies <= GameRuntime.Limits.maximumBlocks else { return }
-        var random = SeededRandom(seed)
+        var random = EditingRandom(seed)
         var images = world.images
         var commands: [EditCommand] = []
         var made: Set<UUID> = []
@@ -224,7 +224,7 @@ public struct CameraBookmarks: Codable, Hashable, Sendable {
 
 /// A small, fast generator with a seed: the same seed, the same numbers,
 /// on every iPad.
-struct SeededRandom {
+struct EditingRandom {
     private var state: UInt64
 
     init(_ seed: UInt64) {

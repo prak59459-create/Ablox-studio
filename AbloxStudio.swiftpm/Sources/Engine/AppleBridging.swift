@@ -1,5 +1,4 @@
 import Foundation
-import AbloxCore
 
 // The core's types as simd, RealityKit and SwiftUI see them. Kept out of
 // AbloxCore on purpose: the core imports Foundation alone, so it builds and

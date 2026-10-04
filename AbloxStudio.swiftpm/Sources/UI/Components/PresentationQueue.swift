@@ -1,6 +1,5 @@
 import UIKit
 import SwiftUI
-import AbloxCore
 
 /// Holds back a full-screen presentation until whatever is over the screen
 /// has gone: a sheet, a popover, a confirmation dialog.

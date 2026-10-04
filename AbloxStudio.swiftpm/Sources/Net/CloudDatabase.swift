@@ -1,6 +1,5 @@
 import Foundation
 import Security
-import AbloxCore
 
 // Talking to the family's Firebase Realtime Database over plain HTTPS: an
 // anonymous sign-in (Firebase Authentication's REST interface), reads and

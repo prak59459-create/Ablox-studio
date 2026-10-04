@@ -10,10 +10,10 @@
 // repository — run `scripts/sync-core.sh --check` to confirm they have not
 // drifted.
 //
-// Two targets, as in the client: AbloxCore (the mirrored core and Studio's own
-// EditorCore, one module, also built and tested off-device by the root
-// package) and the app. Every file outside those two folders says
-// `import AbloxCore`.
+// One target, as in the client: the whole editor, the mirrored core and
+// Studio's own EditorCore included, is one module. The root package builds
+// the core and EditorCore on their own as `AbloxCore` for the tests, so no
+// file under Sources/ imports it or names a module.
 
 import PackageDescription
 import AppleProductTypes
@@ -29,8 +29,8 @@ let package = Package(
             targets: ["AbloxStudioApp"],
             bundleIdentifier: "com.ablox.studio",
             teamIdentifier: "",
-            displayVersion: "3.6",
-            bundleVersion: "27",
+            displayVersion: "3.7",
+            bundleVersion: "28",
             // No `appIcon:` on purpose, matching the client: the parameter is
             // optional, and a wrong `PlaceholderIcon` member name stops the
             // manifest compiling rather than falling back to a default icon.
@@ -58,31 +58,25 @@ let package = Package(
         )
     ],
     targets: [
-        // Two modules rather than one, for the build on an iPad: each compile
-        // job then holds only its own module's source, with the other one read
-        // back as a small compiled summary. One module of this size had the
-        // compiler holding the whole editor in every job at once, which is
-        // what ran an older iPad out of memory and made a build take minutes.
+        // One module, for the build after an update: the compiler then
+        // follows which file uses which declaration, and an update that
+        // touches a few files rebuilds those and the files that use what
+        // they declare. Across two modules it could only tell that the core
+        // had changed, and rebuilt nearly every panel for any new
+        // declaration in it (the client's docs/ipad-build.md, "One module
+        // again").
         //
-        // The library target's name must differ from the app product's;
-        // Swift Playgrounds refuses a target and a product that share one.
+        // The target's name must differ from the app product's; Swift
+        // Playgrounds refuses a target and a product that share one.
         //
         // `-gnone`: no debug information. Nothing on an iPad reads it, and
         // making it was about a fifth of the build (docs/ipad-build.md). It
         // goes to the compiler itself (`-Xfrontend`): package flags come
         // before the `-g` of a debug build, so given to the driver it would
         // lose, and the last one wins.
-        .target(
-            name: "AbloxCore",
-            path: "Sources",
-            sources: ["AbloxCore", "EditorCore"],
-            swiftSettings: [.unsafeFlags(["-Xfrontend", "-gnone"])]
-        ),
         .executableTarget(
             name: "AbloxStudioApp",
-            dependencies: ["AbloxCore"],
             path: "Sources",
-            exclude: ["AbloxCore", "EditorCore"],
             swiftSettings: [.unsafeFlags(["-Xfrontend", "-gnone"])]
         )
     ]

@@ -1,5 +1,4 @@
 import SwiftUI
-import AbloxCore
 
 // Going back: a world's earlier versions, and worlds deleted in the last
 // thirty days. Shared by Ablox and Ablox Studio (see `scripts/sync-core.sh`

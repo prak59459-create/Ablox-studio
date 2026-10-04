@@ -1,5 +1,4 @@
 import UIKit
-import AbloxCore
 
 /// Names (and titles) over people's heads, and the emoji stamps they send.
 ///

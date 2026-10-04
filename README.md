@@ -82,7 +82,7 @@ and block programming ("when … do …" cards) for players not ready to type.
 swift test        # 457 tests, no device or simulator needed
 ```
 
-Two modules are portable and therefore tested:
+Two parts are portable and therefore tested:
 
 - **`AbloxCore`** — the shared data model, wire format and rule engine. Mirrored
   from the Ablox client; see below.

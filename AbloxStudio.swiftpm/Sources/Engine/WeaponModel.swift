@@ -1,7 +1,6 @@
 import Foundation
 import RealityKit
 import UIKit
-import AbloxCore
 
 /// Weapons built from boxes, like avatars: no asset files, and a new model is
 /// a few lines rather than a download.

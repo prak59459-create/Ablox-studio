@@ -1,6 +1,5 @@
 import Foundation
 import Combine
-import AbloxCore
 
 /// Keeps this app up to date by itself, as far as an iPad allows.
 ///

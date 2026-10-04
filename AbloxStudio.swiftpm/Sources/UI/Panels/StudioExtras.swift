@@ -1,5 +1,4 @@
 import SwiftUI
-import AbloxCore
 
 // The building tools' screens: the menu of extras over the 3D view, the bar
 // for the tool in hand (paint, ground, box), the part library, the history,

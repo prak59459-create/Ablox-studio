@@ -1,7 +1,6 @@
 import Foundation
 import RealityKit
 import simd
-import AbloxCore
 
 // How the body moves when no emote is playing: walking and running with the
 // limbs swinging from the shoulder and hip, jumping with the arms thrown up,

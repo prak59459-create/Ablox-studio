@@ -3,7 +3,6 @@ import RealityKit
 import UIKit
 import CoreGraphics
 import Metal
-import AbloxCore
 
 /// Pictures the engine paints for itself: the patterns of the natural
 /// materials (wood grain, bricks, grass…), the sky, and the pictures a world

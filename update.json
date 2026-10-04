@@ -1,16 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "3.6",
-  "build": 27,
+  "version": "3.7",
+  "build": 28,
   "protocol": 8,
   "date": "2026-10-04",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shares Ablox 3.9's engine: a few of the compiler's slowest lines written in simpler steps; the Ablox keyboard works again; everything from 2.6 is still here"
+      "Quicker builds after an update: Studio is one module again, as Ablox 4.6, so the build after an update compiles only the files that changed and the files that use them",
+      "The first build after this update still builds everything once, because the project's layout changed"
     ],
     "ja": [
-      "Ablox 3.9 と同じエンジン: コンパイラが 時間をかけていた 数か所を かんたんな 手順に。Ablox キーボードも また使えます。2.6 の内容もそのまま"
+      "アップデートの あとの ビルドが 速く なります。Ablox 4.6 と 同じく 1つの モジュールに もどしたので、変わった ファイルと それを 使う ファイルだけを 作りなおします",
+      "この版に してから 最初の 1回だけは、プロジェクトの 組み立てが 変わったため ぜんぶ ビルドします"
     ]
   }
 }
