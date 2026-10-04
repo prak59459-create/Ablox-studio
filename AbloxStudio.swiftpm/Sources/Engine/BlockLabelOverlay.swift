@@ -48,15 +48,23 @@ final class BlockLabelOverlay: UIView {
                 return made
             }()
             view.show(item.label)
+            // Each step typed: mixed Float and CGFloat arithmetic in one
+            // nested expression is slow for the compiler to resolve.
+            let distance: Float = item.distance
+            let range: Float = item.label.range
             // Smaller with distance, but never too small to read.
-            let fade = CGFloat(max(0.5, min(1.25, 16 / max(item.distance, 1))))
-            let scale = fade * CGFloat(item.label.size)
+            let nearness: Float = 16 / Swift.max(distance, 1)
+            let fade: Float = Swift.max(0.5, Swift.min(1.25, nearness))
+            let scale: CGFloat = CGFloat(fade * item.label.size)
             view.transform = CGAffineTransform(scaleX: scale, y: scale)
-            view.center = CGPoint(x: item.anchor.x, y: item.anchor.y - view.bounds.height * scale / 2)
+            let lift: CGFloat = view.bounds.height * scale / 2
+            view.center = CGPoint(x: item.anchor.x, y: item.anchor.y - lift)
             // Nearer words over farther ones.
-            view.layer.zPosition = CGFloat(-item.distance)
+            view.layer.zPosition = CGFloat(-distance)
             // Fades out over the last part of its range rather than popping.
-            view.alpha = CGFloat(min(1, max(0, (item.label.range - item.distance) / max(item.label.range * 0.15, 1))))
+            let fadeLength: Float = Swift.max(range * 0.15, 1)
+            let left: Float = (range - distance) / fadeLength
+            view.alpha = CGFloat(Swift.min(1, Swift.max(0, left)))
         }
         for (id, view) in views where !seen.contains(id) {
             view.removeFromSuperview()

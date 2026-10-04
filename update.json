@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "3.5",
-  "build": 26,
+  "version": "3.6",
+  "build": 27,
   "protocol": 8,
   "date": "2026-10-04",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "The Ablox keyboard works again: its keys answered no touches on newer iPads. Shares Ablox 3.8's engine; everything from 2.6 is still here"
+      "Shares Ablox 3.9's engine: a few of the compiler's slowest lines written in simpler steps; the Ablox keyboard works again; everything from 2.6 is still here"
     ],
     "ja": [
-      "Ablox キーボードが また使えるようになりました（新しい iPad では キーを押しても 反応しませんでした）。Ablox 3.8 と同じエンジン。2.6 の内容もそのまま"
+      "Ablox 3.9 と同じエンジン: コンパイラが 時間をかけていた 数か所を かんたんな 手順に。Ablox キーボードも また使えます。2.6 の内容もそのまま"
     ]
   }
 }

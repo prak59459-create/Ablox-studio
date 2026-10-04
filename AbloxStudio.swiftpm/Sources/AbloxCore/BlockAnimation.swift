@@ -46,26 +46,36 @@ public struct BlockAnimation: Codable, Hashable, Sendable {
     /// each axis) at `time` seconds, started at `phase` (0…1) so blocks that
     /// share an animation do not move in step.
     public func pose(at time: Double, phase: Double) -> (degrees: Vec3, stretch: Vec3) {
-        let t = time * Double(speed) + phase * 10
+        // Every step typed: Double and Float mixed in one expression is slow
+        // for the compiler to work out.
+        let t: Double = time * Double(speed) + phase * 10
+        let still = Vec3(1, 1, 1)
         switch kind {
         case .spin:
-            return (Vec3(0, Float((t * 90).truncatingRemainder(dividingBy: 360)), 0), Vec3(1, 1, 1))
+            let turned: Double = (t * 90).truncatingRemainder(dividingBy: 360)
+            return (Vec3(0, Float(turned), 0), still)
         case .sway:
-            return (Vec3(0, 0, Float(sin(t * 2.4) * 10)), Vec3(1, 1, 1))
+            let lean: Double = sin(t * 2.4) * 10
+            return (Vec3(0, 0, Float(lean)), still)
         case .dance:
-            let beat = sin(t * 5)
+            let beat: Double = sin(t * 5)
             let squash = Float(1 + abs(beat) * 0.08)
-            return (Vec3(0, Float(sin(t * 2.5) * 18), Float(beat * 9)), Vec3(1 / squash.squareRoot(), squash, 1 / squash.squareRoot()))
+            let thin: Float = 1 / squash.squareRoot()
+            let twist: Double = sin(t * 2.5) * 18
+            let tilt: Double = beat * 9
+            return (Vec3(0, Float(twist), Float(tilt)), Vec3(thin, squash, thin))
         case .bounce:
-            let hop = sin(t * 6)
+            let hop: Double = sin(t * 6)
             let y = Float(1 + hop * 0.1)
             let side = Float(1 - hop * 0.05)
             return (Vec3(0, 0, 0), Vec3(side, y, side))
         case .pulse:
-            let s = Float(1 + sin(t * 3) * 0.06)
+            let swell: Double = sin(t * 3) * 0.06
+            let s = Float(1 + swell)
             return (Vec3(0, 0, 0), Vec3(s, s, s))
         case .wobble:
-            return (Vec3(Float(sin(t * 2.8) * 8), 0, 0), Vec3(1, 1, 1))
+            let rock: Double = sin(t * 2.8) * 8
+            return (Vec3(Float(rock), 0, 0), still)
         }
     }
 }
