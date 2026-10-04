@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "3.4",
-  "build": 25,
+  "version": "3.5",
+  "build": 26,
   "protocol": 8,
   "date": "2026-10-04",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shares Ablox 3.7's engine: in the game preview, no brief hitches when a part changes colour; players' gear is drawn as fewer pieces and looks the same; everything from 2.6 is still here"
+      "The Ablox keyboard works again: its keys answered no touches on newer iPads. Shares Ablox 3.8's engine; everything from 2.6 is still here"
     ],
     "ja": [
-      "Ablox 3.7 と同じエンジン: ゲームのプレビューで、パーツの色が変わるときの 小さな カクつきが なくなりました。プレイヤーの持ち物も 少ない かたまりで描きます（見た目はそのまま）。2.6 の内容もそのまま"
+      "Ablox キーボードが また使えるようになりました（新しい iPad では キーを押しても 反応しませんでした）。Ablox 3.8 と同じエンジン。2.6 の内容もそのまま"
     ]
   }
 }

@@ -257,6 +257,14 @@ public final class KeyboardController: ObservableObject {
 final class KeyboardWindow {
     static let shared = KeyboardWindow()
     private var window: PassthroughWindow?
+    /// Where the keyboard and the offer are drawn, in the window's
+    /// coordinates. Touches there are the keyboard's; the rest go through to
+    /// the app.
+    private(set) var touchAreas: [String: CGRect] = [:]
+
+    func setTouchArea(_ name: String, _ frame: CGRect?) {
+        touchAreas[name] = frame
+    }
 
     func update() {
         if KeyboardController.shared.needsWindow {
@@ -284,9 +292,28 @@ final class KeyboardWindow {
 
 final class PassthroughWindow: UIWindow {
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        guard let hit = super.hitTest(point, with: event) else { return nil }
-        // The empty, see-through part: not ours.
-        return hit === rootViewController?.view ? nil : hit
+        // Decided by where the keys are, not by which view was hit: SwiftUI
+        // draws the keys inside its hosting view, so a key and the empty,
+        // see-through part hit the same view, and telling them apart by view
+        // let every key's touch fall through to the app underneath.
+        guard KeyboardWindow.shared.touchAreas.values.contains(where: { $0.contains(point) }) else { return nil }
+        return super.hitTest(point, with: event)
+    }
+}
+
+/// Tells the keyboard's window where a part that takes touches is drawn.
+private struct KeyboardTouchArea: ViewModifier {
+    let name: String
+
+    func body(content: Content) -> some View {
+        content.background(
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { KeyboardWindow.shared.setTouchArea(name, proxy.frame(in: .global)) }
+                    .onChange(of: proxy.frame(in: .global)) { _, frame in KeyboardWindow.shared.setTouchArea(name, frame) }
+                    .onDisappear { KeyboardWindow.shared.setTouchArea(name, nil) }
+            }
+        )
     }
 }
 
@@ -307,9 +334,11 @@ struct KeyboardOverlay: View {
             }
             if keyboard.offersAbloxKeyboard {
                 offer
+                    .modifier(KeyboardTouchArea(name: "offer"))
             }
             if keyboard.targetID != nil {
                 KeyboardPanel()
+                    .modifier(KeyboardTouchArea(name: "keys"))
                     .transition(.move(edge: .bottom))
             }
         }
