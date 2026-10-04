@@ -1,18 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "3.8",
-  "build": 29,
+  "version": "3.9",
+  "build": 30,
   "protocol": 8,
   "date": "2026-10-04",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Builds after an update touch fewer files, as in Ablox 4.7: comparisons written by hand and additions to everyday types now live in a few files that seldom change",
-      "From 3.7: Studio is one module again, so the build after an update compiles only the files that changed and those that use them"
+      "Shares Ablox 4.9's core: a player's identity and looks have files of their own, so a change to movement no longer rebuilds most of the editor after an update",
+      "From 3.8: comparisons and additions to everyday types live in a few files that seldom change"
     ],
     "ja": [
-      "Ablox 4.7 と 同じく、アップデートの あとの ビルドで 作りなおす ファイルが 少なく なります（自分で 書いていた くらべ方と、みんなが 使う 型への 追加を、ほとんど 変わらない 少しの ファイルに まとめました）",
-      "3.7 の内容: 1つの モジュールに もどし、アップデートの あとは 変わった ファイルと それを 使う ファイルだけを 作りなおします"
+      "Ablox 4.9 と 同じ core: プレイヤーの ID と 見た目を それぞれ 自分の ファイルに 分けたので、動きの しくみを 変えても アップデートの あとに エディタの 大部分を 作りなおしません",
+      "3.8 の内容: くらべ方と、みんなが 使う 型への 追加を 少しの ファイルに まとめました"
     ]
   }
 }
