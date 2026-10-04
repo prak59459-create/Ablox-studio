@@ -307,8 +307,14 @@ public final class WorldScene {
         lastAppliedBlocks[block.id] = block
         if let baker {
             showModel(of: block, on: entity, picture: picture)
-            // A new name or tag is not a reason to rebuild a mesh.
-            if previous.map({ !RenderMerging.looksTheSame($0, block) }) ?? true {
+            // A new name or tag is not a reason to rebuild a mesh, and a new
+            // colour on a part drawn from the palette only paints its spot.
+            if let previous, RenderMerging.looksTheSame(previous, block) {
+                // Drawn as it was.
+            } else if let previous, RenderMerging.onlyRecoloured(previous, block, marked: BlockEntityFactory.isMarked(block)),
+                      baker.recoloured(block) {
+                // Still drawn by its mesh, in the new colour.
+            } else {
                 baker.changed(block, fresh: fresh && previous == nil)
             }
         }
@@ -531,6 +537,13 @@ public final class WorldScene {
 
     public func entity(for blockID: UUID) -> ModelEntity? {
         entities[blockID]
+    }
+
+    /// Whether a block is in the scene and drawn, by its own entity or by a
+    /// merged mesh (its entity is off then, but still where the block is).
+    public func isDrawn(_ blockID: UUID) -> Bool {
+        guard let entity = entities[blockID], entity.parent != nil else { return false }
+        return entity.isEnabled || (baker?.isBaked(blockID) ?? false)
     }
 
     /// Every block with words over it, and the words.

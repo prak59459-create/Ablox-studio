@@ -255,19 +255,21 @@ public struct GameViewport: UIViewRepresentable {
         private let reportsFrameRate = UserDefaults.standard.bool(forKey: "AbloxPlayBenchmark")
         private var reportedFrames: Double = 0
         private var reportedLevel: GraphicsProfile.Level?
-        /// The run's three parts: merged meshes on High, every part on its
-        /// own on High (to compare), then merged meshes on Auto.
+        /// The run's four parts: merged meshes on High, every part on its
+        /// own on High (to compare), merged meshes on Auto, then nothing but
+        /// the sky — the most the simulator draws at all.
         private var benchmarkPhase = 0
         private var benchmarkStart: Double?
-        private static let benchmarkPhases = ["merged-high", "single-high", "merged-auto"]
+        private static let benchmarkPhases = ["merged-high", "single-high", "merged-auto", "empty"]
         /// Time in each part of `tick` over the last second: the world,
         /// moving, the camera and sky, the words and names, the rest.
         private var sectionSeconds = [Double](repeating: 0, count: 5)
         private var sectionMark: Double = 0
-        /// The same view drawn merged and drawn part by part, to show they
-        /// look the same.
+        /// The same view drawn merged twice and then part by part, with
+        /// nothing moving, to show they look the same (`runBenchmarkPhases`).
         private var mergedLook: [UInt8]?
         private var looksTaken = 0
+        private var lookWaiting = false
         /// Time spent in `tick` over the last second, for the run's report.
         private var tickSeconds: Double = 0
         private var tickLongest: Double = 0
@@ -606,6 +608,14 @@ public struct GameViewport: UIViewRepresentable {
             if reportsFrameRate {
                 sectionMark = started
                 runBenchmarkPhases()
+                if holdsStillForLooks {
+                    // Nothing moves while the pictures are taken: meshes are
+                    // still rebuilt and far parts hidden, nothing else.
+                    worldScene.update()
+                    cullFarAway(index: indexCache.index(for: placeMovingParts(in: parent.session.world)))
+                    watchFrameRate(deltaTime)
+                    return
+                }
             }
             let dt = min(deltaTime, 1.0 / 20)
             // Everything the game changed since the last frame, in one go.
@@ -842,7 +852,7 @@ public struct GameViewport: UIViewRepresentable {
 
         func setGraphics(quality: GraphicsQuality, showFrameRate: Bool) {
             // The frame-rate run sets its own level for each of its parts.
-            let quality = reportsFrameRate ? (benchmarkPhase == 2 ? GraphicsQuality.auto : .high) : quality
+            let quality = reportsFrameRate ? (benchmarkPhase >= 2 ? GraphicsQuality.auto : .high) : quality
             if quality != graphicsQuality || appliedProfile == nil {
                 graphicsQuality = quality
                 // Auto starts from the top and steps down if it has to.
@@ -916,29 +926,66 @@ public struct GameViewport: UIViewRepresentable {
 
         /// The frame-rate run: 40 seconds of merged meshes on High (sampled
         /// from the outside at 26 to 34), 20 with every part drawn on its
-        /// own, then merged meshes on Auto.
+        /// own, 20 of merged meshes on Auto, then the sky alone.
         private func runBenchmarkPhases() {
             watchMainThread()
             let now = CACurrentMediaTime()
             let start = benchmarkStart ?? now
             benchmarkStart = start
             // Looking round the town, as a player does — but held still for
-            // the two pictures compared below.
+            // the pictures compared below.
             let seconds = now - start
-            let holding = (36..<38.6).contains(seconds) || (56..<58.6).contains(seconds)
-            parent.controls.cameraYaw = holding ? 30 : normalizeDegrees(Float(seconds) * 24)
-            if looksTaken == 0, seconds >= 38.3 {
-                looksTaken = 1
-                takeLook { [weak self] pixels in self?.mergedLook = pixels }
-            } else if looksTaken == 1, seconds >= 58.3 {
-                looksTaken = 2
-                takeLook { [weak self] pixels in self?.compareLooks(pixels) }
-            }
-            let phase = seconds < 40 ? 0 : (seconds < 60 ? 1 : 2)
+            parent.controls.cameraYaw = seconds >= 36 && looksTaken < 5 && seconds < 44
+                ? 30 : normalizeDegrees(Float(seconds) * 24)
+            takeLooks(at: seconds)
+            let phase = seconds < 40 ? 0 : (seconds < 60 ? 1 : (seconds < 80 ? 2 : 3))
             guard phase != benchmarkPhase else { return }
             benchmarkPhase = phase
             worldScene.bakesStillParts = phase != 1
+            worldScene.anchor.isEnabled = phase != 3
             setGraphics(quality: parent.graphicsQuality, showFrameRate: parent.showFrameRate)
+        }
+
+        /// From 37.6 seconds, with nothing moving: the view merged, merged
+        /// again a moment later (any difference there is not the meshes'),
+        /// then every part on its own.
+        private var holdsStillForLooks: Bool {
+            guard let start = benchmarkStart else { return false }
+            let seconds = CACurrentMediaTime() - start
+            return seconds >= 37.6 && seconds < 44 && (looksTaken < 5 || lookWaiting)
+        }
+
+        private func takeLooks(at seconds: Double) {
+            guard !lookWaiting else { return }
+            switch looksTaken {
+            case 0 where seconds >= 38:
+                looksTaken = 1
+                lookWaiting = true
+                takeLook { [weak self] pixels in
+                    self?.mergedLook = pixels
+                    self?.lookWaiting = false
+                }
+            case 1 where seconds >= 38.4:
+                looksTaken = 2
+                lookWaiting = true
+                takeLook { [weak self] pixels in
+                    self?.compareLooks(pixels, "merged-vs-merged")
+                    self?.lookWaiting = false
+                }
+            case 2 where seconds >= 38.7:
+                looksTaken = 3
+                worldScene.bakesStillParts = false
+            case 3 where seconds >= 39.3 && worldScene.mergedSummary.meshes == 0 || seconds >= 40.5:
+                looksTaken = 4
+                lookWaiting = true
+                takeLook { [weak self] pixels in
+                    self?.compareLooks(pixels, "merged-vs-single")
+                    self?.lookWaiting = false
+                    self?.looksTaken = 5
+                }
+            default:
+                break
+            }
         }
 
         /// The view as a small picture's pixels, RGBA.
@@ -959,31 +1006,60 @@ public struct GameViewport: UIViewRepresentable {
             }
         }
 
-        /// How far apart the merged and the part-by-part pictures are: the
-        /// mean difference, and the share of pixels that differ clearly
-        /// (characters walk and signs spin between the two).
-        private func compareLooks(_ single: [UInt8]?) {
-            guard let merged = mergedLook, let single, merged.count == single.count else {
-                FileHandle.standardError.write(Data("AbloxLook could not take both pictures\n".utf8))
+        /// How far the merged picture and a later one are apart: the mean
+        /// difference, the share of pixels that differ clearly, the mean
+        /// shift of each colour (later less merged, so a material drawn
+        /// darker or lighter shows), where on the screen they differ (a grid
+        /// of 8 × 6, the top row first, in percent) and the pixels that
+        /// differ most.
+        private func compareLooks(_ later: [UInt8]?, _ name: String) {
+            guard let merged = mergedLook, let later, merged.count == later.count else {
+                FileHandle.standardError.write(Data("AbloxLook \(name) could not take both pictures\n".utf8))
                 return
             }
+            let width = 160, height = 120, columns = 8, rows = 6
             var total = 0
             var changed = 0
-            var pixels = 0
-            var i = 0
-            while i + 3 < merged.count {
-                let dr = abs(Int(merged[i]) - Int(single[i]))
-                let dg = abs(Int(merged[i + 1]) - Int(single[i + 1]))
-                let db = abs(Int(merged[i + 2]) - Int(single[i + 2]))
-                total += dr + dg + db
-                if max(dr, dg, db) > 25 { changed += 1 }
-                pixels += 1
-                i += 4
+            var shift = [0, 0, 0]
+            var cells = [Int](repeating: 0, count: columns * rows)
+            var worst: [(difference: Int, x: Int, y: Int)] = []
+            for y in 0..<height {
+                for x in 0..<width {
+                    let i = (y * width + x) * 4
+                    var difference = 0
+                    var most = 0
+                    for c in 0..<3 {
+                        let d = Int(later[i + c]) - Int(merged[i + c])
+                        shift[c] += d
+                        difference += abs(d)
+                        most = max(most, abs(d))
+                    }
+                    total += difference
+                    if most > 25 { changed += 1 }
+                    cells[(y * rows / height) * columns + x * columns / width] += difference
+                    if difference > 0, worst.count < 6 || difference > worst[worst.count - 1].difference {
+                        worst.append((difference, x, y))
+                        worst.sort { $0.difference > $1.difference }
+                        if worst.count > 6 { worst.removeLast() }
+                    }
+                }
             }
-            let mean = Double(total) / Double(max(pixels * 3, 1)) / 255 * 100
-            let share = Double(changed) / Double(max(pixels, 1)) * 100
-            let line = String(format: "AbloxLook merged-vs-single mean=%.2f%% changed=%.2f%%\n", mean, share)
-            FileHandle.standardError.write(Data(line.utf8))
+            let pixels = Double(width * height)
+            let mean = Double(total) / (pixels * 3) / 255 * 100
+            let share = Double(changed) / pixels * 100
+            let means = shift.map { String(format: "%+.2f", Double($0) / pixels) }.joined(separator: "/")
+            var lines = String(format: "AbloxLook %@ mean=%.2f%% changed=%.2f%% shift(rgb)=%@\n", name, mean, share, means)
+            let perCell = pixels / Double(columns * rows) * 3 * 255 / 100
+            for row in 0..<rows {
+                let values = (0..<columns).map { String(format: "%5.1f", Double(cells[row * columns + $0]) / perCell) }
+                lines += "AbloxLook \(name) grid " + values.joined(separator: " ") + "\n"
+            }
+            for spot in worst {
+                let i = (spot.y * width + spot.x) * 4
+                lines += "AbloxLook \(name) at \(spot.x),\(spot.y) merged=\(merged[i]),\(merged[i + 1]),\(merged[i + 2])"
+                    + " later=\(later[i]),\(later[i + 1]),\(later[i + 2])\n"
+            }
+            FileHandle.standardError.write(Data(lines.utf8))
         }
 
         /// The run's report: time since the last mark goes to `section`.
@@ -1420,7 +1496,7 @@ public struct GameViewport: UIViewRepresentable {
                 labelClock = 0
                 var near: [(id: UUID, label: BlockLabel, distance: Float)] = []
                 for (id, label) in labelled {
-                    guard let entity = worldScene.entity(for: id), entity.isEnabled, entity.parent != nil else { continue }
+                    guard worldScene.isDrawn(id), let entity = worldScene.entity(for: id) else { continue }
                     let distance = Vec3(entity.position(relativeTo: nil)).distance(to: eye)
                     // A little further than the label reaches: it may come
                     // into range before the next look.
@@ -1432,8 +1508,7 @@ public struct GameViewport: UIViewRepresentable {
             var items: [BlockLabelOverlay.Item] = []
             for id in labelCandidates {
                 // The words as they are now: a price or a count changes often.
-                guard let label = labelled[id], let entity = worldScene.entity(for: id), entity.isEnabled,
-                      entity.parent != nil else { continue }
+                guard let label = labelled[id], worldScene.isDrawn(id), let entity = worldScene.entity(for: id) else { continue }
                 let half = entity.scale(relativeTo: nil).y / 2
                 let top = Vec3(entity.position(relativeTo: nil)) + Vec3(0, half + label.height, 0)
                 let toTop = top - eye

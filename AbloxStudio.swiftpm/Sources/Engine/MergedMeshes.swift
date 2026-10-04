@@ -87,6 +87,16 @@ final class StillPartBaker {
     private var paletteMaterials: [MaterialKind: RealityKit.Material] = [:]
     /// The texture could not be made: every colour gets its own mesh again.
     private var paletteFailed = false
+    /// The palette texture as shown, painted again in place when a part's
+    /// own spot changes colour (`recoloured`).
+    private var paletteTexture: TextureResource?
+    private var paletteRepainted = false
+    /// Spots of parts' own, the ones free to give out again, and the ones
+    /// freed but perhaps still drawn by a mesh until it is rebuilt.
+    private var ownSlots: [UUID: Int] = [:]
+    private var freeSlots: [Int] = []
+    private var releasing: [Int] = []
+    static let mostOwnSlots = 1_024
 
     /// Seconds a part must stay the same before it is baked: longer on the
     /// map, where a rebuild is bigger, than on a character.
@@ -114,6 +124,29 @@ final class StillPartBaker {
         let settle = block.parentID == nil ? Self.patchSettle : Self.modelSettle
         let time = now
         waiting[id] = fresh ? time : Swift.max(time + settle, heldUntil[id] ?? 0)
+    }
+
+    /// Only its colour changed (`RenderMerging.onlyRecoloured`): a part in
+    /// a palette mesh stays in it and its own spot is painted again, at
+    /// once and without building the mesh again after the first time.
+    /// False when it cannot be — not in a palette mesh, or no spot left —
+    /// and then it is `changed` as any other.
+    func recoloured(_ block: BlockData) -> Bool {
+        let id = block.id
+        guard !paletteFailed, let key = groupOf[id], groups[key]?.paletteKind != nil else { return false }
+        if let slot = ownSlots[id] {
+            if palette.repaint(slot: slot, to: block.color) { paletteRepainted = true }
+            return true
+        }
+        guard ownSlots.count < Self.mostOwnSlots, let slot = freeSlots.popLast() ?? palette.ownSlot(block.color) else {
+            return false
+        }
+        palette.repaint(slot: slot, to: block.color)
+        ownSlots[id] = slot
+        paletteRepainted = true
+        // Its vertices point at its own spot from the next build, straight away.
+        leaving.insert(key)
+        return true
     }
 
     /// Something not in the world changed how a part looks — a tint, a
@@ -149,6 +182,7 @@ final class StillPartBaker {
             group.entity?.removeFromParent()
             for id in group.members.union(group.drawn) {
                 groupOf.removeValue(forKey: id)
+                releaseSlot(of: id)
                 if baked.remove(id) != nil { scene.bakedStateChanged(id) }
             }
             groups.removeValue(forKey: key)
@@ -162,7 +196,10 @@ final class StillPartBaker {
     func dissolveAll() {
         waiting.removeAll()
         for (key, group) in groups {
-            for id in group.members { groupOf.removeValue(forKey: id) }
+            for id in group.members {
+                groupOf.removeValue(forKey: id)
+                releaseSlot(of: id)
+            }
             group.members.removeAll()
             leaving.insert(key)
         }
@@ -194,17 +231,29 @@ final class StillPartBaker {
         paletteShown = -1
         paletteMaterials.removeAll()
         paletteFailed = false
+        paletteTexture = nil
+        paletteRepainted = false
+        ownSlots.removeAll()
+        freeSlots.removeAll()
+        releasing.removeAll()
     }
 
     private func takeOut(_ id: UUID, hold: Bool) {
         guard let key = groupOf.removeValue(forKey: id), let group = groups[key] else { return }
         group.members.remove(id)
+        releaseSlot(of: id)
         leaving.insert(key)
         if hold {
             let times = (timesTakenOut[id] ?? 0) + 1
             timesTakenOut[id] = times
             heldUntil[id] = now + Swift.min(120, 8 * pow(2, Double(times - 1)))
         }
+    }
+
+    /// A part's own spot may be given out again once no mesh draws it: when
+    /// every mesh it left has been rebuilt.
+    private func releaseSlot(of id: UUID) {
+        if let slot = ownSlots.removeValue(forKey: id) { releasing.append(slot) }
     }
 
     // MARK: Every frame
@@ -222,6 +271,13 @@ final class StillPartBaker {
                 join(id)
             }
             refreshPalette()
+        }
+        defer {
+            if leaving.isEmpty, !releasing.isEmpty {
+                freeSlots.append(contentsOf: releasing)
+                releasing.removeAll()
+            }
+            if paletteRepainted { repaintPalette() }
         }
         guard !leaving.isEmpty || !joining.isEmpty else { return }
         let start = CACurrentMediaTime()
@@ -293,7 +349,7 @@ final class StillPartBaker {
                 if group.paletteKind != nil {
                     // Its colour's spot; a colour new to the palette is
                     // painted into the texture before the mesh is shown.
-                    guard let slot = palette.slot(for: block.color) else { continue }
+                    guard let slot = ownSlots[id] ?? palette.slot(for: block.color) else { continue }
                     spot = ColorPalette.textureCoordinate(ofSlot: slot)
                 }
                 wanted.insert(id)
@@ -384,7 +440,8 @@ final class StillPartBaker {
     /// every palette mesh the new materials.
     private func refreshPalette() {
         guard !paletteFailed, palette.colors.count != paletteShown, !palette.colors.isEmpty else { return }
-        guard let texture = Self.paletteTexture(palette) else {
+        guard let image = Self.paletteImage(palette),
+              let texture = try? TextureResource.generate(from: image, options: .init(semantic: .color)) else {
             // Never drawn with a stand-in material: those parts go back to a
             // mesh per colour.
             paletteFailed = true
@@ -399,6 +456,8 @@ final class StillPartBaker {
             return
         }
         paletteShown = palette.colors.count
+        paletteTexture = texture
+        paletteRepainted = false
         let spots = MaterialParameters.Texture(texture, sampler: Self.paletteSampler())
         paletteMaterials.removeAll()
         for group in groups.values {
@@ -407,6 +466,24 @@ final class StillPartBaker {
             paletteMaterials[kind] = material
             group.material = material
             group.entity?.model?.materials = [material]
+        }
+    }
+
+    /// Parts' own spots painted again: the texture's contents replaced in
+    /// place, so every material made from it shows the new colours.
+    private func repaintPalette() {
+        paletteRepainted = false
+        guard !paletteFailed else { return }
+        guard palette.colors.count == paletteShown, let texture = paletteTexture, let image = Self.paletteImage(palette) else {
+            // More colours as well: a new texture, with these in it.
+            refreshPalette()
+            return
+        }
+        do {
+            try texture.replace(withImage: image, options: .init(semantic: .color))
+        } catch {
+            paletteShown = -1
+            refreshPalette()
         }
     }
 
@@ -437,15 +514,14 @@ final class StillPartBaker {
         return MaterialParameters.Texture.Sampler(descriptor)
     }
 
-    private static func paletteTexture(_ palette: ColorPalette) -> TextureResource? {
+    private static func paletteImage(_ palette: ColorPalette) -> CGImage? {
         let width = ColorPalette.width
         let bytes = palette.pixels()
         guard let space = CGColorSpace(name: CGColorSpace.sRGB),
-              let provider = CGDataProvider(data: Data(bytes) as CFData),
-              let image = CGImage(width: width, height: 1, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
-                                  space: space, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
-                                  provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else { return nil }
-        return try? TextureResource.generate(from: image, options: .init(semantic: .color))
+              let provider = CGDataProvider(data: Data(bytes) as CFData) else { return nil }
+        return CGImage(width: width, height: 1, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
+                       space: space, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
+                       provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
     }
 
     // MARK: Distance

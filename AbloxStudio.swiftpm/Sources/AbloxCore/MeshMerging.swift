@@ -147,13 +147,14 @@ public enum RenderMerging {
     /// Whether a block can be baked into a merged mesh: drawn as it stands,
     /// solid-looking, with nothing hanging from it and nothing about it the
     /// renderer moves or swaps by itself. Anything a script changes later is
-    /// taken out of the mesh again then.
+    /// taken out of the mesh again then. Words over it (`label`) are drawn
+    /// over the view, not with the part, so they are no reason to leave it
+    /// out — a shop's price plates are one mesh like the rest.
     public static func canMerge(_ block: BlockData, hasChildren: Bool) -> Bool {
         // Not anchored: physics can knock it over, so it moves by itself.
         guard !hasChildren, block.isVisible, block.isAnchored else { return false }
         guard block.color.a * block.material.alphaScale >= 0.999 else { return false }
         guard block.imageID == nil, block.light == nil, block.animation == nil else { return false }
-        if let label = block.label, !label.isEmpty { return false }
         switch block.behavior {
         // Moved, opened or ridden by the renderer itself, or made to vanish
         // when touched: taking one out of a mesh means drawing the mesh again.
@@ -166,12 +167,12 @@ public enum RenderMerging {
     }
 
     /// Whether two versions of a block are drawn alike and bake alike: a
-    /// script renaming, retagging or scoring a block leaves it in its mesh.
+    /// script renaming, retagging or scoring a block, or counting up the
+    /// money in its words, leaves it in its mesh.
     public static func looksTheSame(_ a: BlockData, _ b: BlockData) -> Bool {
         a.id == b.id && a.transform == b.transform && a.color == b.color && a.parentID == b.parentID
             && a.isVisible == b.isVisible && a.isAnchored == b.isAnchored && a.shape == b.shape && a.material == b.material
-            && a.behavior == b.behavior && a.imageID == b.imageID && a.light == b.light && a.label == b.label
-            && a.animation == b.animation
+            && a.behavior == b.behavior && a.imageID == b.imageID && a.light == b.light && a.animation == b.animation
     }
 
     /// Whether the only difference is where the block is, how it is turned
@@ -181,6 +182,17 @@ public enum RenderMerging {
         var moved = a
         moved.transform = b.transform
         return moved == b
+    }
+
+    /// Whether the only difference is the colour, the part as solid as
+    /// before and coloured from the palette (`usesPalette`): then it keeps
+    /// its place in its mesh and only its spot on the palette is painted
+    /// again — a dance floor changing colour on every beat stays one mesh.
+    public static func onlyRecoloured(_ a: BlockData, _ b: BlockData, marked: Bool) -> Bool {
+        guard a.color != b.color, a.color.a == b.color.a, usesPalette(b, marked: marked) else { return false }
+        var recoloured = a
+        recoloured.color = b.color
+        return recoloured == b
     }
 
     /// Whether a block draws nothing at all: see-through to the end, like the
@@ -253,6 +265,27 @@ public struct ColorPalette: Sendable, Equatable {
 
     public func existingSlot(for color: ColorRGBA) -> Int? {
         slots[Self.packed(color)]
+    }
+
+    /// A spot of a part's own, for a part whose colour keeps changing: it is
+    /// painted again with each change (`repaint`) instead of the part's mesh
+    /// being built again. Never shared, so never found by `slot(for:)`. Nil
+    /// when the palette is full.
+    public mutating func ownSlot(_ color: ColorRGBA) -> Int? {
+        guard !isFull else { return nil }
+        colors.append(Self.packed(color))
+        return colors.count - 1
+    }
+
+    /// Paints a spot of a part's own (`ownSlot`) again; a shared spot is
+    /// left as it is. True when its colour changed.
+    @discardableResult
+    public mutating func repaint(slot: Int, to color: ColorRGBA) -> Bool {
+        guard colors.indices.contains(slot) else { return false }
+        let packed = Self.packed(color)
+        guard colors[slot] != packed, slots[colors[slot]] != slot else { return false }
+        colors[slot] = packed
+        return true
     }
 
     /// The middle of the spot, so a sample never reaches the next one.
