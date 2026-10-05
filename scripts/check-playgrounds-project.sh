@@ -70,14 +70,16 @@ for manifest in "${manifests[@]}"; do
     echo "Checking ${manifest#"$repo_root"/}"
     scan "$manifest" "${manifest_rules[@]}"
 
-    # One target: the whole app is one module, so the compiler can follow
-    # which file uses which declaration and an update rebuilds only what it
-    # touches. Across two modules any new declaration in the core rebuilt
-    # nearly every screen (docs/ipad-build.md, "One module again").
+    # Two targets: the portable core as a library, and the app on top of it.
+    # Each compile job then holds one module's source rather than the whole
+    # app, which is what ran an older iPad out of memory (docs/ipad-build.md).
     library_count=$(grep -cE '^\s*\.target\(' "$manifest" || true)
     app_count=$(grep -cE '^\s*\.executableTarget\(' "$manifest" || true)
-    if [ "$library_count" -ne 0 ] || [ "$app_count" -ne 1 ]; then
-        fail "expected one .executableTarget and no .target, found $app_count and $library_count — the app is one module"
+    if [ "$library_count" -ne 1 ] || [ "$app_count" -ne 1 ]; then
+        fail "expected one .target (AbloxCore) and one .executableTarget, found $library_count and $app_count"
+    fi
+    if ! grep -A1 -E '^\s*\.target\(' "$manifest" | grep -q 'name: "AbloxCore"'; then
+        fail "the library target must be named AbloxCore — every file outside the core says \`import AbloxCore\`"
     fi
     product=$(grep -A1 -E '\.iOSApplication\(' "$manifest" | grep -oE 'name: "[^"]+"' | head -1 || true)
     if [ -n "$product" ] && grep -A1 -E '^\s*\.(executableTarget|target)\(' "$manifest" | grep -qF "$product"; then
@@ -94,11 +96,9 @@ done
 # The deployment target the manifest declares. Anything newer than this is a
 # compile error on device, not a graceful degradation.
 source_rules=(
-    # On device the core is part of the app's module; only the root test
-    # package calls it `AbloxCore`. EditorCore is only a folder.
-    '\bEditorCore\.[A-Za-z_]'$'\t''EditorCore is a folder, not a module. Call it unqualified.'
-    '\bAbloxCore\.[A-Za-z_]'$'\t''AbloxCore is a module only in the root test package; on device the core is part of the app. Call it unqualified.'
-    '^[[:space:]]*(@preconcurrency[[:space:]]+|@testable[[:space:]]+)?import[[:space:]]+AbloxCore\b'$'\t''the app is one module and there is no AbloxCore to import on device; the core is already in scope.'
+    # The core is the module `AbloxCore` in both builds; EditorCore is only a
+    # folder inside it.
+    '\bEditorCore\.[A-Za-z_]'$'\t''EditorCore is a folder in the AbloxCore module, not a module of its own. Call it unqualified.'
 
     # iOS 18 API. Ablox deploys to iOS 17; see Engine/ProceduralMesh.swift.
     '\.generateCylinder\('$'\t''`MeshResource.generateCylinder(height:radius:)` is iOS 18+. Use `.abloxCylinder(height:radius:)`.'
@@ -114,8 +114,10 @@ source_rules=(
 
 # Only for files in the core (Sources/AbloxCore, and Studio's Sources/EditorCore).
 core_rules=(
-    # The root package builds these files alone, on Linux, for the tests:
-    # an Apple-only import here would stop that build.
+    '^[[:space:]]*(@preconcurrency[[:space:]]+)?import[[:space:]]+AbloxCore\b'$'\t''these files are the AbloxCore module; a module cannot import itself.'
+    # Every compile job of a module loads whatever any of its files imports,
+    # so one SwiftUI import here would be paid by every core job — and the
+    # Linux tests could not build it at all.
     '^[[:space:]]*(@preconcurrency[[:space:]]+)?import[[:space:]]+(SwiftUI|RealityKit|UIKit|Network|GameController|AVFoundation|AVFAudio|Combine|CoreGraphics|simd|CryptoKit|Security)\b'$'\t''the core imports Foundation alone (and Compression). Put glue to Apple frameworks in Engine/, like Engine/AppleBridging.swift.'
 )
 
@@ -127,6 +129,11 @@ for root in "${source_roots[@]}"; do
             AbloxCore/*|EditorCore/*)
                 scan "$file" "${core_rules[@]}"
                 ;;
+            *)
+                if ! grep -qE '^import AbloxCore$' "$file"; then
+                    fail "${file#"$repo_root"/}: missing \`import AbloxCore\` — the core is its own module, so without it none of its types are in scope"
+                fi
+                ;;
         esac
     done < <(find "$root" -name '*.swift' -print0)
 done
@@ -134,8 +141,8 @@ done
 # --------------------------------------------------- rebuilds after updates --
 #
 # Two kinds of declaration make their file a dependency of nearly every
-# other file, so that any change to that file rebuilds the whole app after
-# an update (docs/ipad-build.md, "One module again"):
+# other file of its module, so that any change to that file rebuilds the
+# whole module after an update (docs/ipad-build.md, "One module again"):
 #
 #   * an operator written for a type (`static func ==`, `<`, `+`, …): the
 #     compiler looks at every one of them to check any `a == b`; and

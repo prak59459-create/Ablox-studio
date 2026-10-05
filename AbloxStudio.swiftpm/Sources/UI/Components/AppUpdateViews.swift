@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import AbloxCore
 
 // What the player sees of `AppUpdater`: a banner in the menu when a new
 // version is out or already downloaded, a card in Settings, the sheet that

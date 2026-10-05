@@ -2,6 +2,7 @@ import Foundation
 import RealityKit
 import UIKit
 import simd
+import AbloxCore
 
 /// Players for the launch check's frame-rate run (`-AbloxPlayBenchmark YES`):
 /// a room's worth of avatars in every kind of hat, face, pet and ride, so the

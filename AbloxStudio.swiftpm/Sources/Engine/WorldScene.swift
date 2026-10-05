@@ -1,6 +1,7 @@
 import Foundation
 import RealityKit
 import simd
+import AbloxCore
 
 /// Keeps a RealityKit scene in step with a `WorldDocument`.
 ///

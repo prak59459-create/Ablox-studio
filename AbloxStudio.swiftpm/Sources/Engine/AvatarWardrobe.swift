@@ -2,6 +2,7 @@ import Foundation
 import RealityKit
 import simd
 import UIKit
+import AbloxCore
 
 /// The newer hats, faces and pets, built from boxes, cylinders, cones and
 /// spheres like the rest of the avatar. Kept apart from `AvatarEntity` so

@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import Darwin
+import AbloxCore
 
 /// Keeps the problems this iPad has had — script errors, a room that could
 /// not be reached, a world that would not save, a crash — so they can be

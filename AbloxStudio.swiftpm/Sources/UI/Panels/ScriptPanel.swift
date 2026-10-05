@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import AbloxCore
 
 /// The Script tab: the world's `.absc` files, and the way into editing them.
 ///

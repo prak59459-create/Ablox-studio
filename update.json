@@ -1,18 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "4.0",
-  "build": 31,
+  "version": "4.1",
+  "build": 32,
   "protocol": 8,
-  "date": "2026-10-04",
+  "date": "2026-10-05",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shares Ablox 5.0's core: blocks' shapes, materials, behaviours and lights, and a world's particles, music, sounds and panels each have a file of their own, so a change to one rebuilds only what uses it after an update",
-      "From 3.9: a player's identity and looks have files of their own"
+      "Two modules again, as Ablox 5.2: as one module the app could not be built on an iPad with little memory (the build failed with no error)",
+      "Kept from 3.8 to 4.0: comparisons and additions to everyday types in a few files, and the split files"
     ],
     "ja": [
-      "Ablox 5.0 と 同じ core: ブロックの 形・素材・動き・明かりと、ワールドの パーティクル・音楽・音・パネルを それぞれ 自分の ファイルに 分けたので、1つを 変えても アップデートの あとに それを 使う ファイルだけを 作りなおします",
-      "3.9 の内容: プレイヤーの ID と 見た目を それぞれ 自分の ファイルに 分けました"
+      "Ablox 5.2 と 同じく、2つの モジュールに もどしました。1つの モジュールでは、メモリの 少ない iPad で エラーの 表示なしで ビルドが 失敗して いました",
+      "3.8〜4.0 の 内容（くらべ方などを 少しの ファイルに まとめた・ファイルを 分けた）は そのまま です"
     ]
   }
 }

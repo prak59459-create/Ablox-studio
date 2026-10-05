@@ -1,4 +1,5 @@
 import Foundation
+import AbloxCore
 
 /// This iPad's address on the local network, for an invitation that joins
 /// without the list (`JoinTicket`).

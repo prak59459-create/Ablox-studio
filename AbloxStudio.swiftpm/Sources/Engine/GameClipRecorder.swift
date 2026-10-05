@@ -5,6 +5,7 @@ import CoreVideo
 import Metal
 import QuartzCore
 import RealityKit
+import AbloxCore
 
 /// The last half minute of a game, kept by Ablox itself.
 ///

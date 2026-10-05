@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import AbloxCore
 
 /// The joining side of a session: one TLS connection to a host, plus the
 /// replicated world and roster it sends back.

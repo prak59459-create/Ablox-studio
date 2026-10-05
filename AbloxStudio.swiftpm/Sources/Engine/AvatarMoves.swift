@@ -2,6 +2,7 @@ import Foundation
 import RealityKit
 import simd
 import UIKit
+import AbloxCore
 
 // The newer emotes, looking about when stood still, the pet joining in, and
 // the ring of light round the feet. Kept apart from `AvatarEntity` so each

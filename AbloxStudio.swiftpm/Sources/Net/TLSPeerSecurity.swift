@@ -2,6 +2,7 @@ import Foundation
 import Network
 import CryptoKit
 import CommonCrypto
+import AbloxCore
 
 /// Builds the TLS-secured `NWParameters` every Ablox connection uses.
 ///

@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import AbloxCore
 
 /// Notices for the main menu, published as `notices.json` beside
 /// `update.json` in the app's repository: an event, something fixed, a

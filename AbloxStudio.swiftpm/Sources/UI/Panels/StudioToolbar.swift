@@ -1,4 +1,5 @@
 import SwiftUI
+import AbloxCore
 
 /// The top bar: tools, snapping, undo, sharing, and the Play switch.
 struct StudioToolbar: View {

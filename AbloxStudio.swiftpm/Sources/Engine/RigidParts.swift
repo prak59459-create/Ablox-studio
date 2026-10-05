@@ -2,6 +2,7 @@ import Foundation
 import RealityKit
 import UIKit
 import simd
+import AbloxCore
 
 /// Draws the parts of something that only ever moves as a whole — a face, a
 /// hat, a pet, a car — as one mesh per material instead of one per part.

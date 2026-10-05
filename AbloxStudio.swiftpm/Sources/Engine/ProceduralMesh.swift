@@ -1,6 +1,7 @@
 import Foundation
 import RealityKit
 import simd
+import AbloxCore
 
 /// Cylinders and cones that exist on iOS 17.
 ///

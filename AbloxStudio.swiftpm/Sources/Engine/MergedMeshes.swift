@@ -5,6 +5,7 @@ import CoreGraphics
 import Metal
 import simd
 import QuartzCore
+import AbloxCore
 
 /// Bakes the parts of a game that stay put into a few merged meshes, so the
 /// iPad draws a handful of things instead of thousands (`RenderMerging`
