@@ -1,18 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "4.1",
-  "build": 32,
+  "version": "4.2",
+  "build": 33,
   "protocol": 8,
-  "date": "2026-10-05",
+  "date": "2026-10-08",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Two modules again, as Ablox 5.2: as one module the app could not be built on an iPad with little memory (the build failed with no error)",
-      "Kept from 3.8 to 4.0: comparisons and additions to everyday types in a few files, and the split files"
+      "Sync for Ablox 5.3: in a play test, a character's face is now its front (walking left or right, it used to face the other way), and shift lock from Ablox's settings is followed"
     ],
     "ja": [
-      "Ablox 5.2 と 同じく、2つの モジュールに もどしました。1つの モジュールでは、メモリの 少ない iPad で エラーの 表示なしで ビルドが 失敗して いました",
-      "3.8〜4.0 の 内容（くらべ方などを 少しの ファイルに まとめた・ファイルを 分けた）は そのまま です"
+      "Ablox 5.3 と 同じに しました: テストプレイで キャラクターの 顔の ある方が 正面に なりました（左右に 歩くと 反対を 向いて いました）。Ablox の 設定の シフトロックにも したがいます"
     ]
   }
 }

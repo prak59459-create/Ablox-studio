@@ -36,7 +36,7 @@ public enum Strings {
     /// Exposed so the tests can see duplicates, which the dictionary hides.
     public static let entries: [(String, String)] = [
         coreEntries, clientEntries, studioEntries, guideEntries, catalogueEntries, scriptEntries, updateEntries, updateEntries2,
-        featureEntries, featureEntries2, featureEntries3, featureEntries4, featureEntries5, featureEntries6, featureEntries7, featureEntries8, featureEntries9, featureEntries10, featureEntries11, featureEntries12, featureEntries13
+        featureEntries, featureEntries2, featureEntries3, featureEntries4, featureEntries5, featureEntries6, featureEntries7, featureEntries8, featureEntries9, featureEntries10, featureEntries11, featureEntries12, featureEntries13, featureEntries14
     ].flatMap { $0 }
 
     // MARK: - Shared vocabulary
@@ -3358,5 +3358,15 @@ public enum Strings {
         ("{} on this iPad", "この iPad に {}"),
         ("{} to go", "のこり {} 本"),
         ("{} to go · {}", "のこり {} 本 ・ {}"),
+    ]
+
+    // MARK: - Shift lock (5.3)
+
+    static let featureEntries14: [(String, String)] = [
+        ("Shift lock", "シフトロック"),
+        ("On", "オン"),
+        ("Your character faces where the camera looks", "キャラクターがカメラの向いている方を向きます"),
+        ("Shift lock button", "シフトロックボタン"),
+        ("Shift lock (face where the camera looks)", "シフトロック（カメラの向いている方を向く）"),
     ]
 }

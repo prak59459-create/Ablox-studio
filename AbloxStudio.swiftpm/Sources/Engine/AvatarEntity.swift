@@ -554,9 +554,9 @@ public final class AvatarEntity: Entity {
         let next = Vec3.lerp(current, targetPosition, blend)
         position = next.simd
 
-        let currentYaw = Quat(orientation).eulerDegrees.y
+        let currentYaw = Facing.yawDegrees(of: Quat(orientation))
         let yaw = normalizeDegrees(currentYaw + angularDelta(from: currentYaw, to: targetYawDegrees) * blend)
-        orientation = Quat.yaw(degrees: yaw).simd
+        orientation = Facing.rotation(yawDegrees: yaw).simd
 
         let travelled = next.horizontalDistance(to: current)
         animate(travelled: travelled, deltaTime: deltaTime)
@@ -724,6 +724,6 @@ public final class AvatarEntity: Entity {
         targetPosition = newPosition
         targetYawDegrees = yawDegrees
         position = newPosition.simd
-        orientation = Quat.yaw(degrees: yawDegrees).simd
+        orientation = Facing.rotation(yawDegrees: yawDegrees).simd
     }
 }

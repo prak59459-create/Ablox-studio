@@ -145,6 +145,8 @@ public struct HUDOptions: Codable, Hashable, Sendable {
     public var showWalkButton = false
     /// A button in the top bar to switch between first and third person.
     public var showViewButton = false
+    /// A button in the top bar that turns shift lock on and off.
+    public var showShiftLockButton = true
 
     // MARK: The stick
 
@@ -171,6 +173,9 @@ public struct HUDOptions: Codable, Hashable, Sendable {
     public static let verticalLookRange: ClosedRange<Double> = 0.4...1.6
     /// Two taps on the look side put the camera back behind the player.
     public var doubleTapResetsCamera = true
+    /// Shift lock: the body faces where the camera looks, instead of the way
+    /// the stick walks it. Kept from one game to the next.
+    public var shiftLock = false
 
     // MARK: Habits
 
@@ -207,6 +212,7 @@ public struct HUDOptions: Codable, Hashable, Sendable {
         showRunButton = read(.showRunButton, d.showRunButton)
         showWalkButton = read(.showWalkButton, d.showWalkButton)
         showViewButton = read(.showViewButton, d.showViewButton)
+        showShiftLockButton = read(.showShiftLockButton, d.showShiftLockButton)
         joystickStyle = read(.joystickStyle, d.joystickStyle)
         joystickScale = read(.joystickScale, d.joystickScale)
         joystickOpacity = read(.joystickOpacity, d.joystickOpacity)
@@ -217,6 +223,7 @@ public struct HUDOptions: Codable, Hashable, Sendable {
         invertLookX = read(.invertLookX, d.invertLookX)
         verticalLookSpeed = read(.verticalLookSpeed, d.verticalLookSpeed)
         doubleTapResetsCamera = read(.doubleTapResetsCamera, d.doubleTapResetsCamera)
+        shiftLock = read(.shiftLock, d.shiftLock)
         buttonHaptics = read(.buttonHaptics, d.buttonHaptics)
         pauseWhenAway = read(.pauseWhenAway, d.pauseWhenAway)
         powerWarnings = read(.powerWarnings, d.powerWarnings)
@@ -241,6 +248,7 @@ public struct HUDOptions: Codable, Hashable, Sendable {
         try c.encode(showRunButton, forKey: .showRunButton)
         try c.encode(showWalkButton, forKey: .showWalkButton)
         try c.encode(showViewButton, forKey: .showViewButton)
+        try c.encode(showShiftLockButton, forKey: .showShiftLockButton)
         try c.encode(joystickStyle, forKey: .joystickStyle)
         try c.encode(joystickScale, forKey: .joystickScale)
         try c.encode(joystickOpacity, forKey: .joystickOpacity)
@@ -251,6 +259,7 @@ public struct HUDOptions: Codable, Hashable, Sendable {
         try c.encode(invertLookX, forKey: .invertLookX)
         try c.encode(verticalLookSpeed, forKey: .verticalLookSpeed)
         try c.encode(doubleTapResetsCamera, forKey: .doubleTapResetsCamera)
+        try c.encode(shiftLock, forKey: .shiftLock)
         try c.encode(buttonHaptics, forKey: .buttonHaptics)
         try c.encode(pauseWhenAway, forKey: .pauseWhenAway)
         try c.encode(powerWarnings, forKey: .powerWarnings)
@@ -259,9 +268,9 @@ public struct HUDOptions: Codable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case opacity, hiddenTopBar, showCompass, showPosition, showSpeed, showBattery, showTimeOfDay
         case showCoinsPreview, showRank, showMissionTracker, mapSize, mapTurnsWithCamera
-        case showZoomButtons, showRunButton, showWalkButton, showViewButton
+        case showZoomButtons, showRunButton, showWalkButton, showViewButton, showShiftLockButton
         case joystickStyle, joystickScale, joystickOpacity, stickDeadZone, eightWay, alwaysRun
-        case cameraFollows, invertLookX, verticalLookSpeed, doubleTapResetsCamera
+        case cameraFollows, invertLookX, verticalLookSpeed, doubleTapResetsCamera, shiftLock
         case buttonHaptics, pauseWhenAway, powerWarnings
     }
 

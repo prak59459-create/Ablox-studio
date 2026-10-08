@@ -673,11 +673,12 @@ public struct GameViewport: UIViewRepresentable {
                                               floats: parent.session.localAppearance.ride == .hoverboard, deltaTime: dt)
             localSnapshot.velocity = motion.velocity
             localSnapshot.yawDegrees = motion.yawDegrees
-            if scripted.camera.mode == .firstPerson || scripted.weapon != nil {
-                // Aiming: the body faces where the camera looks, so walking
-                // sideways strafes instead of turning away from the target.
-                let forward = Quat.yaw(degrees: controls.cameraYaw).act(Vec3(0, 0, -1))
-                localSnapshot.yawDegrees = atan2(forward.x, -forward.z) * 180 / .pi
+            let shiftLocked = ShiftLock.turnsBody(isOn: preferences.hud.shiftLock, cameraMode: scripted.camera.mode,
+                                                  photoMode: parent.photoMode, spectating: parent.spectating != nil)
+            if scripted.camera.mode == .firstPerson || scripted.weapon != nil || shiftLocked {
+                // Aiming or shift lock: the body faces where the camera
+                // looks, so walking sideways strafes instead of turning away.
+                localSnapshot.yawDegrees = Facing.yaw(cameraYaw: controls.cameraYaw)
             } else {
                 followCamera(stick: input.stick, dt: dt)
             }
