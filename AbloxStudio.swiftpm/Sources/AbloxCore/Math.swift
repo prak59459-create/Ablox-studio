@@ -333,6 +333,11 @@ public struct BoundingBox: Codable, Hashable, Sendable {
     public var center: Vec3 { (min + max) * 0.5 }
     public var size: Vec3 { max - min }
 
+    /// The same box moved by `shift`.
+    public func offset(by shift: Vec3) -> BoundingBox {
+        BoundingBox(min: min + shift, max: max + shift)
+    }
+
     public func contains(_ point: Vec3) -> Bool {
         point.x >= min.x && point.x <= max.x &&
         point.y >= min.y && point.y <= max.y &&

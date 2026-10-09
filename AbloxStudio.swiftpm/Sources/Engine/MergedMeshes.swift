@@ -457,8 +457,9 @@ final class StillPartBaker {
     // MARK: Distance
 
     /// Hides the meshes beyond the view distance, as the parts in them
-    /// would have been.
-    func cull(from eye: Vec3, limit: Float, index: WorldIndex) {
+    /// would have been. `shift` says how far a model is drawn from where the map has it,
+    /// while its root is on its way somewhere (`BlockTravel`).
+    func cull(from eye: Vec3, limit: Float, index: WorldIndex, shift: (UUID) -> Vec3? = { _ in nil }) {
         for group in groups.values {
             guard let entity = group.entity else { continue }
             let bounds: BoundingBox?
@@ -472,7 +473,11 @@ final class StillPartBaker {
                     guard let box = index.bounds(of: id) else { continue }
                     union = union.map { BoundingBox(min: $0.min.componentMin(box.min), max: $0.max.componentMax(box.max)) } ?? box
                 }
-                bounds = union
+                if case let .model(parentID) = group.key.place, let moved = shift(parentID) {
+                    bounds = union?.offset(by: moved)
+                } else {
+                    bounds = union
+                }
             }
             guard let bounds else { continue }
             let far = bounds.distanceSquared(to: eye) > limit

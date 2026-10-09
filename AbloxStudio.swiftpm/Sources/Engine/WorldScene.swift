@@ -46,6 +46,10 @@ public final class WorldScene {
     private var labels: [UUID: BlockLabel] = [:]
     /// Blocks that move by themselves (`BlockAnimation`).
     private var animated: [UUID: BlockAnimation] = [:]
+    /// Blocks on their way somewhere (`BlockTravel`), and when the trip is
+    /// over by the frame clock. The map has them where they set off until
+    /// then, so they are hidden for distance by where they are drawn.
+    private var travelling: [UUID: Double] = [:]
     /// The ones near enough to be seen moving, looked for a few times a second.
     private var animatedNearby: [UUID] = []
     private var animatedLookedAt: Double = -.infinity
@@ -228,6 +232,7 @@ public final class WorldScene {
         lamps.removeValue(forKey: id)
         labels.removeValue(forKey: id)
         animated.removeValue(forKey: id)
+        travelling.removeValue(forKey: id)
         if parentIDs.remove(id) != nil { baker?.forgetModel(id) }
         baker?.forget(id)
     }
@@ -299,8 +304,12 @@ public final class WorldScene {
         }
         let picture = block.imageID.flatMap { world.image(id: $0) }
         pictures[block.id] = picture
+        // New words or colours on a block halfway along a trip: it stays
+        // where the trip has got to.
+        let enRoute = travelling[block.id] != nil && previous?.transform == block.transform ? entity.transform : nil
         BlockEntityFactory.apply(block, to: entity, physicsEnabled: physicsEnabled && block.hasCollision,
                                  collisionShapes: collisionShapes, picture: picture)
+        if let enRoute { entity.transform = enRoute }
         updateLamp(block, on: entity)
         if let label = block.label, !label.isEmpty { labels[block.id] = label } else { labels.removeValue(forKey: block.id) }
         if let animation = block.animation { animated[block.id] = animation } else { animated.removeValue(forKey: block.id) }
@@ -463,9 +472,11 @@ public final class WorldScene {
     public func cull(from eye: Vec3, index: WorldIndex) {
         guard let distance = profile.viewDistance else { return }
         let limit = distance * distance
+        let shifts = travelShifts(index: index)
         for (id, entity) in entities {
             // Baked parts are hidden with their mesh, below.
-            guard !parentIDs.contains(id), baker?.isBaked(id) != true, let bounds = index.bounds(of: id) else { continue }
+            guard !parentIDs.contains(id), baker?.isBaked(id) != true, var bounds = index.bounds(of: id) else { continue }
+            if let shift = shift(of: id, in: shifts) { bounds = bounds.offset(by: shift) }
             let far = bounds.distanceSquared(to: eye) > limit
             if far {
                 if culled.insert(id).inserted { entity.isEnabled = false }
@@ -473,7 +484,30 @@ public final class WorldScene {
                 entity.isEnabled = shouldShow(id)
             }
         }
-        baker?.cull(from: eye, limit: limit, index: index)
+        baker?.cull(from: eye, limit: limit, index: index) { parentID in self.shift(of: parentID, in: shifts) }
+    }
+
+    /// How far each travelling block is drawn from where the map has it.
+    /// Trips over a while ago are let go: the map has caught up by then.
+    private func travelShifts(index: WorldIndex) -> [UUID: Vec3] {
+        guard !travelling.isEmpty else { return [:] }
+        let now = ProcessInfo.processInfo.systemUptime
+        travelling = travelling.filter { $0.value > now }
+        var shifts: [UUID: Vec3] = [:]
+        for id in travelling.keys {
+            guard let entity = entities[id], let bounds = index.bounds(of: id) else { continue }
+            shifts[id] = Vec3(entity.position(relativeTo: nil)) - bounds.center
+        }
+        return shifts
+    }
+
+    /// The shift of a block, or of the travelling block it hangs from.
+    private func shift(of id: UUID, in shifts: [UUID: Vec3]) -> Vec3? {
+        guard !shifts.isEmpty else { return nil }
+        let travelling = Set(shifts.keys)
+        return BlockTravel.travellingAncestor(of: id, travelling: travelling) {
+            self.lastAppliedBlocks[$0]?.parentID
+        }.flatMap { shifts[$0] }
     }
 
     private func showAllCulled() {
@@ -617,6 +651,7 @@ public final class WorldScene {
         lamps.removeAll()
         labels.removeAll()
         animated.removeAll()
+        travelling.removeAll()
         animatedNearby.removeAll()
     }
 
@@ -644,7 +679,10 @@ public final class WorldScene {
             var target = entity.transform
             target.translation += SIMD3<Float>(offset)
             if duration > 0 {
-                entity.move(to: target, relativeTo: entity.parent, duration: duration, timingFunction: .easeInOut)
+                // A long trip at a steady speed, the way scripts count it.
+                entity.move(to: target, relativeTo: entity.parent, duration: duration,
+                            timingFunction: BlockTravel.isSteady(duration: duration) ? .linear : .easeInOut)
+                travelling[blockID] = ProcessInfo.processInfo.systemUptime + duration + 1
             } else {
                 entity.transform = target
             }

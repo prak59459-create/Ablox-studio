@@ -825,11 +825,14 @@ extension GameRuntime: ScriptObjectResolver {
 
     func moveBlock(_ id: UUID, by offset: Vec3, over seconds: Double) {
         guard var block = world.block(id: id) else { return }
+        let from = block.position
         block.position += offset
         guard seconds > 0 else {
+            travels[id] = nil
             queue(.update(block))
             return
         }
+        travels[id] = BlockTravel(from: from, offset: offset, start: clock, duration: seconds)
         // Everyone's iPad animates the move; the map takes the end position
         // now for shots and collisions on the host, and everyone else's copy
         // gets it when the move has finished.

@@ -477,7 +477,11 @@ public final class AbloxHost {
         approvedPeers.insert(peerID)
         attempts.recordSuccess(peer.remoteAddress)
 
+        let travelling = game.travels
         let welcome = game.addPlayer(PlayerSnapshot(peerID: peerID, profile: profile))
+        // Blocks on their way somewhere: where they have got to, and the rest
+        // of the way (`BlockTravel`).
+        let joining = game.joiningWorld(for: peerID, before: travelling)
 
         // Reply with our own details, then the world, then the roster —
         // in that order, so the client can render the world before it has to
@@ -491,12 +495,12 @@ public final class AbloxHost {
             isHost: true,
             capacity: configuration.capacity
         ))
-        peer.send(.worldSnapshot, game.world)
+        peer.send(.worldSnapshot, joining.world)
         publishRoster()
         room.clock = elapsed
         peer.send(.room, RoomMessage.state(room))
         refreshAdvertisement()
-        dispatch(welcome)
+        dispatch(welcome + joining.effects)
     }
 
     private func refuse(_ peer: PeerConnection) {

@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "4.2",
-  "build": 33,
+  "version": "4.3",
+  "build": 34,
   "protocol": 8,
-  "date": "2026-10-08",
+  "date": "2026-10-09",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Sync for Ablox 5.3: in a play test, a character's face is now its front (walking left or right, it used to face the other way), and shift lock from Ablox's settings is followed"
+      "Same as Ablox 5.4: characters walking a long way are drawn where they are, players who join halfway see them walking, and new words on the way no longer make them jump to the end"
     ],
     "ja": [
-      "Ablox 5.3 と 同じに しました: テストプレイで キャラクターの 顔の ある方が 正面に なりました（左右に 歩くと 反対を 向いて いました）。Ablox の 設定の シフトロックにも したがいます"
+      "Ablox 5.4 と同じ: 長い道を歩くキャラクターが いる場所で見え、とちゅうで入った人にも歩いて見え、とちゅうで文字が変わっても 終わりに ワープしなくなりました"
     ]
   }
 }

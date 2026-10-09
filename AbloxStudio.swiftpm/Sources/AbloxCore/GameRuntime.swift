@@ -143,6 +143,9 @@ public final class GameRuntime {
     /// Animated block moves whose end position has not yet been sent to
     /// everyone's copy of the world.
     var deferredUpdates: [(due: Double, blockID: UUID)] = []
+    /// The same moves, kept to bring someone who joins halfway up to date
+    /// (`joiningWorld`).
+    public internal(set) var travels: [UUID: BlockTravel] = [:]
 
     var pending: [Effect] = []
     var pendingDeltas: [WorldDelta] = []
@@ -442,6 +445,7 @@ public final class GameRuntime {
         globalUIOrder.removeAll()
         lastTouch.removeAll()
         deferredUpdates.removeAll()
+        travels.removeAll()
         settings = Settings()
         weapons = WeaponSpec.presets
 
@@ -816,6 +820,7 @@ public final class GameRuntime {
         guard !deferredUpdates.isEmpty else { return }
         let due = deferredUpdates.filter { $0.due <= clock }
         deferredUpdates.removeAll { $0.due <= clock }
+        travels = travels.filter { $0.value.end > clock }
         for item in due {
             if let block = world.block(id: item.blockID) { pendingDeltas.append(.update(block)) }
         }
@@ -847,7 +852,17 @@ public final class GameRuntime {
     func queue(_ delta: WorldDelta) {
         forgetLookup(ifAffectedBy: delta)
         machine.apply(delta)
-        pendingDeltas.append(delta)
+        pendingDeltas.append(travelling(delta))
+    }
+
+    /// A block changed on its way somewhere — new words over a walking
+    /// character — goes to everyone where their copy has it until the trip
+    /// is over: the end position would make it jump there.
+    private func travelling(_ delta: WorldDelta) -> WorldDelta {
+        guard case var .update(block) = delta, let travel = travels[block.id], travel.end > clock,
+              block.position == travel.from + travel.offset else { return delta }
+        block.position = travel.from
+        return .update(block)
     }
 
     func teleport(_ state: PlayerState, to position: Vec3) {
