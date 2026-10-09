@@ -50,6 +50,8 @@ public final class WorldScene {
     /// over by the frame clock. The map has them where they set off until
     /// then, so they are hidden for distance by where they are drawn.
     private var travelling: [UUID: Double] = [:]
+    /// Where each of those is drawn, placed every frame (`BlockTrips`).
+    private var trips = BlockTrips()
     /// The ones near enough to be seen moving, looked for a few times a second.
     private var animatedNearby: [UUID] = []
     private var animatedLookedAt: Double = -.infinity
@@ -233,6 +235,7 @@ public final class WorldScene {
         labels.removeValue(forKey: id)
         animated.removeValue(forKey: id)
         travelling.removeValue(forKey: id)
+        trips.forget(id)
         if parentIDs.remove(id) != nil { baker?.forgetModel(id) }
         baker?.forget(id)
     }
@@ -289,6 +292,7 @@ public final class WorldScene {
             // the entity is moved and nothing else is looked at again.
             if !physicsChanged, let previous, entity.parent != nil, RenderMerging.onlyMoved(previous, block) {
                 entity.transform = block.transform.realityKit
+                keepOnItsWay(block, previous: previous, entity: entity)
                 lastAppliedBlocks[block.id] = block
                 baker?.changed(block, fresh: false)
                 return
@@ -297,6 +301,11 @@ public final class WorldScene {
             entity = BlockEntityFactory.makeEntity(for: block, profile: profile, collisionShapes: collisionShapes,
                                                    picture: block.imageID.flatMap { world.image(id: $0) })
             entities[block.id] = entity
+            // A move that came in before the block did sets off now.
+            if trips.appeared(block.id, at: block.position, clock: ProcessInfo.processInfo.systemUptime) {
+                baker?.pin(block.id)
+                travelling[block.id] = ProcessInfo.processInfo.systemUptime + (trips.trips[block.id]?.duration ?? 0) + 1
+            }
         }
 
         if let previous, previous.shape != block.shape {
@@ -304,12 +313,9 @@ public final class WorldScene {
         }
         let picture = block.imageID.flatMap { world.image(id: $0) }
         pictures[block.id] = picture
-        // New words or colours on a block halfway along a trip: it stays
-        // where the trip has got to.
-        let enRoute = travelling[block.id] != nil && previous?.transform == block.transform ? entity.transform : nil
         BlockEntityFactory.apply(block, to: entity, physicsEnabled: physicsEnabled && block.hasCollision,
                                  collisionShapes: collisionShapes, picture: picture)
-        if let enRoute { entity.transform = enRoute }
+        keepOnItsWay(block, previous: previous, entity: entity)
         updateLamp(block, on: entity)
         if let label = block.label, !label.isEmpty { labels[block.id] = label } else { labels.removeValue(forKey: block.id) }
         if let animation = block.animation { animated[block.id] = animation } else { animated.removeValue(forKey: block.id) }
@@ -323,6 +329,25 @@ public final class WorldScene {
         }
         entity.isEnabled = shouldShow(block.id)
         reparentIfNeeded(entity, block: block, forceTopLevel: forceTopLevel)
+    }
+
+    /// New words or colours on a block halfway along a trip, or the map
+    /// catching up with its end: it stays where the trip has got to. Put
+    /// anywhere else by a script, the trip is over.
+    private func keepOnItsWay(_ block: BlockData, previous: BlockData?, entity: ModelEntity) {
+        guard trips.mapHas(block.id, at: block.position, previously: previous?.position),
+              let now = trips.position(of: block.id, at: ProcessInfo.processInfo.systemUptime) else { return }
+        entity.position = now.simd
+    }
+
+    /// Puts every block on its way somewhere where it has got to. Every
+    /// frame, for all of them: distance hiding and the words over them go by
+    /// where they are drawn.
+    private func placeTravellers() {
+        guard !trips.isEmpty else { return }
+        for (id, position) in trips.advance(to: ProcessInfo.processInfo.systemUptime) {
+            entities[id]?.position = position.simd
+        }
     }
 
     /// A block see-through to the end — a character's root — is not handed
@@ -588,9 +613,11 @@ public final class WorldScene {
     /// seconds: only those within `range` of `eye` (the graphics level's
     /// `animationRange` when nil), since a far one would not be seen moving.
     /// Which ones are near is looked at four times a second, not every
-    /// frame. Never moves a block, so a `move_to` carries on. Nothing goes
-    /// over the network: every iPad does this for itself.
+    /// frame. Blocks on their way somewhere (`move_to`) are put where they
+    /// have got to first; the turning and stretching never moves a block.
+    /// Nothing goes over the network: every iPad does this for itself.
     public func animateBlocks(time: Double, eye: Vec3, range: Float? = nil) {
+        placeTravellers()
         guard !animated.isEmpty else {
             animatedNearby.removeAll()
             return
@@ -652,6 +679,7 @@ public final class WorldScene {
         labels.removeAll()
         animated.removeAll()
         travelling.removeAll()
+        trips.removeAll()
         animatedNearby.removeAll()
     }
 
@@ -674,18 +702,19 @@ public final class WorldScene {
             animateTint(to: color, on: entity, duration: duration)
 
         case let .move(blockID, offset, duration):
-            guard let entity = entities[blockID] else { return }
-            baker?.pin(blockID)
-            var target = entity.transform
-            target.translation += SIMD3<Float>(offset)
-            if duration > 0 {
-                // A long trip at a steady speed, the way scripts count it.
-                entity.move(to: target, relativeTo: entity.parent, duration: duration,
-                            timingFunction: BlockTravel.isSteady(duration: duration) ? .linear : .easeInOut)
-                travelling[blockID] = ProcessInfo.processInfo.systemUptime + duration + 1
-            } else {
-                entity.transform = target
+            let now = ProcessInfo.processInfo.systemUptime
+            guard let entity = entities[blockID] else {
+                // The block comes in a moment: it sets off then.
+                trips.hold(blockID, offset: offset, duration: duration, clock: now)
+                return
             }
+            baker?.pin(blockID)
+            // Placed by the scene every frame (`BlockTrips`), not animated by
+            // RealityKit: a bouncing character's turn and size are set every
+            // frame too, and must not take it off its way.
+            trips.start(blockID, at: Vec3(entity.position), offset: offset, duration: duration, clock: now)
+            travelling[blockID] = now + duration + 1
+            if let position = trips.position(of: blockID, at: now) { entity.position = position.simd }
 
         case let .setVisible(blockID, visible):
             if visible {

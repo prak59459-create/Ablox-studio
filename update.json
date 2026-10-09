@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "4.3",
-  "build": 34,
+  "version": "4.4",
+  "build": 35,
   "protocol": 8,
   "date": "2026-10-09",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Same as Ablox 5.4: characters walking a long way are drawn where they are, players who join halfway see them walking, and new words on the way no longer make them jump to the end"
+      "Same as Ablox 5.5: characters walking a long way in a test play are drawn exactly where the game has them, and one made and sent walking at once always sets off"
     ],
     "ja": [
-      "Ablox 5.4 と同じ: 長い道を歩くキャラクターが いる場所で見え、とちゅうで入った人にも歩いて見え、とちゅうで文字が変わっても 終わりに ワープしなくなりました"
+      "Ablox 5.5 と同じ: テストプレイで 長い道を歩くキャラクターが ゲームの中で いる場所に ぴったり見え、作ってすぐ歩かせても かならず 歩きはじめます"
     ]
   }
 }
