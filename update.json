@@ -1,16 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "4.4",
-  "build": 35,
+  "version": "4.5",
+  "build": 36,
   "protocol": 8,
-  "date": "2026-10-09",
+  "date": "2026-10-10",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Same as Ablox 5.5: characters walking a long way in a test play are drawn exactly where the game has them, and one made and sent walking at once always sets off"
+      "A Sound library button on rules and scripts: over 6,000 sound effects to listen to and use. A rule's Play sound can be any of them, and a script line like sound(\"retro-game-coin-08\") is copied ready to paste",
+      "The 30 built-in sounds are real recordings now, in play-tests too"
     ],
     "ja": [
-      "Ablox 5.5 と同じ: テストプレイで 長い道を歩くキャラクターが ゲームの中で いる場所に ぴったり見え、作ってすぐ歩かせても かならず 歩きはじめます"
+      "ルールとスクリプトに「効果音ライブラリ」ボタン：6,000 以上の効果音を聞いて使えます。ルールの「音を鳴らす」でライブラリの音をえらべて、スクリプトには sound(\"retro-game-coin-08\") のような行がコピーされます",
+      "最初から入っている 30 種類の効果音が本物の録音になりました（テストプレイでも）"
     ]
   }
 }

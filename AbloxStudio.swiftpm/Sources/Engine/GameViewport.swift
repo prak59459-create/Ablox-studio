@@ -300,6 +300,7 @@ public struct GameViewport: UIViewRepresentable {
             view.scene.addAnchor(cameraAnchor)
 
             feedback.prepare()
+            feedback.prepareSounds(for: parent.session.world)
 
             let local = AvatarEntity(
                 peerID: parent.session.localPeerID,

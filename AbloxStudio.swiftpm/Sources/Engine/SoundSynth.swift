@@ -2,14 +2,15 @@ import Foundation
 import AVFoundation
 import AbloxCore
 
-/// Ablox's sound effects and music, made from numbers as they play.
+/// Ablox's sound effects and music.
 ///
-/// Every cue is a few tones (`SoundCue.tones`) and every piece of music a
-/// loop of notes (`MusicTrack.notes(at:)`), so there are still no audio
-/// files in the playground: one `AVAudioSourceNode` adds up the tones that
-/// are sounding, sample by sample. If the audio engine will not start — no
-/// output, another app holding the hardware — the caller falls back to the
-/// system sounds it always had.
+/// Music is a loop of notes (`MusicTrack.notes(at:)`) made from numbers as
+/// it plays. Effects are recordings (`SoundClip`: the built-in cues'
+/// `CueRecordings` and the sound library's files), or a cue's few tones
+/// (`SoundCue.tones`) when there is no recording. One `AVAudioSourceNode`
+/// adds up everything sounding, sample by sample. If the audio engine will
+/// not start — no output, another app holding the hardware — the caller
+/// falls back to the system sounds it always had.
 final class SoundSynth: @unchecked Sendable {
 
     static let shared = SoundSynth()
@@ -49,6 +50,17 @@ final class SoundSynth: @unchecked Sendable {
     }
 
     private var voices: [Voice] = []
+
+    /// A recording playing: where in it, and how far to move each sample
+    /// (its rate over the engine's, times the pitch).
+    private struct ClipVoice {
+        let clip: SoundClip
+        var position: Double = 0
+        let step: Double
+        let volume: Float
+    }
+
+    private var clipVoices: [ClipVoice] = []
     private var _effectsGain: Float = 1
     private var _musicGain: Float = 0.7
     private var noise: UInt32 = 0x9E37_79B9
@@ -63,6 +75,7 @@ final class SoundSynth: @unchecked Sendable {
 
     private init() {
         voices.reserveCapacity(256)
+        clipVoices.reserveCapacity(40)
     }
 
     // MARK: Starting
@@ -117,6 +130,7 @@ final class SoundSynth: @unchecked Sendable {
     func stop() {
         lock.withLock {
             voices.removeAll(keepingCapacity: true)
+            clipVoices.removeAll(keepingCapacity: true)
             track = nil
             loop = []
         }
@@ -140,6 +154,19 @@ final class SoundSynth: @unchecked Sendable {
                                     volume: tone.volume * volume, isMusic: false))
                 offset += length
             }
+        }
+        return true
+    }
+
+    /// Plays a recording. False when the engine is not available.
+    @discardableResult
+    func play(_ clip: SoundClip, volume: Float = 1, pitch: Float = 1) -> Bool {
+        guard clip.samples.count > 1, start() else { return false }
+        let step = clip.rate / sampleRate * Double(max(0.25, min(4, pitch)))
+        lock.withLock {
+            // The oldest gives way: the newest sound is the one just asked for.
+            if clipVoices.count >= 32 { clipVoices.removeFirst() }
+            clipVoices.append(ClipVoice(clip: clip, step: step, volume: max(0, min(1, volume))))
         }
         return true
     }
@@ -200,15 +227,45 @@ final class SoundSynth: @unchecked Sendable {
                 }
                 mix += sample(&voices[index], rate: rate) * (voices[index].isMusic ? musicGain : effectsGain)
             }
-            samples[frame] = max(-1, min(1, mix * 0.6))
+            samples[frame] = mix
         }
         voices.removeAll { $0.position >= $0.length }
+        if !clipVoices.isEmpty {
+            for index in clipVoices.indices {
+                mixClip(&clipVoices[index], into: samples, frames: frames, gain: effectsGain)
+            }
+            clipVoices.removeAll { $0.position >= Double($0.clip.samples.count - 1) }
+        }
         lock.unlock()
+        for frame in 0..<frames {
+            samples[frame] = max(-1, min(1, samples[frame] * 0.6))
+        }
 
         let bytes = frames * MemoryLayout<Float>.size
         for buffer in buffers.dropFirst() {
             if let data = buffer.mData { memcpy(data, samples, bytes) }
         }
+    }
+
+    /// Adds a recording's next `frames` samples, read between its own
+    /// samples where the rates differ.
+    private func mixClip(_ voice: inout ClipVoice, into output: UnsafeMutablePointer<Float>, frames: Int, gain: Float) {
+        let level: Float = voice.volume * gain
+        let step: Double = voice.step
+        var position: Double = voice.position
+        voice.clip.samples.withUnsafeBufferPointer { pcm in
+            let last: Double = Double(pcm.count - 1)
+            for frame in 0..<frames {
+                if position >= last { break }
+                let index: Int = Int(position)
+                let fraction: Float = Float(position - Double(index))
+                let a: Float = pcm[index]
+                let b: Float = pcm[index + 1]
+                output[frame] += (a + (b - a) * fraction) * level
+                position += step
+            }
+        }
+        voice.position = position
     }
 
     private func startNotes(_ notes: [MusicNote]) {

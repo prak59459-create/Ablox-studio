@@ -55,6 +55,7 @@ MIRRORED_FILES=(
   "Sources/UI/Components/CodeEditing.swift:Sources/UI/Components/CodeEditing.swift"
   "Sources/UI/Components/ProblemReports.swift:Sources/UI/Components/ProblemReports.swift"
   "Sources/UI/Components/PresentationQueue.swift:Sources/UI/Components/PresentationQueue.swift"
+  "Sources/UI/Components/SoundLibraryViews.swift:Sources/UI/Components/SoundLibraryViews.swift"
 )
 
 if [[ ! -d "$UPSTREAM_APP" ]]; then

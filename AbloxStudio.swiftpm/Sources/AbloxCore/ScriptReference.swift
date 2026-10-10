@@ -161,6 +161,8 @@ public enum ScriptReference {
                   L("Bits that fly: fire, smoke, sparkles, confetti, rain, snow, bubbles, hearts, stars, leaves, magic, dust.")),
             Entry("sound(\"coin\", {volume: 0.5, pitch: 1.5})  music(\"adventure\")  p.music(\"shop\")  music(\"off\")  music(nil)",
                   L("Sounds and music made on the iPad. Music: calm, adventure, spooky, race, boss, shop, party, space. nil goes back to the world's own.")),
+            Entry("sound(\"retro-game-coin-08\")  p.sound(\"animal-cat-meow-02\", {volume: 0.6})",
+                  L("A recording from the sound library: over 6,000 of them, free to use. Find one in Settings → Sound library and copy its name.")),
             Entry("speak(\"Welcome!\")  p.speak(\"Your turn\")",
                   L("Read aloud, for players who switched on “Read characters' lines aloud”.")),
             Entry("p.vehicle", L("The vehicle block they are riding in, or nil. A Vehicle block puts them in; “Get out” takes them out."))

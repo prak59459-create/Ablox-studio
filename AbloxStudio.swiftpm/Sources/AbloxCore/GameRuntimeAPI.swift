@@ -1361,13 +1361,17 @@ extension GameRuntime: ScriptObjectResolver {
         }
     }
 
-    func soundCue(_ value: ScriptValue, line: Int) throws -> SoundCue {
-        guard let cue = SoundCue.named(value.displayText) else {
-            throw ScriptError(line: line, kind: .runtime, message: L("There is no sound called “{}”. The sounds are: {}.",
+    /// A built-in cue's name (`coin`), or a sound library id
+    /// (`retro-game-coin-08`), as the wire spells it.
+    func soundName(_ value: ScriptValue, line: Int) throws -> String {
+        if let cue = SoundCue.named(value.displayText) { return cue.rawValue }
+        let name = value.displayText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard SoundLibrary.isLibraryID(name) else {
+            throw ScriptError(line: line, kind: .runtime, message: L("There is no sound called “{}”. The sounds are: {}, or the name of one from the sound library (like “retro-game-coin-08”).",
                                                                      value.displayText,
                                                                      SoundCue.allCases.map(\.rawValue).joined(separator: ", ")))
         }
-        return cue
+        return name
     }
 
     func vectorValue(_ position: Vec3) -> ScriptValue {

@@ -10,6 +10,7 @@ struct RulesPanel: View {
     @ObservedObject var session: StudioSession
 
     @State private var expandedRule: UUID?
+    @State private var pickingSound: SoundPickTarget?
 
     private var world: WorldDocument { session.document.world }
     private var rules: [EventRule] { world.rules }
@@ -37,6 +38,12 @@ struct RulesPanel: View {
             }
         }
         .background(.ultraThinMaterial)
+        .sheet(item: $pickingSound) { target in
+            StudioSoundLibrarySheet { id in
+                guard let rule = rules.first(where: { $0.id == target.rule }), target.index < rule.actions.count else { return }
+                update(rule) { $0.actions[target.index] = .playSound(name: id) }
+            }
+        }
     }
 
     private var header: some View {
@@ -229,24 +236,44 @@ struct RulesPanel: View {
                             .foregroundStyle(Ablox.Palette.ink)
 
                         if case let .playSound(name) = action {
-                            Picker(L("Sound"), selection: Binding(
-                                get: { SoundCue.named(name) ?? .collect },
-                                set: { cue in
-                                    update(rule) { $0.actions[index] = .playSound(name: cue.rawValue) }
+                            if SoundCue.named(name) == nil, SoundLibrary.isLibraryID(name) {
+                                // A sound from the library, by its name.
+                                Text(verbatim: name)
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(Ablox.Palette.accent)
+                                    .lineLimit(1)
+                            } else {
+                                Picker(L("Sound"), selection: Binding(
+                                    get: { SoundCue.named(name) ?? .collect },
+                                    set: { cue in
+                                        update(rule) { $0.actions[index] = .playSound(name: cue.rawValue) }
+                                    }
+                                )) {
+                                    ForEach(SoundCue.allCases, id: \.self) { cue in
+                                        Text(cue.displayName).tag(cue)
+                                    }
                                 }
-                            )) {
-                                ForEach(SoundCue.allCases, id: \.self) { cue in
-                                    Text(cue.displayName).tag(cue)
-                                }
+                                .pickerStyle(.menu)
+                                .labelsHidden()
+                                .font(.caption2)
+                                .tint(Ablox.Palette.accent)
                             }
-                            .pickerStyle(.menu)
-                            .labelsHidden()
-                            .font(.caption2)
-                            .tint(Ablox.Palette.accent)
+
+                            Button {
+                                pickingSound = SoundPickTarget(rule: rule.id, index: index)
+                            } label: {
+                                Image(systemName: "music.note.list")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(Ablox.Palette.accent)
+                                    .frame(width: 28, height: 28)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(L("Choose from the sound library"))
 
                             // An authored name the client cannot play would
                             // otherwise just be silence with no explanation.
-                            if SoundCue.named(name) == nil {
+                            if SoundCue.named(name) == nil, !SoundLibrary.isLibraryID(name) {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .font(.system(size: 9))
                                     .foregroundStyle(Ablox.Palette.warning)

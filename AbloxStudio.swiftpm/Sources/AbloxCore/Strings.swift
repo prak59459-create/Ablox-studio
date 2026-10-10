@@ -36,7 +36,7 @@ public enum Strings {
     /// Exposed so the tests can see duplicates, which the dictionary hides.
     public static let entries: [(String, String)] = [
         coreEntries, clientEntries, studioEntries, guideEntries, catalogueEntries, scriptEntries, updateEntries, updateEntries2,
-        featureEntries, featureEntries2, featureEntries3, featureEntries4, featureEntries5, featureEntries6, featureEntries7, featureEntries8, featureEntries9, featureEntries10, featureEntries11, featureEntries12, featureEntries13, featureEntries14
+        featureEntries, featureEntries2, featureEntries3, featureEntries4, featureEntries5, featureEntries6, featureEntries7, featureEntries8, featureEntries9, featureEntries10, featureEntries11, featureEntries12, featureEntries13, featureEntries14, featureEntries15
     ].flatMap { $0 }
 
     // MARK: - Shared vocabulary
@@ -1002,7 +1002,7 @@ public enum Strings {
         ("A block’s “{}” cannot be set.", "ブロックの「{}」は変えられません。"),
         ("“game” has no “{}”.", "「game」には「{}」がありません。"),
         ("“game.{}” cannot be set.", "「game.{}」は変えられません。"),
-        ("There is no sound called “{}”. The sounds are: {}.", "「{}」という音はありません。使える音: {}。"),
+        ("There is no sound called “{}”. The sounds are: {}, or the name of one from the sound library (like “retro-game-coin-08”).", "「{}」という音はありません。使える音: {}、または効果音ライブラリの名前（「retro-game-coin-08」など）。"),
         ("That needs a player, a block or a position like {x: 0, y: 5, z: 0}, not {}.",
          "ここにはプレイヤー、ブロック、または {x: 0, y: 5, z: 0} のような位置が必要です（{}ではなく）。"),
         ("“{}” is not a colour. Try “red”, “blue” or “#FF8800”.", "「{}」は色として読めません。「red」「青」「#FF8800」などにしてください。"),
@@ -3368,5 +3368,48 @@ public enum Strings {
         ("Your character faces where the camera looks", "キャラクターがカメラの向いている方を向きます"),
         ("Shift lock button", "シフトロックボタン"),
         ("Shift lock (face where the camera looks)", "シフトロック（カメラの向いている方を向く）"),
+    ]
+
+    // MARK: - Sound library (5.6)
+
+    static let featureEntries15: [(String, String)] = [
+        ("A recording from the sound library: over 6,000 of them, free to use. Find one in Settings → Sound library and copy its name.", "効果音ライブラリの録音。6,000 以上あって自由に使えます。設定 → 効果音ライブラリで探して、名前をコピーしてね。"),
+        ("Copy the name", "名前をコピー"),
+        ("Copy the name {}", "名前 {} をコピー"),
+        ("Could not reach the sound library.", "効果音ライブラリにつながりませんでした。"),
+        ("Delete downloaded sounds ({})", "ダウンロードした効果音を消す（{}）"),
+        ("Delete downloaded sounds?", "ダウンロードした効果音を消しますか？"),
+        ("Done! {} sounds downloaded · {}", "完了！ {} 個の効果音をダウンロード ・ {}"),
+        ("Download every sound", "効果音をすべてダウンロード"),
+        ("Download every “{}” sound", "「{}」の効果音をすべてダウンロード"),
+        ("Downloading sounds…", "効果音をダウンロード中…"),
+        ("Every sound is on this iPad", "すべての効果音がこの iPad に入っています"),
+        ("Every “{}” sound is on this iPad", "「{}」の効果音はすべてこの iPad に入っています"),
+        ("Getting the sound list…", "効果音の一覧を読みこみ中…"),
+        ("Listen to {}", "{} を聞く"),
+        ("Now: {}", "いま：{}"),
+        ("Open the sound library", "効果音ライブラリを開く"),
+        ("Over 6,000 sound effects for games: coins, jumps, animals, doors, explosions, magic… Listen to them, copy a name into a script, or download every one to play without the internet.", "ゲームに使える 6,000 以上の効果音：コイン、ジャンプ、動物、ドア、爆発、魔法…。聞いてみたり、名前をスクリプトにコピーしたり、全部ダウンロードしてインターネットなしで鳴らしたりできます。"),
+        ("Recorded sounds", "録音の効果音"),
+        ("Search sounds: coin, jump, dog, door…", "効果音をさがす：コイン、ジャンプ、いぬ、ドア…"),
+        ("Showing the sound list saved on this iPad.", "この iPad に保存した効果音の一覧を表示しています。"),
+        ("Sound library", "効果音ライブラリ"),
+        ("Sounds from SFXMint (sfxmint.com). Every one is CC0: free to use in any game, no credit needed.", "効果音は SFXMint（sfxmint.com）のものです。すべて CC0 なので、どのゲームでも自由に使えて、名前を書く必要もありません。"),
+        ("Stopped. {} sounds downloaded · {}", "とめました。{} 個の効果音をダウンロード ・ {}"),
+        ("Stopping…", "とめています…"),
+        ("The 30 built-in sounds (coin, jump, door…) play recordings. Off: the beeps they had before.", "最初から入っている 30 種類の音（コイン、ジャンプ、ドア…）を録音で鳴らします。オフにすると前の電子音になります。"),
+        ("The sound list could not be read.", "効果音の一覧を読めませんでした。"),
+        ("The sound list is too big to be the real one.", "効果音の一覧が大きすぎるため、本物ではないかもしれません。"),
+        ("The sound list needs a newer Ablox. Update the app.", "この効果音の一覧には新しい Ablox が必要です。アプリをアップデートしてね。"),
+        ("There is no sound library on the branch “{}” of {}. Check the game list's repository and branch in Settings.", "ブランチ「{}」（{}）に効果音ライブラリがありません。設定でゲーム一覧のリポジトリとブランチを確認してね。"),
+        ("{} / {} sounds · {}", "{} / {} 個 ・ {}"),
+        ("{} downloaded", "{} 個ダウンロードずみ"),
+        ("{} kinds · {} sounds", "{} 種類 ・ {} 個"),
+        ("{} of {} sounds on this iPad · {}", "{} / {} 個の効果音がこの iPad に ・ {}"),
+        ("{} on this iPad. A game that plays one downloads it again.", "この iPad に {}。ゲームで使うときはまたダウンロードされます。"),
+        ("{} takes · {}", "{} テイク ・ {}"),
+        ("{} sounds could not be downloaded. Try again later.", "{} 個はダウンロードできませんでした。あとでもう一度ためしてね。"),
+        ("Choose from the sound library", "効果音ライブラリから選ぶ"),
+        ("Copied {}. Paste it into a script.", "{} をコピーしました。スクリプトにはりつけてね。"),
     ]
 }

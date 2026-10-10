@@ -295,15 +295,15 @@ extension GameRuntime {
         return ParticleBurst(kind: kind, position: position, amount: Int(amount), seconds: seconds, color: color)
     }
 
-    /// `sound("coin", {volume: 0.5, pitch: 1.5})` — with options, the
-    /// numbers-made sound; without, the classic cue.
+    /// `sound("coin", {volume: 0.5, pitch: 1.5})`, or a sound from the
+    /// library: `sound("retro-game-coin-08")`.
     func soundEffect(_ arguments: [ScriptValue], line: Int) throws -> EventAction {
-        let cue = try soundCue(arguments.first ?? .null, line: line)
-        guard arguments.count > 1, !arguments[1].isNull else { return .playSound(name: cue.rawValue) }
+        let name = try soundName(arguments.first ?? .null, line: line)
+        guard arguments.count > 1, !arguments[1].isNull else { return .playSound(name: name) }
         let options = try optionsMap(arguments[1], line: line)
         let volume = try optionalNumber([options["volume"] ?? .null], 0, default: 1, line: line)
         let pitch = try optionalNumber([options["pitch"] ?? .null], 0, default: 1, line: line)
-        return .script(.sound(SoundPlay(name: cue.rawValue, volume: Float(volume), pitch: Float(pitch))))
+        return .script(.sound(SoundPlay(name: name, volume: Float(volume), pitch: Float(pitch))))
     }
 
     // MARK: Countdowns

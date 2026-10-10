@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 import AbloxCore
 
@@ -21,6 +22,8 @@ struct ScriptPanel: View {
     @State private var pullNote: PullNote?
     @State private var blockEditing: ScriptFileSelection?
     @State private var showLibrary = false
+    @State private var showSounds = false
+    @State private var soundNote: String?
     @State private var showPush = false
 
     init(session: StudioSession) {
@@ -81,6 +84,22 @@ struct ScriptPanel: View {
                         .buttonStyle(NeonButtonStyle(.secondary))
                     }
 
+                    // Over 6,000 recordings: pick one and its line is ready
+                    // to paste, `sound("retro-game-coin-08")`.
+                    Button {
+                        showSounds = true
+                    } label: {
+                        Label(L("Sound library"), systemImage: "music.note.list")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(NeonButtonStyle(.secondary))
+
+                    if let soundNote {
+                        Text(verbatim: soundNote)
+                            .font(.caption)
+                            .foregroundStyle(Ablox.Palette.accent)
+                    }
+
                     if let importMessage {
                         Text(verbatim: importMessage)
                             .font(.caption)
@@ -112,6 +131,13 @@ struct ScriptPanel: View {
         }
         .sheet(isPresented: $showLibrary) {
             ScriptLibrarySheet(session: session)
+        }
+        .sheet(isPresented: $showSounds) {
+            StudioSoundLibrarySheet { id in
+                let line = "sound(\"\(id)\")"
+                UIPasteboard.general.string = line
+                soundNote = L("Copied {}. Paste it into a script.", line)
+            }
         }
         .sheet(isPresented: $showPush) {
             GitHubPushSheet(session: session)

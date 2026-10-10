@@ -29,7 +29,11 @@ struct AbloxStudioApp: App {
                 .id(settings.language)
                 // Offers Ablox's own keyboard on an iPad where the system one
                 // does not come up.
-                .onAppear { KeyboardController.shared.startWatching() }
+                .onAppear {
+                    KeyboardController.shared.startWatching()
+                    // Library sounds a world plays come from the game list's repository.
+                    SoundLibraryStore.shared.source = settings.catalogueSource
+                }
                 // Going to the background is not a crash.
                 .onChange(of: scenePhase) { _, phase in
                     ProblemRecorder.shared.markRunning(phase != .background)
