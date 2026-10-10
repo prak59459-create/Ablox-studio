@@ -59,10 +59,11 @@ public final class GameDownloads: ObservableObject {
     // MARK: Every game
 
     /// Downloads every game on `library`'s list that is not on this iPad
-    /// yet, one after another. Nothing happens if a run is already going.
+    /// yet, or is an older version than the list's, one after another.
+    /// Nothing happens if a run is already going.
     public func downloadAll(with library: GameLibrary) {
         guard bulkTask == nil else { return }
-        let missing = library.listings.filter { !library.isInstalled($0) && $0.isSupported }
+        let missing = library.listings.filter { (!library.isInstalled($0) || library.isOutdated($0)) && $0.isSupported }
         let sizes = missing.compactMap(\.downloadSize)
         bulk = BulkDownload(total: missing.count, expectedBytes: sizes.count == missing.count ? sizes.reduce(0, +) : nil)
         guard !missing.isEmpty else {

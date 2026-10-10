@@ -53,6 +53,10 @@ public final class AppUpdater: ObservableObject {
     @Published public private(set) var lastChecked: Date?
     /// Set on the first launch of a new version: what changed, once.
     @Published public var justUpdated: UpdateManifest?
+    /// Every version and what it changed (`changelog.json`), once read.
+    @Published public private(set) var history: UpdateHistory?
+    @Published public private(set) var historyLoading = false
+    @Published public private(set) var historyFailed = false
 
     @Published public var checksAutomatically: Bool {
         didSet { defaults.set(checksAutomatically, forKey: Keys.autoCheck) }
@@ -114,6 +118,7 @@ public final class AppUpdater: ObservableObject {
         static let branch = "update.branch"
         static let autoInstall = "update.autoInstall"
         static let written = "update.written"
+        static let history = "update.history"
     }
 
     public init(release: InstalledApp, defaults: UserDefaults = .standard) {
@@ -133,6 +138,9 @@ public final class AppUpdater: ObservableObject {
            let manifest = try? UpdateManifest.decode(data, forApp: release.app) {
             latest = manifest
             availability = UpdatePolicy.availability(installed: release.version, build: release.build, manifest: manifest)
+        }
+        if let data = defaults.data(forKey: Keys.history) {
+            history = try? UpdateHistory.decode(data, forApp: release.app)
         }
         noticeNewVersion()
         // A version written into the project earlier: running now, or still
@@ -195,6 +203,30 @@ public final class AppUpdater: ObservableObject {
 
     public var isBusy: Bool {
         phase == .checking || phase == .downloading || phase == .unpacking
+    }
+
+    // MARK: History
+
+    /// Reads every version's notes for Settings → Updates → Update history.
+    /// The last copy read is kept, so the list still shows with no network.
+    public func loadHistory() async {
+        guard !historyLoading, let url = channel.historyURL else { return }
+        historyLoading = true
+        historyFailed = false
+        defer { historyLoading = false }
+        do {
+            let data = try await withRetries { () async throws -> Data in
+                let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+                let (data, response) = try await URLSession.shared.data(for: request)
+                try Self.checkStatus(response)
+                return data
+            }
+            history = try UpdateHistory.decode(data, forApp: release.app)
+            defaults.set(data, forKey: Keys.history)
+        } catch {
+            note("history", error)
+            historyFailed = true
+        }
     }
 
     // MARK: Checking

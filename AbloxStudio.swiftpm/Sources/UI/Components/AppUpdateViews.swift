@@ -205,6 +205,7 @@ public struct UpdateSettingsCard: View {
                     }
                     .buttonStyle(NeonButtonStyle(.secondary))
                     .disabled(updater.isBusy)
+                    UpdateHistoryButton(updater: updater)
                 }
 
                 if case let .failed(message) = updater.phase {

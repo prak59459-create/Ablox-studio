@@ -2,7 +2,9 @@
 #
 # Fails if the app's version is not the same in Package.swift, AppRelease.swift
 # and update.json, or if update.json names a different network protocol than
-# the code speaks. See scripts/release.sh.
+# the code speaks, or if changelog.json (every version's notes, shown in
+# Settings → Updates → Update history) does not start with update.json's
+# release. See scripts/release.sh and scripts/changelog.py.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -47,3 +49,5 @@ if problems:
     sys.exit(1)
 print(f"✓ {app_dir} {release_version} ({release_build}), protocol {protocol}: Package.swift, AppRelease.swift and update.json agree")
 PY
+
+python3 scripts/changelog.py --check

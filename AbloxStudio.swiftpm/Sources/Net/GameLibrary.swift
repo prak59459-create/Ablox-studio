@@ -33,6 +33,8 @@ public final class GameLibrary: ObservableObject {
     @Published public private(set) var installed: Set<String> = []
     /// How big each downloaded game is on this iPad, in bytes, by id.
     @Published public private(set) var installedSizes: [String: Int] = [:]
+    /// Which version each downloaded game is, by id (`GameRevision`).
+    private var revisions: [String: String] = [:]
     /// When the catalogue last changed, for the "last updated" line.
     @Published public private(set) var updatedAt: Date?
 
@@ -205,6 +207,9 @@ public final class GameLibrary: ObservableObject {
 
             let destination = worldCacheURL(for: listing.id)
             try world.encodedForFile().write(to: destination, options: .atomic)
+            // Which version of the game this is, so a newer one in the list
+            // is downloaded again instead of the old copy played forever.
+            try? Data(listing.revision.utf8).write(to: revisionURL(for: listing.id), options: .atomic)
             refreshInstalledList()
             status = .idle
             return world
@@ -218,6 +223,25 @@ public final class GameLibrary: ObservableObject {
     public func cachedWorld(for listing: GameListing) -> WorldDocument? {
         guard let data = try? Data(contentsOf: worldCacheURL(for: listing.id)) else { return nil }
         return try? WorldDocument.decoded(from: data)
+    }
+
+    /// Whether the copy on this iPad is older than the one the list offers
+    /// now (`GameRevision`). False when nothing is downloaded.
+    public func isOutdated(_ listing: GameListing) -> Bool {
+        guard isInstalled(listing) else { return false }
+        return !GameRevision.isCurrent(stamp: revisions[listing.id], for: listing)
+    }
+
+    /// The world to play: the copy on this iPad when it is the list's
+    /// current version, otherwise a fresh download. When the download fails
+    /// (no network), the old copy is still better than nothing.
+    public func worldToPlay(for listing: GameListing) async -> WorldDocument? {
+        let cached = cachedWorld(for: listing)
+        if cached != nil, !isOutdated(listing) { return cached }
+        if let fresh = await download(listing) { return fresh }
+        guard let cached else { return nil }
+        status = .idle
+        return cached
     }
 
     // MARK: Covers
@@ -292,6 +316,7 @@ public final class GameLibrary: ObservableObject {
     /// next played.
     public func removeDownload(_ listing: GameListing) {
         try? FileManager.default.removeItem(at: worldCacheURL(for: listing.id))
+        try? FileManager.default.removeItem(at: revisionURL(for: listing.id))
         refreshInstalledList()
     }
 
@@ -324,13 +349,21 @@ public final class GameLibrary: ObservableObject {
         ) else {
             installed = []
             installedSizes = [:]
+            revisions = [:]
             return
         }
         var sizes: [String: Int] = [:]
-        for url in files where url.lastPathComponent.hasSuffix(".ablox") {
-            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-            sizes[url.deletingPathExtension().lastPathComponent] = size
+        var stamps: [String: String] = [:]
+        for url in files {
+            let id = url.deletingPathExtension().lastPathComponent
+            if url.pathExtension == "ablox" {
+                sizes[id] = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            } else if url.pathExtension == "revision",
+                      let data = try? Data(contentsOf: url), data.count <= 64 {
+                stamps[id] = String(data: data, encoding: .utf8)
+            }
         }
+        revisions = stamps
         installed = Set(sizes.keys)
         installedSizes = sizes
     }
@@ -344,6 +377,11 @@ public final class GameLibrary: ObservableObject {
     /// cannot become a path outside the cache directory.
     private func worldCacheURL(for id: String) -> URL {
         cacheDirectory.appendingPathComponent("\(id).ablox")
+    }
+
+    /// Beside the world: the `GameListing.revision` it was downloaded as.
+    private func revisionURL(for id: String) -> URL {
+        cacheDirectory.appendingPathComponent("\(id).revision")
     }
 
     /// The game and its cover's path. The catalogue publishes a changed

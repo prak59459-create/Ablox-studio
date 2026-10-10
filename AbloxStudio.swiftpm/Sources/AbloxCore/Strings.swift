@@ -3411,5 +3411,10 @@ public enum Strings {
         ("{} sounds could not be downloaded. Try again later.", "{} 個はダウンロードできませんでした。あとでもう一度ためしてね。"),
         ("Choose from the sound library", "効果音ライブラリから選ぶ"),
         ("Copied {}. Paste it into a script.", "{} をコピーしました。スクリプトにはりつけてね。"),
+        ("Update history", "アップデートの履歴"),
+        ("What changed in each version, newest first.", "それぞれの版で変わったところ。新しい順です。"),
+        ("Getting the update history…", "アップデートの履歴を読みこみ中…"),
+        ("Could not read the whole history. Check the internet and try again.", "履歴を全部は読めませんでした。インターネットを確かめて、もう一度ためしてね。"),
+        ("Get the new version and play", "新しい版をダウンロードして遊ぶ"),
     ]
 }

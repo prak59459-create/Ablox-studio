@@ -1,18 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "4.7",
-  "build": 38,
+  "version": "4.8",
+  "build": 39,
   "protocol": 8,
   "date": "2026-10-10",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Same as Ablox 5.8: The sound library (6,056 sounds) is now on the game list's main branch as well, so it works whichever branch Settings → Game list points at",
-      "Same as Ablox 5.8: The sound list is fetched once in the background when the app starts, so the first game that plays a library sound does not wait for it"
+      "Settings → Updates → Update history: every version so far and what each one changed, newest first, with this iPad's version marked",
+      "Same as Ablox 5.9: a game from the list that has been updated is downloaded again before it is played, instead of an old copy"
     ],
     "ja": [
-      "Ablox 5.8 と同じ: 効果音ライブラリ（6,056 個）がゲーム一覧の main ブランチにも入りました。設定 → ゲーム一覧 のブランチがどちらでも使えます",
-      "Ablox 5.8 と同じ: アプリを開いたときに効果音の一覧を裏で読みこんでおくので、ライブラリの音を使うゲームでも最初の音から鳴ります"
+      "設定 → アップデート →「アップデートの履歴」で、これまでの版と それぞれで変わったところを 新しい順に見られます（この iPad の版に しるし）",
+      "Ablox 5.9 と同じ: ゲーム一覧で新しくなったゲームは、古いコピーではなく もう一度ダウンロードしてから遊びます"
     ]
   }
 }

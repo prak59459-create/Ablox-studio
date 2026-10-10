@@ -1,0 +1,557 @@
+{
+  "app": "Ablox Studio",
+  "releases": [
+    {
+      "version": "4.8",
+      "build": 39,
+      "date": "2026-10-10",
+      "notes": {
+        "en": [
+          "Settings → Updates → Update history: every version so far and what each one changed, newest first, with this iPad's version marked",
+          "Same as Ablox 5.9: a game from the list that has been updated is downloaded again before it is played, instead of an old copy"
+        ],
+        "ja": [
+          "設定 → アップデート →「アップデートの履歴」で、これまでの版と それぞれで変わったところを 新しい順に見られます（この iPad の版に しるし）",
+          "Ablox 5.9 と同じ: ゲーム一覧で新しくなったゲームは、古いコピーではなく もう一度ダウンロードしてから遊びます"
+        ]
+      }
+    },
+    {
+      "version": "4.7",
+      "build": 38,
+      "date": "2026-10-10",
+      "notes": {
+        "en": [
+          "Same as Ablox 5.8: The sound library (6,056 sounds) is now on the game list's main branch as well, so it works whichever branch Settings → Game list points at",
+          "Same as Ablox 5.8: The sound list is fetched once in the background when the app starts, so the first game that plays a library sound does not wait for it"
+        ],
+        "ja": [
+          "Ablox 5.8 と同じ: 効果音ライブラリ（6,056 個）がゲーム一覧の main ブランチにも入りました。設定 → ゲーム一覧 のブランチがどちらでも使えます",
+          "Ablox 5.8 と同じ: アプリを開いたときに効果音の一覧を裏で読みこんでおくので、ライブラリの音を使うゲームでも最初の音から鳴ります"
+        ]
+      }
+    },
+    {
+      "version": "4.6",
+      "build": 37,
+      "date": "2026-10-10",
+      "notes": {
+        "en": [
+          "Same as Ablox 5.7: the sound library lists every one of its 591 kinds of sound — the list stopped at 400 before"
+        ],
+        "ja": [
+          "Ablox 5.7 と同じ: 効果音ライブラリに 591 種類すべてが出るようになりました（前は 400 種類で切れていました）"
+        ]
+      }
+    },
+    {
+      "version": "4.5",
+      "build": 36,
+      "date": "2026-10-10",
+      "notes": {
+        "en": [
+          "A Sound library button on rules and scripts: over 6,000 sound effects to listen to and use. A rule's Play sound can be any of them, and a script line like sound(\"retro-game-coin-08\") is copied ready to paste",
+          "The 30 built-in sounds are real recordings now, in play-tests too"
+        ],
+        "ja": [
+          "ルールとスクリプトに「効果音ライブラリ」ボタン：6,000 以上の効果音を聞いて使えます。ルールの「音を鳴らす」でライブラリの音をえらべて、スクリプトには sound(\"retro-game-coin-08\") のような行がコピーされます",
+          "最初から入っている 30 種類の効果音が本物の録音になりました（テストプレイでも）"
+        ]
+      }
+    },
+    {
+      "version": "4.4",
+      "build": 35,
+      "date": "2026-10-09",
+      "notes": {
+        "en": [
+          "Same as Ablox 5.5: characters walking a long way in a test play are drawn exactly where the game has them, and one made and sent walking at once always sets off"
+        ],
+        "ja": [
+          "Ablox 5.5 と同じ: テストプレイで 長い道を歩くキャラクターが ゲームの中で いる場所に ぴったり見え、作ってすぐ歩かせても かならず 歩きはじめます"
+        ]
+      }
+    },
+    {
+      "version": "4.3",
+      "build": 34,
+      "date": "2026-10-09",
+      "notes": {
+        "en": [
+          "Same as Ablox 5.4: characters walking a long way are drawn where they are, players who join halfway see them walking, and new words on the way no longer make them jump to the end"
+        ],
+        "ja": [
+          "Ablox 5.4 と同じ: 長い道を歩くキャラクターが いる場所で見え、とちゅうで入った人にも歩いて見え、とちゅうで文字が変わっても 終わりに ワープしなくなりました"
+        ]
+      }
+    },
+    {
+      "version": "4.2",
+      "build": 33,
+      "date": "2026-10-08",
+      "notes": {
+        "en": [
+          "Sync for Ablox 5.3: in a play test, a character's face is now its front (walking left or right, it used to face the other way), and shift lock from Ablox's settings is followed"
+        ],
+        "ja": [
+          "Ablox 5.3 と 同じに しました: テストプレイで キャラクターの 顔の ある方が 正面に なりました（左右に 歩くと 反対を 向いて いました）。Ablox の 設定の シフトロックにも したがいます"
+        ]
+      }
+    },
+    {
+      "version": "4.1",
+      "build": 32,
+      "date": "2026-10-05",
+      "notes": {
+        "en": [
+          "Two modules again, as Ablox 5.2: as one module the app could not be built on an iPad with little memory (the build failed with no error)",
+          "Kept from 3.8 to 4.0: comparisons and additions to everyday types in a few files, and the split files"
+        ],
+        "ja": [
+          "Ablox 5.2 と 同じく、2つの モジュールに もどしました。1つの モジュールでは、メモリの 少ない iPad で エラーの 表示なしで ビルドが 失敗して いました",
+          "3.8〜4.0 の 内容（くらべ方などを 少しの ファイルに まとめた・ファイルを 分けた）は そのまま です"
+        ]
+      }
+    },
+    {
+      "version": "4.0",
+      "build": 31,
+      "date": "2026-10-04",
+      "notes": {
+        "en": [
+          "Shares Ablox 5.0's core: blocks' shapes, materials, behaviours and lights, and a world's particles, music, sounds and panels each have a file of their own, so a change to one rebuilds only what uses it after an update",
+          "From 3.9: a player's identity and looks have files of their own"
+        ],
+        "ja": [
+          "Ablox 5.0 と 同じ core: ブロックの 形・素材・動き・明かりと、ワールドの パーティクル・音楽・音・パネルを それぞれ 自分の ファイルに 分けたので、1つを 変えても アップデートの あとに それを 使う ファイルだけを 作りなおします",
+          "3.9 の内容: プレイヤーの ID と 見た目を それぞれ 自分の ファイルに 分けました"
+        ]
+      }
+    },
+    {
+      "version": "3.9",
+      "build": 30,
+      "date": "2026-10-04",
+      "notes": {
+        "en": [
+          "Shares Ablox 4.9's core: a player's identity and looks have files of their own, so a change to movement no longer rebuilds most of the editor after an update",
+          "From 3.8: comparisons and additions to everyday types live in a few files that seldom change"
+        ],
+        "ja": [
+          "Ablox 4.9 と 同じ core: プレイヤーの ID と 見た目を それぞれ 自分の ファイルに 分けたので、動きの しくみを 変えても アップデートの あとに エディタの 大部分を 作りなおしません",
+          "3.8 の内容: くらべ方と、みんなが 使う 型への 追加を 少しの ファイルに まとめました"
+        ]
+      }
+    },
+    {
+      "version": "3.8",
+      "build": 29,
+      "date": "2026-10-04",
+      "notes": {
+        "en": [
+          "Builds after an update touch fewer files, as in Ablox 4.7: comparisons written by hand and additions to everyday types now live in a few files that seldom change",
+          "From 3.7: Studio is one module again, so the build after an update compiles only the files that changed and those that use them"
+        ],
+        "ja": [
+          "Ablox 4.7 と 同じく、アップデートの あとの ビルドで 作りなおす ファイルが 少なく なります（自分で 書いていた くらべ方と、みんなが 使う 型への 追加を、ほとんど 変わらない 少しの ファイルに まとめました）",
+          "3.7 の内容: 1つの モジュールに もどし、アップデートの あとは 変わった ファイルと それを 使う ファイルだけを 作りなおします"
+        ]
+      }
+    },
+    {
+      "version": "3.7",
+      "build": 28,
+      "date": "2026-10-04",
+      "notes": {
+        "en": [
+          "Quicker builds after an update: Studio is one module again, as Ablox 4.6, so the build after an update compiles only the files that changed and the files that use them",
+          "The first build after this update still builds everything once, because the project's layout changed"
+        ],
+        "ja": [
+          "アップデートの あとの ビルドが 速く なります。Ablox 4.6 と 同じく 1つの モジュールに もどしたので、変わった ファイルと それを 使う ファイルだけを 作りなおします",
+          "この版に してから 最初の 1回だけは、プロジェクトの 組み立てが 変わったため ぜんぶ ビルドします"
+        ]
+      }
+    },
+    {
+      "version": "3.6",
+      "build": 27,
+      "date": "2026-10-04",
+      "notes": {
+        "en": [
+          "Shares Ablox 3.9's engine: a few of the compiler's slowest lines written in simpler steps; the Ablox keyboard works again; everything from 2.6 is still here"
+        ],
+        "ja": [
+          "Ablox 3.9 と同じエンジン: コンパイラが 時間をかけていた 数か所を かんたんな 手順に。Ablox キーボードも また使えます。2.6 の内容もそのまま"
+        ]
+      }
+    },
+    {
+      "version": "3.5",
+      "build": 26,
+      "date": "2026-10-04",
+      "notes": {
+        "en": [
+          "The Ablox keyboard works again: its keys answered no touches on newer iPads. Shares Ablox 3.8's engine; everything from 2.6 is still here"
+        ],
+        "ja": [
+          "Ablox キーボードが また使えるようになりました（新しい iPad では キーを押しても 反応しませんでした）。Ablox 3.8 と同じエンジン。2.6 の内容もそのまま"
+        ]
+      }
+    },
+    {
+      "version": "3.4",
+      "build": 25,
+      "date": "2026-10-04",
+      "notes": {
+        "en": [
+          "Shares Ablox 3.7's engine: in the game preview, no brief hitches when a part changes colour; players' gear is drawn as fewer pieces and looks the same; everything from 2.6 is still here"
+        ],
+        "ja": [
+          "Ablox 3.7 と同じエンジン: ゲームのプレビューで、パーツの色が変わるときの 小さな カクつきが なくなりました。プレイヤーの持ち物も 少ない かたまりで描きます（見た目はそのまま）。2.6 の内容もそのまま"
+        ]
+      }
+    },
+    {
+      "version": "3.3",
+      "build": 24,
+      "date": "2026-10-04",
+      "notes": {
+        "en": [
+          "Shares Ablox 3.6's engine: in the game preview, a part changing colour no longer waits for the frame being drawn; players' gear is drawn as fewer pieces and looks the same; everything from 2.6 is still here"
+        ],
+        "ja": [
+          "Ablox 3.6 と同じエンジン: ゲームのプレビューで、パーツの色が変わるとき 描いている途中のフレームを 待たなくなりました。プレイヤーの持ち物も 少ない かたまりで描きます（見た目はそのまま）。2.6 の内容もそのまま"
+        ]
+      }
+    },
+    {
+      "version": "3.2",
+      "build": 23,
+      "date": "2026-10-04",
+      "notes": {
+        "en": [
+          "Shares Ablox 3.5's engine: in the game preview, players' faces, hats, pets and rides are drawn as fewer pieces and look the same; parts that only change colour and parts with words over them stay drawn together; everything from 2.6 is still here"
+        ],
+        "ja": [
+          "Ablox 3.5 と同じエンジン: ゲームのプレビューで、プレイヤーの顔・帽子・ペット・乗り物を 少ない かたまりで描きます（見た目はそのまま）。色だけ変わるパーツや 文字がのったパーツも まとめたまま。2.6 の内容もそのまま"
+        ]
+      }
+    },
+    {
+      "version": "3.1",
+      "build": 22,
+      "date": "2026-10-04",
+      "notes": {
+        "en": [
+          "Shares Ablox 3.3's engine: in the game preview, parts that only change colour and parts with words over them stay drawn together with the rest, and look the same; everything from 2.6 is still here"
+        ],
+        "ja": [
+          "Ablox 3.3 と同じエンジン: ゲームのプレビューで、色だけ変わるパーツや 文字がのったパーツも まとめて描いたままにします（見た目はそのまま）。2.6 の内容もそのまま"
+        ]
+      }
+    },
+    {
+      "version": "3.0",
+      "build": 21,
+      "date": "2026-10-03",
+      "notes": {
+        "en": [
+          "Shares Ablox 3.2's engine: in the game preview, plain parts of any colour are drawn together and look the same; everything from 2.6 is still here"
+        ],
+        "ja": [
+          "Ablox 3.2 と同じエンジン: ゲームのプレビューで、ふつうの素材のパーツは 色がちがっても まとめて描きます（見た目はそのまま）。2.6 の内容もそのまま"
+        ]
+      }
+    },
+    {
+      "version": "2.9",
+      "build": 20,
+      "date": "2026-10-03",
+      "notes": {
+        "en": [
+          "Shares Ablox 3.1's engine: moving blocks in the game preview are only moved, nothing else about them is looked at again; everything from 2.6 is still here"
+        ],
+        "ja": [
+          "Ablox 3.1 と同じエンジン: ゲームのプレビューで 動くブロックは 場所を変えるだけにしました。2.6 の内容もそのまま"
+        ]
+      }
+    },
+    {
+      "version": "2.8",
+      "build": 19,
+      "date": "2026-10-03",
+      "notes": {
+        "en": [
+          "Shares Ablox 3.0's engine (a more detailed frame-rate test for the developers); everything from 2.6 is still here"
+        ],
+        "ja": [
+          "Ablox 3.0 と同じエンジン（開発用の速さのテストを くわしく）。2.6 の内容もそのまま"
+        ]
+      }
+    },
+    {
+      "version": "2.7",
+      "build": 18,
+      "date": "2026-10-03",
+      "notes": {
+        "en": [
+          "Shares Ablox 2.9's engine (a longer frame-rate test for the developers); everything from 2.6 is still here"
+        ],
+        "ja": [
+          "Ablox 2.9 と同じエンジン（開発用の速さのテストを長く）。2.6 の内容もそのまま"
+        ]
+      }
+    },
+    {
+      "version": "2.6",
+      "build": 17,
+      "date": "2026-10-03",
+      "notes": {
+        "en": [
+          "Shares Ablox 2.8's engine: the 3D view reads the stick and camera every frame without SwiftUI redrawing anything",
+          "Everything from 2.4 and 2.5: still parts drawn together in the game preview, faster scripts, and quicker editing of big worlds"
+        ],
+        "ja": [
+          "Ablox 2.8 と同じエンジン: 3D の画面が スティックとカメラを 毎フレーム読み、SwiftUI の作りなおしを 起こしません",
+          "2.4・2.5 の内容もそのまま: プレビューで動かないパーツを まとめて描く、スクリプトが速い、大きなワールドの編集が速い"
+        ]
+      }
+    },
+    {
+      "version": "2.5",
+      "build": 16,
+      "date": "2026-10-03",
+      "notes": {
+        "en": [
+          "The game preview has Ablox 2.7's engine: worlds with moving platforms no longer copy the whole world at every change",
+          "Everything from 2.4: still parts drawn together in the game preview, faster scripts, and quicker editing of big worlds"
+        ],
+        "ja": [
+          "ゲームのプレビューに Ablox 2.7 のエンジンが入りました: 動く床のあるワールドで、変わるたびに ワールドぜんぶを コピーしなくなりました",
+          "2.4 の内容もそのまま: プレビューで動かないパーツを まとめて描く、スクリプトが速い、大きなワールドの編集が速い"
+        ]
+      }
+    },
+    {
+      "version": "2.4",
+      "build": 15,
+      "date": "2026-10-03",
+      "notes": {
+        "en": [
+          "The game preview has Ablox 2.6's faster engine: parts that stay put are drawn as a few merged pieces, and only the blocks that changed are looked at each frame",
+          "Scripts that move many blocks run up to 30 times faster in the game preview",
+          "Finding a part no longer reads through every part, so editing big worlds is quicker; the editor still draws and picks every part on its own"
+        ],
+        "ja": [
+          "ゲームのプレビューに Ablox 2.6 の速いエンジンが入りました: 動かないパーツを まとめて描き、毎フレーム 変わったブロックだけを見ます",
+          "たくさんのブロックを動かすスクリプトが、ゲームのプレビューで 最大30倍 速く動きます",
+          "パーツを探すとき 全部を順に見なくなり、大きなワールドの編集が 速くなりました（エディタでは これまでどおり パーツを1つずつ 描いて えらべます）"
+        ]
+      }
+    },
+    {
+      "version": "2.3",
+      "build": 14,
+      "date": "2026-10-02",
+      "notes": {
+        "en": [
+          "The game preview has the new \"Lightest\" graphics from Ablox 2.5, and characters keep looking ahead while running",
+          "Everything from 2.2: faster editing of worlds with lots of parts"
+        ],
+        "ja": [
+          "ゲームのプレビューに Ablox 2.5 の新しい画質「最軽量」が入り、走るときも キャラクターが 前を見るようになりました",
+          "2.2 の内容もそのまま: パーツの多いワールドの編集が速い"
+        ]
+      }
+    },
+    {
+      "version": "2.2",
+      "build": 13,
+      "date": "2026-10-02",
+      "notes": {
+        "en": [
+          "Shared with Ablox 2.4: big worlds keep up faster when blocks are added, moved or changed, in test play and while editing"
+        ],
+        "ja": [
+          "Ablox 2.4 といっしょ: 大きなワールドで ブロックを 足す・動かす・かえるのが 速くなりました（テストプレイでも 編集中でも）"
+        ]
+      }
+    },
+    {
+      "version": "2.1",
+      "build": 12,
+      "date": "2026-10-01",
+      "notes": {
+        "en": [
+          "Shared with Ablox 2.3: today() gives the date for weekly and seasonal events in test play too"
+        ],
+        "ja": [
+          "Ablox 2.3 といっしょ: today() で日付が分かり、テストプレイでも曜日や季節のイベントが試せます"
+        ]
+      }
+    },
+    {
+      "version": "2.0",
+      "build": 11,
+      "date": "2026-10-01",
+      "notes": {
+        "en": [
+          "Shared with Ablox 2.2: words floating over blocks, blocks hanging from one another, and blocks that move by themselves",
+          "The editor shows the words over blocks as players will see them, and test play shows the movement"
+        ],
+        "ja": [
+          "Ablox 2.2 といっしょ: ブロックの上に浮かぶ文字、ブロックどうしをつなげる、自分で動くブロック",
+          "エディタでも ブロックの上の文字が 遊ぶときと同じように見え、テストプレイでは動きも見えます"
+        ]
+      }
+    },
+    {
+      "version": "1.9",
+      "build": 10,
+      "date": "2026-10-01",
+      "notes": {
+        "en": [
+          "Updating is one tap: choose the Ablox Studio project in Files once, and every new version goes straight into it by itself. Then close the project and open it again",
+          "Downloads try again by themselves when the connection drops, and problems are saved with their error code",
+          "Characters in test play move like in Ablox: limbs swing from the shoulders and hips, jump and fall poses, running lean, ride poses"
+        ],
+        "ja": [
+          "アップデートが1タップに: ファイル App で Ablox Studio のプロジェクトを1回えらべば、新しいバージョンは自動で入ります。そのあとプロジェクトを閉じて開き直すだけ",
+          "つながりが切れたときは自動でやり直し、問題はエラーの番号つきで残ります",
+          "テストプレイのキャラクターも Ablox と同じ動きに: 肩と腰から動く手足、ジャンプと落下のポーズ、走ると前かがみ、乗り物のポーズ"
+        ]
+      }
+    },
+    {
+      "version": "1.8",
+      "build": 9,
+      "date": "2026-09-29",
+      "notes": {
+        "en": [
+          "Shared with Ablox 1.9: games published to the list can carry their download size, and downloading a game reports its megabytes as they arrive",
+          "Nothing changes in how Studio works"
+        ],
+        "ja": [
+          "Ablox 1.9 といっしょ: ゲーム一覧のゲームにダウンロードの大きさが入れられるようになり、ダウンロード中は何MBまで来たかがわかるようになりました",
+          "Studio の使い方は変わりません"
+        ]
+      }
+    },
+    {
+      "version": "1.7",
+      "build": 8,
+      "date": "2026-09-29",
+      "notes": {
+        "en": [
+          "Shared rules updated with Ablox 1.8: the suggestion box's database rules and sending",
+          "Shared translations updated"
+        ],
+        "ja": [
+          "Ablox 1.8 と共通のルールを更新: 意見箱のデータベースのルールと送るしくみ",
+          "共通の日本語訳を更新"
+        ]
+      }
+    },
+    {
+      "version": "1.6",
+      "build": 7,
+      "date": "2026-09-29",
+      "notes": {
+        "en": [
+          "Each change to Ablox Studio is now also started on an iPad simulator by the automatic checks, so a crash at launch shows up there",
+          "Shared rules updated with Ablox 1.7"
+        ],
+        "ja": [
+          "これからは変更のたびに、自動チェックで Ablox Studio を iPad のシミュレータでも起動して、起動してすぐ止まらないか確かめます",
+          "Ablox 1.7 と共通のルールを更新"
+        ]
+      }
+    },
+    {
+      "version": "1.5",
+      "build": 6,
+      "date": "2026-09-29",
+      "notes": {
+        "en": [
+          "The shared play engine is updated to match Ablox 1.6: it can keep game clips itself, without ReplayKit",
+          "Shared translations updated with Ablox"
+        ],
+        "ja": [
+          "共通のプレイエンジンを Ablox 1.6 と同じに更新: ReplayKit を使わずにゲームのクリップを記録できるしくみ",
+          "Ablox と共通の日本語訳を更新"
+        ]
+      }
+    },
+    {
+      "version": "1.4",
+      "build": 5,
+      "date": "2026-09-28",
+      "notes": {
+        "en": [
+          "The script reference beside the editor has a new section, More helpers: 60 new functions, all usable in your games and test runs",
+          "Test runs are safer: nan or huge numbers as a list position or a count give nil or an error instead of stopping Studio",
+          "While paused on a breakpoint, your own variables named like a function (count, first…) are shown"
+        ],
+        "ja": [
+          "エディターの横のリファレンスに「もっと便利な機能」を追加: 新しい関数60個をゲームとテストプレイで使えます",
+          "テストプレイがより安全に: リストの位置や個数に nan やとても大きな数を使っても、Studio が止まらず nil かエラーになります",
+          "ブレークポイントで止まったとき、関数と同じ名前（count や first など）の自分の変数も表示されます"
+        ]
+      }
+    },
+    {
+      "version": "1.3",
+      "build": 4,
+      "date": "2026-09-28",
+      "notes": {
+        "en": [
+          "The shared play engine is updated to match Ablox 1.4: sound hooks for captions, a walking-pace option and a friends-only chat filter",
+          "Shared rules for family settings, access options and moving settings, kept the same as Ablox",
+          "More Japanese translations, shared with Ablox"
+        ],
+        "ja": [
+          "共通のプレイエンジンを Ablox 1.4 と同じに更新: 音の文字表示のしくみ、歩く速さの設定、フレンドだけのチャットフィルター",
+          "家族の設定・見る/聞くの設定・設定の引っこしのルールを Ablox と共通化",
+          "Ablox と共通の日本語訳を追加"
+        ]
+      }
+    },
+    {
+      "version": "1.2",
+      "build": 3,
+      "date": "2026-09-28",
+      "notes": {
+        "en": [
+          "Play-tests show the new looks: hats, faces, pets, trails, auras, name cards and chat bubbles",
+          "Play-tests use the new chat tidying, camera follow and bubble and name options",
+          "More Japanese translations, shared with Ablox"
+        ],
+        "ja": [
+          "テストプレイで新しい見た目を表示: ぼうし・顔・ペット・トレイル・オーラ・ネームカード・チャットのふきだし",
+          "テストプレイにチャットの整え機能、ついてくるカメラ、ふきだしと名前の設定を反映",
+          "Ablox と共通の日本語訳を追加"
+        ]
+      }
+    },
+    {
+      "version": "1.1",
+      "build": 2,
+      "date": "2026-09-26",
+      "notes": {
+        "en": [
+          "Updates itself: new versions are found, downloaded and handed to Swift Playgrounds for you",
+          "Worlds keep their earlier versions, and deleted worlds can be brought back for 30 days",
+          "Safer co-editing: a stronger room key, and the host ignores floods and fake messages",
+          "Faster play-testing: creating and moving parts costs far less"
+        ],
+        "ja": [
+          "自動アップデート: 新しいバージョンを見つけて、ダウンロードして、Swift Playgrounds にわたします",
+          "ワールドの前のバージョンにもどせる・消したワールドを30日以内なら復活できる",
+          "共同編集がより安全に: 強いルームキー、ホストは大量送信やなりすましを無視",
+          "テストプレイが軽く: パーツを出したり動かしたりする負担を大きく削減"
+        ]
+      }
+    }
+  ]
+}

@@ -17,7 +17,12 @@
 # Japanese, on what changed. Push to the default branch and every iPad with
 # automatic updates on finds it within a few hours.
 #
-# scripts/check-release.sh (run by CI) checks the three agree.
+# Then python3 scripts/changelog.py adds the release, notes and all, to
+# changelog.json: every version so far, shown in Settings → Updates → Update
+# history.
+#
+# scripts/check-release.sh (run by CI) checks the three agree, and that
+# changelog.json starts with update.json's release.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -52,4 +57,5 @@ with open("update.json", "w") as f:
 PY
 
 echo "✓ $app_dir is now $version ($build), protocol $protocol, dated $today"
-echo "  Now write what changed in update.json \"notes\" (en and ja), then commit and push."
+echo "  Now write what changed in update.json \"notes\" (en and ja), run python3 scripts/changelog.py"
+echo "  to add the release to the update history (changelog.json), then commit and push."
