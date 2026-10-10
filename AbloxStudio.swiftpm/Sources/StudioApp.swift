@@ -34,6 +34,8 @@ struct AbloxStudioApp: App {
                     // Library sounds a world plays come from the game list's repository.
                     SoundLibraryStore.shared.source = settings.catalogueSource
                 }
+                // The sound library's list, once, in the background.
+                .task { await SoundLibraryStore.shared.loadIfNeeded() }
                 // Going to the background is not a crash.
                 .onChange(of: scenePhase) { _, phase in
                     ProblemRecorder.shared.markRunning(phase != .background)

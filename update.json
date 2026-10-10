@@ -1,16 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "4.6",
-  "build": 37,
+  "version": "4.7",
+  "build": 38,
   "protocol": 8,
   "date": "2026-10-10",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Same as Ablox 5.7: the sound library lists every one of its 591 kinds of sound — the list stopped at 400 before"
+      "Same as Ablox 5.8: The sound library (6,056 sounds) is now on the game list's main branch as well, so it works whichever branch Settings → Game list points at",
+      "Same as Ablox 5.8: The sound list is fetched once in the background when the app starts, so the first game that plays a library sound does not wait for it"
     ],
     "ja": [
-      "Ablox 5.7 と同じ: 効果音ライブラリに 591 種類すべてが出るようになりました（前は 400 種類で切れていました）"
+      "Ablox 5.8 と同じ: 効果音ライブラリ（6,056 個）がゲーム一覧の main ブランチにも入りました。設定 → ゲーム一覧 のブランチがどちらでも使えます",
+      "Ablox 5.8 と同じ: アプリを開いたときに効果音の一覧を裏で読みこんでおくので、ライブラリの音を使うゲームでも最初の音から鳴ります"
     ]
   }
 }

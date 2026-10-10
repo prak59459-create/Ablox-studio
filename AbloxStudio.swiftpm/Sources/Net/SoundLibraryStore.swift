@@ -75,6 +75,12 @@ public final class SoundLibraryStore: ObservableObject {
 
     // MARK: The list
 
+    /// At launch: gets the list once if this iPad has none saved yet, so the
+    /// first game that names a library sound does not wait for it.
+    public func loadIfNeeded() async {
+        if library == nil { await refresh() }
+    }
+
     /// Fetches the list unless it was fetched in the last half hour.
     public func refreshIfStale() async {
         if library != nil, let lastRefresh, Date().timeIntervalSince(lastRefresh) < 30 * 60 { return }
