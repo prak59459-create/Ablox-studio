@@ -1,18 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "4.5",
-  "build": 36,
+  "version": "4.6",
+  "build": 37,
   "protocol": 8,
   "date": "2026-10-10",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "A Sound library button on rules and scripts: over 6,000 sound effects to listen to and use. A rule's Play sound can be any of them, and a script line like sound(\"retro-game-coin-08\") is copied ready to paste",
-      "The 30 built-in sounds are real recordings now, in play-tests too"
+      "Same as Ablox 5.7: the sound library lists every one of its 591 kinds of sound — the list stopped at 400 before"
     ],
     "ja": [
-      "ルールとスクリプトに「効果音ライブラリ」ボタン：6,000 以上の効果音を聞いて使えます。ルールの「音を鳴らす」でライブラリの音をえらべて、スクリプトには sound(\"retro-game-coin-08\") のような行がコピーされます",
-      "最初から入っている 30 種類の効果音が本物の録音になりました（テストプレイでも）"
+      "Ablox 5.7 と同じ: 効果音ライブラリに 591 種類すべてが出るようになりました（前は 400 種類で切れていました）"
     ]
   }
 }

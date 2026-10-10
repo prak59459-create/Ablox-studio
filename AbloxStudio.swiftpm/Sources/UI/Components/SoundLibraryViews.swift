@@ -47,7 +47,9 @@ public struct SoundLibraryView: View {
                         Text(L("{} kinds · {} sounds", found.count, found.reduce(0) { $0 + $1.sounds.count }))
                             .font(.caption.monospacedDigit())
                             .foregroundStyle(Ablox.Palette.inkFaint)
-                        ForEach(found.prefix(400)) { family in
+                        // All of them: about 600 kinds, and the stack only
+                        // builds the rows on screen.
+                        ForEach(found) { family in
                             SoundFamilyRow(family: family, store: store, isOpen: open.contains(family.id),
                                            copied: copied, onPick: pickAndClose,
                                            toggle: { toggle(family.id) }, copy: copy)

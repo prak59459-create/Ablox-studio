@@ -8,8 +8,8 @@ import AbloxCore
 /// the three agree — a release where they did not would either never be
 /// offered or be offered forever.
 enum AppRelease {
-    static let version = "4.5"
-    static let build = 36
+    static let version = "4.6"
+    static let build = 37
 
     static let current = InstalledApp(
         app: "Ablox Studio",
