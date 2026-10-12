@@ -1,20 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "4.9",
-  "build": 40,
+  "version": "5.0",
+  "build": 41,
   "protocol": 8,
   "date": "2026-10-12",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Play now opens your game full screen, just as Ablox plays it: a character to walk and jump with, the scripts running, and their buttons, shop and messages on the screen. Stop comes back to building",
-      "The old Play, physics in the editor's view without a character, is the small cube button beside Play",
-      "Scripts kept on GitHub are tested as they are in Studio, not fetched again"
+      "Every push now also builds an .ipa for AltStore. In AltStore, add the source https://github.com/prak59459-create/Ablox-studio/releases/download/ipa/altstore-source.json once, and new versions appear there as updates"
     ],
     "ja": [
-      "「プレイ」で、作っているゲームを Ablox と同じように 全画面で遊べるようになりました。キャラクターで歩く・ジャンプする、スクリプトが動く、スクリプトのボタンやお店やメッセージも出ます。「停止」で作業にもどります",
-      "前の「プレイ」（キャラクターなしで 物理だけ見る）は、プレイの横の 小さな立方体のボタンです",
-      "GitHub にあるスクリプトも、Studio にある いまのスクリプトで テストします"
+      "プッシュのたびに AltStore 用の .ipa も作るようにしました。AltStore にソース https://github.com/prak59459-create/Ablox-studio/releases/download/ipa/altstore-source.json を1回追加すると、新しいバージョンがアップデートとして出ます"
     ]
   }
 }

@@ -1,0 +1,45 @@
+name: IPA
+
+# Builds an unsigned .ipa on every push and puts it on the "ipa" release,
+# replacing the one before: https://github.com/<owner>/<repo>/releases/tag/ipa
+# AltStore source: https://github.com/<owner>/<repo>/releases/download/ipa/altstore-source.json
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "*.swiftpm/**"
+      - "scripts/build-ipa.sh"
+      - ".github/workflows/ipa.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ipa
+  cancel-in-progress: true
+
+jobs:
+  ipa:
+    name: Build the .ipa
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: scripts/build-ipa.sh
+        env:
+          OUT: ${{ runner.temp }}/ipa
+      - name: Put it on the "ipa" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view ipa > /dev/null 2>&1 || gh release create ipa --title "Latest .ipa" --notes "Unsigned .ipa of the latest push. Install it with a sideloading app (AltStore, Sideloadly…), which signs it with your Apple ID." --target "$GITHUB_SHA"
+          for old in $(gh release view ipa --json assets --jq '.assets[].name'); do gh release delete-asset ipa "$old" -y; done
+          gh release upload ipa "$RUNNER_TEMP"/ipa/*.ipa "$RUNNER_TEMP"/ipa/altstore-source.json $(ls "$RUNNER_TEMP"/ipa/icon.png 2>/dev/null) --clobber
+          git tag -f ipa "$GITHUB_SHA" && git push -f origin refs/tags/ipa
+      - name: Keep it as a build artifact too
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipa
+          path: ${{ runner.temp }}/ipa/*.ipa
