@@ -57,7 +57,8 @@ minimum="$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$plist" 2>/dev/
 icon="$(find "$app" -maxdepth 1 -name 'AppIcon*.png' -print0 | xargs -0 ls -S 2>/dev/null | head -1 || true)"
 stable="$out/${name// /}.ipa"
 cp "$ipa" "$stable"
-[ -n "$icon" ] && cp "$icon" "$out/icon.png"
+# The app's own icon, else the one in design/.
+if [ -n "$icon" ]; then cp "$icon" "$out/icon.png"; elif [ -f design/AppIcon.png ]; then cp design/AppIcon.png "$out/icon.png"; icon=design; fi
 NAME="$name" BUNDLE="$bundle" VERSION="$version" BUILD="$build" MINIMUM="$minimum" BASE="$base" REPO="$repo" \
 SIZE="$(stat -f %z "$stable")" FILE="$(basename "$stable")" ICON="$([ -n "$icon" ] && echo yes)" python3 - "$out/altstore-source.json" <<'PY'
 import json, os, sys, datetime
