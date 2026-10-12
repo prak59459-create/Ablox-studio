@@ -248,12 +248,30 @@ struct StudioToolbar: View {
         .accessibilityLabel(session.isHosting ? "Sharing this project" : "Share this project")
     }
 
-    private var playButton: some View {
+    /// Play opens the game itself (`StudioTestPlayView`); the smaller button
+    /// beside it is the preview, physics in this view. Either one's Stop
+    /// comes back to building.
+    @ViewBuilder private var playButton: some View {
+        if session.mode == .edit {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { session.toggleMode() }
+            } label: {
+                Image(systemName: "cube.transparent")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 34, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Ablox.Palette.inkMuted)
+            .accessibilityLabel(L("Preview physics here"))
+        }
         Button {
-            withAnimation(.easeInOut(duration: 0.2)) { session.toggleMode() }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                if session.mode == .edit { session.play() } else { session.toggleMode() }
+            }
         } label: {
             Label(
-                session.mode == .edit ? "Play" : "Stop",
+                session.mode == .edit ? L("Play") : L("Stop"),
                 systemImage: session.mode == .edit ? "play.fill" : "stop.fill"
             )
             .font(.subheadline.weight(.bold))

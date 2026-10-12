@@ -1,18 +1,20 @@
 {
   "app": "Ablox Studio",
-  "version": "4.8",
-  "build": 39,
+  "version": "4.9",
+  "build": 40,
   "protocol": 8,
-  "date": "2026-10-10",
+  "date": "2026-10-12",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Settings → Updates → Update history: every version so far and what each one changed, newest first, with this iPad's version marked",
-      "Same as Ablox 5.9: a game from the list that has been updated is downloaded again before it is played, instead of an old copy"
+      "Play now opens your game full screen, just as Ablox plays it: a character to walk and jump with, the scripts running, and their buttons, shop and messages on the screen. Stop comes back to building",
+      "The old Play, physics in the editor's view without a character, is the small cube button beside Play",
+      "Scripts kept on GitHub are tested as they are in Studio, not fetched again"
     ],
     "ja": [
-      "設定 → アップデート →「アップデートの履歴」で、これまでの版と それぞれで変わったところを 新しい順に見られます（この iPad の版に しるし）",
-      "Ablox 5.9 と同じ: ゲーム一覧で新しくなったゲームは、古いコピーではなく もう一度ダウンロードしてから遊びます"
+      "「プレイ」で、作っているゲームを Ablox と同じように 全画面で遊べるようになりました。キャラクターで歩く・ジャンプする、スクリプトが動く、スクリプトのボタンやお店やメッセージも出ます。「停止」で作業にもどります",
+      "前の「プレイ」（キャラクターなしで 物理だけ見る）は、プレイの横の 小さな立方体のボタンです",
+      "GitHub にあるスクリプトも、Studio にある いまのスクリプトで テストします"
     ]
   }
 }

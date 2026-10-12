@@ -107,6 +107,12 @@ struct StudioView: View {
         .animation(.easeInOut(duration: 0.22), value: session.mode)
         .animation(.easeInOut(duration: 0.2), value: session.document.tool)
         .statusBarHidden()
+        .fullScreenCover(isPresented: $session.isTestPlaying) {
+            let player = session.testPlayer
+            StudioTestPlayView(world: session.document.world, peerID: player.peerID, profile: player.profile) {
+                session.isTestPlaying = false
+            }
+        }
         .sheet(item: $sheet) { which in
             switch which {
             case .library:

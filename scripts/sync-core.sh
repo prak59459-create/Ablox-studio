@@ -57,6 +57,10 @@ MIRRORED_FILES=(
   "Sources/UI/Components/PresentationQueue.swift:Sources/UI/Components/PresentationQueue.swift"
   "Sources/UI/Components/SoundLibraryViews.swift:Sources/UI/Components/SoundLibraryViews.swift"
   "Sources/UI/Components/UpdateHistoryViews.swift:Sources/UI/Components/UpdateHistoryViews.swift"
+  # The play screen's stick, camera, jump and script HUD, for Play (test play).
+  "Sources/UI/Game/VirtualJoystick.swift:Sources/UI/Game/VirtualJoystick.swift"
+  "Sources/UI/Game/ScriptHUDView.swift:Sources/UI/Game/ScriptHUDView.swift"
+  "Sources/UI/Game/PartsHUD.swift:Sources/UI/Game/PartsHUD.swift"
 )
 
 if [[ ! -d "$UPSTREAM_APP" ]]; then

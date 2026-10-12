@@ -23,6 +23,8 @@ public final class StudioSession: ObservableObject, Identifiable {
 
     @Published public private(set) var document: EditorDocument
     @Published public var mode: Mode = .edit
+    /// The game is open full screen to be tried (Play).
+    @Published public var isTestPlaying = false
     @Published public private(set) var collaborators: [PlayerSnapshot] = []
     @Published public private(set) var statusMessage: String?
 
@@ -385,7 +387,28 @@ public final class StudioSession: ObservableObject, Identifiable {
 
     // MARK: Play mode
 
-    /// Switches between building and testing.
+    /// Play: the game itself, full screen, with a character and the scripts
+    /// running. Saved first, like the preview. While this iPad shares the
+    /// project the room holds the game's port, so the preview opens instead.
+    public func play() {
+        switch TestPlay.choice(isSharingFromHere: isHosting) {
+        case .game:
+            save()
+            document.clearSelection()
+            isTestPlaying = true
+        case .preview:
+            toggleMode()
+            flash(L("While sharing, Play shows the preview. Stop sharing to play the game."))
+        }
+    }
+
+    /// Who walks around in test play: this builder.
+    public var testPlayer: (peerID: PeerID, profile: AvatarProfile) {
+        (localPeerID, profile)
+    }
+
+    /// Switches between building and the preview: physics in the editor's
+    /// own view, without a character.
     ///
     /// Entering play mode saves first: a crash while testing must not lose the
     /// work, and the play simulation reads the saved world.

@@ -2,6 +2,23 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "4.9",
+      "build": 40,
+      "date": "2026-10-12",
+      "notes": {
+        "en": [
+          "Play now opens your game full screen, just as Ablox plays it: a character to walk and jump with, the scripts running, and their buttons, shop and messages on the screen. Stop comes back to building",
+          "The old Play, physics in the editor's view without a character, is the small cube button beside Play",
+          "Scripts kept on GitHub are tested as they are in Studio, not fetched again"
+        ],
+        "ja": [
+          "「プレイ」で、作っているゲームを Ablox と同じように 全画面で遊べるようになりました。キャラクターで歩く・ジャンプする、スクリプトが動く、スクリプトのボタンやお店やメッセージも出ます。「停止」で作業にもどります",
+          "前の「プレイ」（キャラクターなしで 物理だけ見る）は、プレイの横の 小さな立方体のボタンです",
+          "GitHub にあるスクリプトも、Studio にある いまのスクリプトで テストします"
+        ]
+      }
+    },
+    {
       "version": "4.8",
       "build": 39,
       "date": "2026-10-10",
