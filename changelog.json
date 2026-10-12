@@ -2,6 +2,19 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "5.0",
+      "build": 41,
+      "date": "2026-10-12",
+      "notes": {
+        "en": [
+          "Every push now also builds an .ipa for AltStore. In AltStore, add the source https://github.com/prak59459-create/Ablox-studio/releases/download/ipa/altstore-source.json once, and new versions appear there as updates"
+        ],
+        "ja": [
+          "プッシュのたびに AltStore 用の .ipa も作るようにしました。AltStore にソース https://github.com/prak59459-create/Ablox-studio/releases/download/ipa/altstore-source.json を1回追加すると、新しいバージョンがアップデートとして出ます"
+        ]
+      }
+    },
+    {
       "version": "4.9",
       "build": 40,
       "date": "2026-10-12",
