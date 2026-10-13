@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "5.2",
-  "build": 43,
+  "version": "5.3",
+  "build": 44,
   "protocol": 8,
   "date": "2026-10-13",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shared with Ablox 6.3: backups and saved-game files carry a seal, so files changed by hand are noticed"
+      "Shared with Ablox 6.4: the screen-size check behind the iPhone layout"
     ],
     "ja": [
-      "Ablox 6.3 と共通: バックアップとセーブデータのファイルに封印をつけ、手で書きかえたファイルに気づけるようにしました"
+      "Ablox 6.4 と共通: iPhone 向けの画面の大きさの判定"
     ]
   }
 }

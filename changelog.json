@@ -2,6 +2,19 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "5.3",
+      "build": 44,
+      "date": "2026-10-13",
+      "notes": {
+        "en": [
+          "Shared with Ablox 6.4: the screen-size check behind the iPhone layout"
+        ],
+        "ja": [
+          "Ablox 6.4 と共通: iPhone 向けの画面の大きさの判定"
+        ]
+      }
+    },
+    {
       "version": "5.2",
       "build": 43,
       "date": "2026-10-13",
