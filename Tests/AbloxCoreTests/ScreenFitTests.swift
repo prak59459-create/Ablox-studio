@@ -65,4 +65,27 @@ final class ScreenFitTests: XCTestCase {
         // A phone in landscape has room for the cards as drawn.
         XCTAssertEqual(ScreenFit(width: 844, height: 390).cardMinimum(280), 280)
     }
+
+    func testPlayButtonsAndCornerMapFitAPhoneHeldSideways() {
+        // An iPad keeps the play screen as drawn.
+        let iPad = ScreenFit(width: 1180, height: 820)
+        XCTAssertEqual(iPad.controlScale, 1)
+        XCTAssertEqual(iPad.controlInset(44), 44)
+        XCTAssertEqual(iPad.controlInset(150), 150)
+        XCTAssertEqual(iPad.cornerMap(240), 240)
+
+        // An iPhone in landscape: below the chips at the top (64 points) the
+        // corner map and the jump button with its extra buttons both fit.
+        let phone = ScreenFit(width: 844, height: 390)
+        XCTAssertLessThan(phone.controlScale, 1)
+        XCTAssertLessThanOrEqual(phone.cornerMap(MapSize.large.points), 390 * 0.3)
+        XCTAssertGreaterThanOrEqual(phone.cornerMap(MapSize.small.points), 90)
+        XCTAssertLessThan(phone.controlInset(150), 150)
+        XCTAssertGreaterThanOrEqual(phone.controlInset(44), 12)
+        // The one-handed layout still leaves room for the buttons.
+        XCTAssertLessThan(phone.controlInset(150) * 2, phone.height / 2)
+
+        // A phone in portrait keeps its buttons at full size.
+        XCTAssertEqual(ScreenFit(width: 390, height: 844).controlScale, 1)
+    }
 }

@@ -56,6 +56,26 @@ public struct ScreenFit: Equatable, Sendable {
         return max(200, min(preferred, width * share))
     }
 
+    /// The buttons while playing (jump and the ones beside it) on a phone
+    /// held sideways, where the screen is too short for them at full size
+    /// below the chips and the corner map.
+    public var controlScale: Double { height < Self.compactHeight ? 0.8 : 1 }
+
+    /// The space between the play buttons and the edge of the screen: as
+    /// drawn on an iPad, less on a small screen so the buttons stay clear of
+    /// the clock and the corner map at the top.
+    public func controlInset(_ preferred: Double) -> Double {
+        guard isCompact else { return preferred }
+        return min(preferred, max(12, preferred * 0.4))
+    }
+
+    /// The corner map while playing: the size chosen in the options, but on a
+    /// small screen never more than a third of the height.
+    public func cornerMap(_ preferred: Double) -> Double {
+        guard isCompact else { return preferred }
+        return max(90, min(preferred, height * 0.3))
+    }
+
     /// Something square in the middle of the screen (the big map): the size
     /// it was drawn at, or smaller so it fits with a margin.
     public func square(_ preferred: Double, margin: Double = 24) -> Double {

@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "5.4",
-  "build": 45,
+  "version": "5.5",
+  "build": 46,
   "protocol": 8,
   "date": "2026-10-13",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shared with Ablox 6.5: the screen-size rules now also size grids of cards so they fit an iPhone"
+      "Shared with Ablox 6.6: the screen-size rules now also size the play buttons and the corner map for an iPhone held sideways"
     ],
     "ja": [
-      "Ablox 6.5 と同じ: 画面の大きさのルールに、iPhone でもカードの列が 入るようにする 決まりを足しました"
+      "Ablox 6.6 と同じ: 画面の大きさのルールに、iPhone を横にしたときの 遊ぶボタンと 右上の地図の 大きさを 足しました"
     ]
   }
 }
