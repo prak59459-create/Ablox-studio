@@ -7,6 +7,10 @@ import Foundation
 /// teacher's Mac — so a new or reset iPad can get it all back. Reading one
 /// merges rather than replaces: nothing already on the iPad is lost to an
 /// older backup.
+///
+/// The file is sealed (`FileSeal`). One whose seal is missing or does not
+/// match — changed by hand, or written before seals — still brings back the
+/// avatar and the worlds, but not coins, bought items or game progress.
 public struct AbloxBackup: Codable, Sendable {
 
     public static let fileExtension = "abloxbackup"
@@ -20,6 +24,12 @@ public struct AbloxBackup: Codable, Sendable {
     public var wallet: PlayerWallet
     public var saves: [GameSaveStore.Record]
     public var worlds: [WorldDocument]
+    /// Set when reading: whether the file's seal matched. Not written.
+    public private(set) var isSealed = false
+
+    private enum CodingKeys: String, CodingKey {
+        case version, createdAt, profile, wallet, saves, worlds
+    }
 
     public init(createdAt: Date = Date(), profile: AvatarProfile, wallet: PlayerWallet,
                 saves: [GameSaveStore.Record], worlds: [WorldDocument]) {
@@ -46,13 +56,14 @@ public struct AbloxBackup: Codable, Sendable {
     }
 
     public func encoded() throws -> Data {
-        try Self.encoder.encode(self)
+        try FileSeal.sealed(Self.encoder.encode(self))
     }
 
     public static func decoded(from data: Data) throws -> AbloxBackup {
         guard data.count <= maximumBytes else { throw ReadError.tooBig }
-        guard let backup = try? decoder.decode(AbloxBackup.self, from: data) else { throw ReadError.notABackup }
+        guard var backup = try? decoder.decode(AbloxBackup.self, from: data) else { throw ReadError.notABackup }
         guard backup.version <= currentVersion else { throw ReadError.newerVersion }
+        backup.isSealed = FileSeal.isIntact(data)
         return backup
     }
 

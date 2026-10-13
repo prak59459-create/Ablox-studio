@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "5.1",
-  "build": 42,
+  "version": "5.2",
+  "build": 43,
   "protocol": 8,
-  "date": "2026-10-12",
+  "date": "2026-10-13",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "The app's icon shows in AltStore"
+      "Shared with Ablox 6.3: backups and saved-game files carry a seal, so files changed by hand are noticed"
     ],
     "ja": [
-      "AltStore にアプリのアイコンが出るようにしました"
+      "Ablox 6.3 と共通: バックアップとセーブデータのファイルに封印をつけ、手で書きかえたファイルに気づけるようにしました"
     ]
   }
 }
