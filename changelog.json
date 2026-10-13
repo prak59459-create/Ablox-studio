@@ -2,6 +2,19 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "5.6",
+      "build": 47,
+      "date": "2026-10-13",
+      "notes": {
+        "en": [
+          "Shared with Ablox 6.7: the screen-size rules can tell when there is room to set things side by side"
+        ],
+        "ja": [
+          "Ablox 6.7 と同じ: 画面の大きさのルールに、横に並べる 場所が あるかを 決める 決まりを足しました"
+        ]
+      }
+    },
+    {
       "version": "5.5",
       "build": 46,
       "date": "2026-10-13",

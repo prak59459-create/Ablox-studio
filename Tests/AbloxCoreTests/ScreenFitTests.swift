@@ -88,4 +88,13 @@ final class ScreenFitTests: XCTestCase {
         // A phone in portrait keeps its buttons at full size.
         XCTAssertEqual(ScreenFit(width: 390, height: 844).controlScale, 1)
     }
+
+    func testSideBySideOnlyWhereThereIsRoom() {
+        // Today's pick: a 280-point card with its words beside it.
+        let needed = 280.0 + 16 + 200
+        XCTAssertTrue(ScreenFit(width: 744, height: 1133).pageHas(room: needed))
+        XCTAssertTrue(ScreenFit(width: 844, height: 390).pageHas(room: needed))
+        XCTAssertFalse(ScreenFit(width: 390, height: 844).pageHas(room: needed))
+        XCTAssertFalse(ScreenFit(width: 320, height: 568).pageHas(room: needed))
+    }
 }

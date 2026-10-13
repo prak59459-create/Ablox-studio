@@ -48,6 +48,15 @@ public struct ScreenFit: Equatable, Sendable {
         return max(140, min(preferred, room))
     }
 
+    /// Whether the page beside the sidebar, less its margins, is at least
+    /// `room` wide: things set side by side on an iPad go one under the
+    /// other when it is not (a phone held upright). An iPad keeps the
+    /// layout it was drawn with.
+    public func pageHas(room: Double) -> Bool {
+        guard isCompact else { return true }
+        return width - sidebarWidth - gutter * 2 >= room
+    }
+
     /// A panel beside the game or the avatar (player list, avatar editor):
     /// the size it was drawn at on an iPad, but on a small screen never more
     /// than `share` of the width, so the rest stays visible.
