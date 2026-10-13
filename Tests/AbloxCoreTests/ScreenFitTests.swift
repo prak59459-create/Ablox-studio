@@ -46,4 +46,23 @@ final class ScreenFitTests: XCTestCase {
         XCTAssertGreaterThan(fit.square(520), 0)
         XCTAssertGreaterThan(fit.sidePanel(420), 0)
     }
+
+    func testCardGridsFitOneColumnOnAPhone() {
+        // An iPad keeps the card sizes the menus were drawn with.
+        let iPad = ScreenFit(width: 744, height: 1133)
+        XCTAssertEqual(iPad.cardMinimum(280), 280)
+        XCTAssertEqual(iPad.cardMinimum(240), 240)
+
+        // The smallest iPhone in portrait: a card is never wider than the
+        // page beside the icons-only sidebar.
+        let small = ScreenFit(width: 320, height: 568)
+        let page = small.width - small.sidebarWidth - small.gutter * 2
+        for preferred in [170.0, 230, 240, 260, 280] {
+            XCTAssertLessThanOrEqual(small.cardMinimum(preferred), page)
+            XCTAssertGreaterThanOrEqual(small.cardMinimum(preferred), 140)
+        }
+
+        // A phone in landscape has room for the cards as drawn.
+        XCTAssertEqual(ScreenFit(width: 844, height: 390).cardMinimum(280), 280)
+    }
 }

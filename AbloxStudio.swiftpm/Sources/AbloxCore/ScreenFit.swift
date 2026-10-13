@@ -38,6 +38,16 @@ public struct ScreenFit: Equatable, Sendable {
     /// The space kept around the content of a page.
     public var gutter: Double { isCompact ? 14 : 28 }
 
+    /// The narrowest a card in a grid of cards may be: the size it was drawn
+    /// at on an iPad, but on a small screen never wider than the page beside
+    /// the sidebar (less its margins and a panel's own padding), so one column
+    /// always fits instead of running off the edge.
+    public func cardMinimum(_ preferred: Double) -> Double {
+        guard isCompact else { return preferred }
+        let room = width - sidebarWidth - gutter * 4
+        return max(140, min(preferred, room))
+    }
+
     /// A panel beside the game or the avatar (player list, avatar editor):
     /// the size it was drawn at on an iPad, but on a small screen never more
     /// than `share` of the width, so the rest stays visible.
