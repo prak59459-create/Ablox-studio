@@ -2,6 +2,19 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "6.2",
+      "build": 53,
+      "date": "2026-10-16",
+      "notes": {
+        "en": [
+          "Shares Ablox 7.4’s engine: rooms can move on to another game together"
+        ],
+        "ja": [
+          "Ablox 7.4 と 同じ エンジンに：ルームの みんなで 別の ゲームへ 行けるように"
+        ]
+      }
+    },
+    {
       "version": "6.1",
       "build": 52,
       "date": "2026-10-16",

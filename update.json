@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "6.1",
-  "build": 52,
+  "version": "6.2",
+  "build": 53,
   "protocol": 8,
   "date": "2026-10-16",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shares Ablox 7.3’s engine and words"
+      "Shares Ablox 7.4’s engine: rooms can move on to another game together"
     ],
     "ja": [
-      "Ablox 7.3 と 同じ エンジンと ことばに"
+      "Ablox 7.4 と 同じ エンジンに：ルームの みんなで 別の ゲームへ 行けるように"
     ]
   }
 }

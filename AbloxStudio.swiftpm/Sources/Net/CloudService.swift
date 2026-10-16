@@ -463,6 +463,9 @@ public final class CloudService: ObservableObject {
         }
     }
 
+    /// Whether this iPad's room is on the internet (or on its way there).
+    public var isHostingRoom: Bool { hostTask != nil || hostedRoom != nil }
+
     public func stopHosting() {
         hostTask?.cancel()
         hostTask = nil
@@ -496,6 +499,17 @@ public final class CloudService: ObservableObject {
             session.join(ticket: ticket)
             setPlaying(game: room.world, room: room.id)
             watchRole(session)
+            // The host taking everyone on to its next game lists that room
+            // under the code it sends: found there, and joined the same way.
+            let host = room.host
+            session.findMovedRoom = { [weak self, weak session] move in
+                guard let self, let session else { return false }
+                await self.refreshRooms()
+                let code = RoomCode.normalize(move.roomCode)
+                guard let next = self.rooms.first(where: { $0.host == host && RoomCode.normalize($0.code) == code }) else { return false }
+                await self.join(next, session: session)
+                return true
+            }
         } catch {
             guest.stop()
             session.noteCloudProblem(error.localizedDescription)

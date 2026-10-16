@@ -331,9 +331,11 @@ public final class SessionCoordinator: ObservableObject {
         let host = AbloxHost(world: world, configuration: configuration, localPeerID: localPeerID, localProfile: profile,
                              alreadyApproved: alreadyApproved)
 
-        host.onStateChange = { [weak self] state in
+        // Each answers only for the room that is still this iPad's: one
+        // closing behind a party (`moveRoom`) must not close the next.
+        host.onStateChange = { [weak self, weak host] state in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, let host, self.host === host else { return }
                 switch state {
                 case let .hosting(port):
                     self.status = .active
@@ -350,8 +352,11 @@ public final class SessionCoordinator: ObservableObject {
             }
         }
 
-        host.onRosterChange = { [weak self] roster in
-            Task { @MainActor in self?.replaceRoster(roster) }
+        host.onRosterChange = { [weak self, weak host] roster in
+            Task { @MainActor in
+                guard let self, let host, self.host === host else { return }
+                self.replaceRoster(roster)
+            }
         }
 
         // The host used to receive every joined player's movement and never
@@ -367,21 +372,27 @@ public final class SessionCoordinator: ObservableObject {
             Task { @MainActor in self?.appendChat(payload, from: sender) }
         }
 
-        host.onLocalEffects = { [weak self] effects in
-            Task { @MainActor in self?.apply(effects: effects.map(\.action)) }
+        host.onLocalEffects = { [weak self, weak host] effects in
+            Task { @MainActor in
+                guard let self, let host, self.host === host else { return }
+                self.apply(effects: effects.map(\.action))
+            }
         }
 
         host.onScriptDiagnostics = { [weak self] errors, output in
             Task { @MainActor in self?.appendScriptLog(errors: errors, output: output) }
         }
 
-        host.onRoomState = { [weak self] state in
-            Task { @MainActor in self?.receive(state) }
+        host.onRoomState = { [weak self, weak host] state in
+            Task { @MainActor in
+                guard let self, let host, self.host === host else { return }
+                self.receive(state)
+            }
         }
 
-        host.onJoinRequest = { [weak self] peer, name in
+        host.onJoinRequest = { [weak self, weak host] peer, name in
             Task { @MainActor in
-                guard let self, !self.joinRequests.contains(where: { $0.id == peer }) else { return }
+                guard let self, let host, self.host === host, !self.joinRequests.contains(where: { $0.id == peer }) else { return }
                 self.joinRequests.append(JoinRequest(id: peer, name: name))
             }
         }
@@ -426,6 +437,7 @@ public final class SessionCoordinator: ObservableObject {
 
     public func join(_ peer: DiscoveredPeer, roomCode code: String) {
         roomMove = nil
+        findMovedRoom = nil
         guard peer.isCompatible else {
             status = .error(peer.isNewer
                 ? L("That iPad has a newer Ablox. Update this one in Settings, then join.")
@@ -439,6 +451,7 @@ public final class SessionCoordinator: ObservableObject {
 
         leave()
         roomCode = RoomCode.normalize(code)
+        joinedSalt = peer.keySalt
         makeClient().connect(to: peer, roomCode: roomCode)
     }
 
@@ -446,8 +459,10 @@ public final class SessionCoordinator: ObservableObject {
     /// straight to the host's address, without the list.
     public func join(ticket: JoinTicket) {
         roomMove = nil
+        findMovedRoom = nil
         leave()
         roomCode = ticket.code
+        joinedSalt = ticket.salt
         guard let port = NWEndpoint.Port(rawValue: ticket.port) else {
             status = .error(L("That invitation doesn't work."))
             return
@@ -774,11 +789,56 @@ public final class SessionCoordinator: ObservableObject {
         return true
     }
 
+    /// How a guest of an internet room finds where the room went: set by
+    /// `CloudService` as it joins one, nil for a room on the router.
+    public var findMovedRoom: (@MainActor (HostMove) async -> Bool)?
+    /// The key salt of the room joined, to tell the host's next room (a new
+    /// listener, a new salt) from the one it is closing.
+    private var joinedSalt: String?
+
+    /// Takes everyone on to another game (a party): the room's own "moving"
+    /// message, with this iPad as the new host under a new code, so every
+    /// guest — iPads and browsers — follows, and comes straight in.
+    @discardableResult
+    public func moveRoom(to next: WorldDocument) -> Bool {
+        guard role == .hosting, !isSolo, let host else { return false }
+        let code = RoomCode.generate()
+        let members = people.map(\.peerID)
+        let capacity = host.configuration.capacity
+        let needsApproval = roomState.needsApproval
+        let isPublic = isRoomPublic
+        let move = HostMove(newHost: localPeerID, newHostName: profile.displayName, roomCode: code, isPublic: isPublic,
+                            capacity: capacity, needsApproval: needsApproval, members: members)
+        host.handOver(move)
+        // The old room closes itself once the news has gone out; its
+        // goodbyes are not this room's.
+        self.host = nil
+        // What belonged to the last game (as `leave` clears), keeping the room's people and chat.
+        roomState = RoomState()
+        pollEndsAt = nil
+        joinRequests = []
+        hostingPort = nil
+        pendingEffects = []
+        _ = deltaInbox.take()
+        _ = transformInbox.take()
+        worldChanges.noteEverything()
+        scripted.reset()
+        scriptLog = []
+        rosterState.reset()
+        roster = []
+        beginHosting(world: next, isStudioSession: false, isPublic: isPublic, capacity: capacity,
+                     roomCode: code, needsApproval: needsApproval, alreadyApproved: members)
+        return true
+    }
+
     /// The room is moving: open it here, or go and find it on the new host.
     private func follow(_ move: HostMove) {
         roomMove = move
         let world = self.world
         let old = client
+        // The host moving its own room on to the next game: a party, not a hand-over.
+        let party = old?.hostPeerID == move.newHost
+        let oldSalt = joinedSalt
         client = nil
         old?.disconnect()
         stopReconnecting()
@@ -795,14 +855,29 @@ public final class SessionCoordinator: ObservableObject {
             return
         }
 
-        status = .reconnecting(L("Moving to {}'s iPad…", move.newHostName))
-        browser.start()
+        status = .reconnecting(party ? L("Going on to the next game with {}…", move.newHostName)
+                                     : L("Moving to {}'s iPad…", move.newHostName))
         let wanted = RoomTag.short(move.newHost)
+        let findOnline = findMovedRoom
+        if findOnline == nil { browser.start() }
         moveTask?.cancel()
         moveTask = Task { @MainActor [weak self] in
             let deadline = Date().addingTimeInterval(25)
             while !Task.isCancelled, Date() < deadline {
-                if let self, let room = self.discoveredPeers.first(where: { $0.hostShortID == wanted && $0.isCompatible }) {
+                if let findOnline {
+                    // An internet room: the host lists its next room under the new code.
+                    if await findOnline(move) {
+                        self?.moveTask = nil
+                        return
+                    }
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    continue
+                }
+                // On the router: the host's next room, not the one it is closing
+                // (a new listener has a new salt).
+                if let self, let room = self.discoveredPeers.first(where: {
+                    $0.hostShortID == wanted && $0.isCompatible && !(party && $0.keySalt == oldSalt)
+                }) {
                     self.moveTask = nil
                     self.join(room, roomCode: move.roomCode)
                     return
@@ -812,7 +887,8 @@ public final class SessionCoordinator: ObservableObject {
             guard let self, !Task.isCancelled else { return }
             self.moveTask = nil
             self.roomMove = nil
-            self.status = .error(L("Couldn't find the room on {}'s iPad.", move.newHostName))
+            self.status = .error(party ? L("Couldn't find {}'s next game.", move.newHostName)
+                                       : L("Couldn't find the room on {}'s iPad.", move.newHostName))
             self.role = .offline
         }
     }

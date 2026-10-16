@@ -3456,6 +3456,13 @@ public enum Strings {
         ("Make worlds of your own and play them.", "自分のワールドをつくって遊ぼう。"),
         ("Next", "つぎへ"),
         ("Back", "もどる"),
+        // A party: the host takes the room on to another game (NextGameSheet)
+        ("Take everyone to another game", "みんなで別のゲームへ行く"),
+        ("Up to {} players", "{}人まで"),
+        ("That game could not be opened.", "そのゲームを開けませんでした。"),
+        ("Only the host can do that.", "それができるのはホストだけです。"),
+        ("Going on to the next game with {}…", "{}といっしょに次のゲームへ移動中…"),
+        ("Couldn't find {}'s next game.", "{}の次のゲームが見つかりませんでした。"),
         ("{} waiting", "{}個まってるよ"),
         ("Menu sounds", "メニューの音"),
         ("A little sound for every button in the menus.", "メニューのボタンをおすと、小さな音が鳴ります。"),
