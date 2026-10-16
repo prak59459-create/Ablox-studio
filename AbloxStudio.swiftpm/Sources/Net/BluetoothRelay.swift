@@ -194,6 +194,10 @@ public final class BluetoothRelayHost: NSObject, CBPeripheralManagerDelegate, @u
         switch peripheral.state {
         case .poweredOn:
             if channel == nil, !stopped { peripheral.publishL2CAPChannel(withEncryption: false) }
+        case .poweredOff, .resetting:
+            // Bluetooth turned off takes the channel and the service with it:
+            // both go up again when it comes back.
+            channel = nil
         case .unauthorized:
             problem(L("Bluetooth is turned off for Ablox. Turn it on in the iPad's Settings → Ablox."))
         case .unsupported:
@@ -303,11 +307,20 @@ public final class BluetoothRoomFinder: NSObject, CBCentralManagerDelegate, CBPe
         central?.scanForPeripherals(withServices: [serviceUUID], options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
     }
 
+    private var lastPublished = Date.distantPast
+    private var lastList: [UUID] = []
+
     private func publish() {
         // A room not seen for half a minute has gone.
         let now = Date()
         rooms = rooms.filter { now.timeIntervalSince($0.value.seenAt) < 30 }
         let list = rooms.values.sorted { $0.seenAt > $1.seenAt }
+        // Every advertisement is heard: tell the screen at most once a second,
+        // unless a room came or went.
+        let ids = list.map(\.id).sorted { $0.uuidString < $1.uuidString }
+        guard ids != lastList || now.timeIntervalSince(lastPublished) > 1 else { return }
+        lastList = ids
+        lastPublished = now
         guard let report = onRooms else { return }
         Task { @MainActor in report(list) }
     }
@@ -386,6 +399,7 @@ public final class BluetoothRoomFinder: NSObject, CBCentralManagerDelegate, CBPe
         let id = peripheral.identifier
         if error == nil, let value = characteristic.value, let info = BluetoothRoomInfo.decode(value) {
             rooms[id] = BluetoothRoom(id: id, info: info, seenAt: Date())
+            lastPublished = .distantPast
             publish()
         }
         finishReading(peripheral)

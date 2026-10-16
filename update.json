@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "6.4",
-  "build": 55,
+  "version": "6.5",
+  "build": 56,
   "protocol": 8,
   "date": "2026-10-16",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shares Ablox 7.6’s engine"
+      "Shares Ablox 7.7’s engine"
     ],
     "ja": [
-      "Ablox 7.6 と 同じ エンジンに"
+      "Ablox 7.7 と 同じ エンジンに"
     ]
   }
 }
