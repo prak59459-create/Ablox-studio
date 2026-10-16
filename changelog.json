@@ -2,6 +2,19 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "6.4",
+      "build": 55,
+      "date": "2026-10-16",
+      "notes": {
+        "en": [
+          "Shares Ablox 7.6’s engine"
+        ],
+        "ja": [
+          "Ablox 7.6 と 同じ エンジンに"
+        ]
+      }
+    },
+    {
       "version": "6.3",
       "build": 54,
       "date": "2026-10-16",

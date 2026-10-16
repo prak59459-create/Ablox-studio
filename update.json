@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "6.3",
-  "build": 54,
+  "version": "6.4",
+  "build": 55,
   "protocol": 8,
   "date": "2026-10-16",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shares Ablox 7.5’s engine: ready for the Mac and for rooms over Bluetooth"
+      "Shares Ablox 7.6’s engine"
     ],
     "ja": [
-      "Ablox 7.5 と 同じ エンジンに：Mac と Bluetooth の ルームの じゅんび"
+      "Ablox 7.6 と 同じ エンジンに"
     ]
   }
 }
