@@ -25,10 +25,10 @@ public final class BluetoothService: ObservableObject {
 
     /// `UserDefaults`: Settings → Rooms over Bluetooth.
     public static let enabledKey = "ablox.bluetoothRooms"
-    /// Whether this version may use Bluetooth at all: true once Package.swift
-    /// asks the iPad for Bluetooth (without that, iOS stops the app the
-    /// moment Bluetooth is touched). Until then the switch is not shown.
-    public static let isReady = false
+    /// Whether this version may use Bluetooth at all: Package.swift asks the
+    /// iPad for it (`.bluetoothAlways`); without that, iOS stops an app the
+    /// moment Bluetooth is touched, so this stays tied to the manifest.
+    public static let isReady = true
     public static var isTurnedOn: Bool { isReady && UserDefaults.standard.bool(forKey: enabledKey) }
 
     public init() {
