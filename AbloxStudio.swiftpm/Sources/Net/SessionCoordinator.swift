@@ -856,7 +856,12 @@ public final class SessionCoordinator: ObservableObject {
 
     /// Reports that the local player touched or tapped a block. The host
     /// decides what that means.
+    /// Blocks the app answers itself, before the world's rules hear of
+    /// them: the Plaza's doors. Returns true when it took the touch.
+    public var localTouch: (@MainActor (UUID) -> Bool)?
+
     public func report(blockID: UUID, cause: EventTriggerPayload.Cause) {
+        if case .touched = cause, let localTouch, localTouch(blockID) { return }
         switch role {
         case .hosting:
             let observation: EventMachine.Observation

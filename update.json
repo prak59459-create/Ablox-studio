@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "5.9",
-  "build": 50,
+  "version": "6.0",
+  "build": 51,
   "protocol": 8,
   "date": "2026-10-16",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shared with Ablox 7.1: the play screen’s three ready-made layouts (easy, normal, pro) are known here too, so a world tested in Studio and played in Ablox agree"
+      "Shares Ablox 7.2’s engine: the words for the Plaza, and worlds tested in Studio behave as in the app"
     ],
     "ja": [
-      "Ablox 7.1 と 共通：プレイ画面の 3つの レイアウト（かんたん・ふつう・プロ）を Studio でも わかるように しました"
+      "Ablox 7.2 と 同じ エンジンに：プラザの ことばと、Studio で ためす ワールドが アプリと 同じ 動きに"
     ]
   }
 }

@@ -2,6 +2,19 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "6.0",
+      "build": 51,
+      "date": "2026-10-16",
+      "notes": {
+        "en": [
+          "Shares Ablox 7.2’s engine: the words for the Plaza, and worlds tested in Studio behave as in the app"
+        ],
+        "ja": [
+          "Ablox 7.2 と 同じ エンジンに：プラザの ことばと、Studio で ためす ワールドが アプリと 同じ 動きに"
+        ]
+      }
+    },
+    {
       "version": "5.9",
       "build": 50,
       "date": "2026-10-16",
