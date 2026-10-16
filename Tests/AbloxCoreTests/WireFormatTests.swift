@@ -99,6 +99,21 @@ final class WireFormatTests: XCTestCase {
         XCTAssertFalse(isSequence(UInt32.max, newerThan: 1))
     }
 
+    func testRelayedTransformsAreJudgedBySender() {
+        // A host passes on two players' transforms, each numbered by its
+        // sender: one has sent thousands of packets, the other a handful.
+        let busy = PeerID(), late = PeerID()
+        var recency = TransformRecency()
+        XCTAssertTrue(recency.accept(5_000, from: busy))
+        XCTAssertTrue(recency.accept(12, from: late), "a lower count from someone else is not late")
+        XCTAssertTrue(recency.accept(5_001, from: busy))
+        XCTAssertTrue(recency.accept(13, from: late))
+        XCTAssertFalse(recency.accept(12, from: late), "a late one from the same sender is")
+        XCTAssertFalse(recency.accept(13, from: late))
+        XCTAssertFalse(recency.accept(0, from: busy), "nor one from long before")
+        XCTAssertTrue(recency.accept(1, from: PeerID()), "and the list of senders stays small")
+    }
+
     // MARK: Reassembly
 
     private func bytes(for packets: [Packet]) -> Data {

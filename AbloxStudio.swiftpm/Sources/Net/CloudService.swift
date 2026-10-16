@@ -466,15 +466,19 @@ public final class CloudService: ObservableObject {
     public func stopHosting() {
         hostTask?.cancel()
         hostTask = nil
-        relayHost?.stop()
+        let relay = relayHost
         relayHost = nil
         if let key = hostedRoom, let database {
-            // The relay goes first: the rules let the host clear it only
-            // while its room is still listed.
+            // The last messages out first (goodbyes), then the relay, then the
+            // listing: the rules let the host write to the relay, and clear
+            // it, only while its room is still listed.
             Task {
+                await relay?.stop(draining: 2)
                 try? await database.delete(CloudPath.relay(key))
                 try? await database.delete(CloudPath.room(key))
             }
+        } else if let relay {
+            Task { await relay.stop() }
         }
         if hostedRoom != nil { setPlaying(game: nil, room: nil) }
         hostedRoom = nil

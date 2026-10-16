@@ -113,6 +113,9 @@ private final class RelayPipe: @unchecked Sendable {
         connection.cancel()
         onClose?()
     }
+
+    /// Everything read from the connection has reached the database.
+    var isIdle: Bool { !sending && outbox.isEmpty }
 }
 
 // MARK: - The host's side
@@ -171,18 +174,34 @@ public final class CloudRelayHost: @unchecked Sendable {
         listed = listed.intersection(Set(pipes.keys)).union(open)
     }
 
-    public func stop() {
+    /// Stops taking new links, then closes every one — once what is still on
+    /// its way out (a goodbye, the room moving) has reached the database, or
+    /// after `draining` seconds.
+    public func stop(draining: Double = 0) async {
         watcher?.cancel()
         watcher = nil
         linkWatcher?.cancel()
         linkWatcher = nil
-        queue.async {
-            for pipe in self.pipes.values { pipe.close() }
-            self.pipes.removeAll()
+        if draining > 0 {
+            let deadline = Date().addingTimeInterval(draining)
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            while Date() < deadline, await isBusy() {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
         }
-        let database = self.database
-        let room = self.room
-        Task { try? await database.delete(CloudPath.relay(room)) }
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            queue.async {
+                for pipe in self.pipes.values { pipe.close() }
+                self.pipes.removeAll()
+                done.resume()
+            }
+        }
+    }
+
+    private func isBusy() async -> Bool {
+        await withCheckedContinuation { (answer: CheckedContinuation<Bool, Never>) in
+            queue.async { answer.resume(returning: self.pipes.values.contains { !$0.isIdle }) }
+        }
     }
 
     private func update(_ links: [String: JSONValue]) {
@@ -322,7 +341,10 @@ public final class CloudRelayGuest: @unchecked Sendable {
                             mirror.apply(event)
                             if mirror.value != .null { seen = true }
                             if event.kind == .cancel || (seen && mirror.value == .null) {
-                                self.queue.async { pipe.close() }
+                                // The host's last pieces come on the other
+                                // stream, which is not in step with this one:
+                                // a moment for them before the line closes.
+                                self.queue.asyncAfter(deadline: .now() + 1.5) { pipe.close() }
                                 return
                             }
                         }

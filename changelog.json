@@ -2,6 +2,19 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "5.7",
+      "build": 48,
+      "date": "2026-10-16",
+      "notes": {
+        "en": [
+          "Shared with Ablox 6.9: in rooms of three or more, everyone’s movement reaches everyone, and guests are told when the host closes the room"
+        ],
+        "ja": [
+          "Ablox 6.9 と同じ: 3人 以上の ルームで みんなの 動きが ちゃんと 届くように し、ホストが ルームを 閉じたら 知らせるように しました"
+        ]
+      }
+    },
+    {
       "version": "5.6",
       "build": 47,
       "date": "2026-10-13",

@@ -55,9 +55,10 @@ public final class PeerConnection {
     private let queue: DispatchQueue
     private let codec: PacketCodec
 
-    /// Last sequence seen per packet kind, so a late `playerTransform` cannot
-    /// rubber-band an avatar backwards.
-    private var lastSequenceByKind: [PacketKind: UInt32] = [:]
+    /// The last transform taken from each sender, so a late one cannot
+    /// rubber-band an avatar backwards. Per sender: a host passes on everyone's
+    /// transforms, each numbered by its own sender (`TransformRecency`).
+    private var transformRecency = TransformRecency()
 
     private var pendingPings: [UInt32: UInt64] = [:]
     private var pingNonce: UInt32 = 0
@@ -235,10 +236,9 @@ public final class PeerConnection {
         // Drop stale high-frequency packets. Reliable kinds (world edits,
         // chat, handshakes) are always delivered: losing one would desync the
         // world permanently, whereas a late transform is simply irrelevant.
-        if packet.kind.isHighFrequency, let last = lastSequenceByKind[packet.kind] {
-            guard isSequence(packet.header.sequence, newerThan: last) else { return }
+        if packet.kind.isHighFrequency {
+            guard transformRecency.accept(packet.header.sequence, from: packet.header.senderID) else { return }
         }
-        lastSequenceByKind[packet.kind] = packet.header.sequence
 
         switch packet.kind {
         case .handshake:

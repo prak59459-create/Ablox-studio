@@ -201,7 +201,9 @@ public final class AbloxHost {
         tickTimer?.cancel()
         tickTimer = nil
         for connection in connections.values {
-            connection.sendEmpty(.leave)
+            // Goodbye from the host by name, so a guest knows the room has
+            // closed rather than trying to reconnect to it.
+            connection.send(.leave, LeavePayload(peerID: localPeerID))
             connection.cancel()
         }
         connections.removeAll()
@@ -349,7 +351,12 @@ public final class AbloxHost {
             // check that touched it, here and on everyone's iPad.
             guard payload.isPlausible else { return }
             game.updateTransform(payload)
-            relay(packet, excluding: peer)
+            // Numbered again by this host, under the player's own id: an older
+            // iPad keeps one count for all transforms, and would otherwise
+            // throw away whoever counts lower.
+            if let renumbered = try? codec.encode(.playerTransform, payload, sender: payload.peerID) {
+                relay(renumbered, excluding: peer)
+            }
             onRemoteTransform?(payload)
 
         case .eventTrigger:

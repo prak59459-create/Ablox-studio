@@ -123,6 +123,33 @@ public func isSequence(_ candidate: UInt32, newerThan reference: UInt32) -> Bool
     return candidate != reference && (candidate &- reference) < half
 }
 
+/// Which avatar transforms are new enough to use.
+///
+/// Kept per sender, not per kind: a host passes on every player's
+/// transforms, each numbered by the player who sent it, so one count for the
+/// kind would throw away whoever happens to count lower — in a room of three
+/// or more, a player who joined later stood still on everyone else's screen.
+public struct TransformRecency: Sendable {
+    /// Senders remembered at once; more than any room holds.
+    public static let maximumSenders = 256
+
+    private var last: [PeerID: UInt32] = [:]
+
+    public init() {}
+
+    /// True when this transform is newer than the last one taken from the
+    /// same sender, and then it is remembered; false for a late one.
+    public mutating func accept(_ sequence: UInt32, from sender: PeerID) -> Bool {
+        if let previous = last[sender] {
+            guard isSequence(sequence, newerThan: previous) else { return false }
+        } else if last.count >= Self.maximumSenders {
+            last.removeAll()
+        }
+        last[sender] = sequence
+        return true
+    }
+}
+
 // MARK: - StreamReassembler
 
 /// Accumulates bytes from a stream and yields complete packets.
