@@ -3450,5 +3450,9 @@ public enum Strings {
         ("Only what is on screen changes: a world is the same at every level.", "変わるのは画面に出るものだけ。ワールドはどのレベルでも同じです。"),
         // The play screen's layouts
         ("Screen layout", "画面のレイアウト"),
+        ("Big buttons, a stick that stays in the corner, and today's mission on the screen.", "大きなボタン、すみに止まったスティック、画面に今日のミッション。"),
+        ("The play screen as it comes.", "はじめのままの画面。"),
+        ("Smaller buttons, with where you are, how fast you go and the first-person button.", "小さめのボタンに、いる場所・はやさ・一人称ボタンつき。"),
+        ("Changed by hand: your own play screen.", "自分で変えた、あなただけの画面。"),
     ]
 }

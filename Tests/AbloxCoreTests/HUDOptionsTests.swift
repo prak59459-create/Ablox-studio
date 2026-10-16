@@ -136,3 +136,56 @@ final class HUDOptionsTests: XCTestCase {
         XCTAssertEqual(Set(keys).count, keys.count)
     }
 }
+
+/// The three ready-made play screens.
+final class HUDLayoutTests: XCTestCase {
+
+    func testEachLayoutIsWhatItSaysAndKnowsItself() {
+        for layout in HUDLayout.allCases {
+            var p = PlayPreferences()
+            layout.apply(to: &p)
+            XCTAssertTrue(layout.matches(p), "\(layout)")
+            XCTAssertEqual(HUDLayout.current(p), layout)
+        }
+    }
+
+    func testNormalIsThePlayScreenAsItComes() {
+        XCTAssertEqual(HUDLayout.current(PlayPreferences()), .normal)
+    }
+
+    func testEasyIsBiggerAndPutsTheStickInTheCorner() {
+        var p = PlayPreferences()
+        HUDLayout.easy.apply(to: &p)
+        XCTAssertGreaterThan(p.buttonScale, 1)
+        XCTAssertEqual(p.hud.joystickStyle, .fixed)
+        XCTAssertTrue(p.hud.showMissionTracker)
+        XCTAssertTrue(p.hud.hiddenTopBar.contains(.scoreboard))
+        var pro = PlayPreferences()
+        HUDLayout.pro.apply(to: &pro)
+        XCTAssertLessThan(pro.buttonScale, 1)
+        XCTAssertTrue(pro.hud.showPosition && pro.hud.showSpeed && pro.hud.showViewButton)
+    }
+
+    func testALayoutLeavesWhatItIsNotAbout() {
+        var p = PlayPreferences()
+        p.hud.invertLookX = true
+        p.hud.pauseWhenAway = false
+        HUDLayout.easy.apply(to: &p)
+        HUDLayout.pro.apply(to: &p)
+        XCTAssertTrue(p.hud.invertLookX)
+        XCTAssertFalse(p.hud.pauseWhenAway)
+        // Something a layout decides, changed by hand afterwards: no longer one
+        // of the three. Something none of them decides does not count.
+        p.hud.showBattery.toggle()
+        XCTAssertEqual(HUDLayout.current(p), .pro)
+        p.hud.showSpeed.toggle()
+        XCTAssertNil(HUDLayout.current(p))
+    }
+
+    func testLayoutsHaveJapanese() {
+        for layout in HUDLayout.allCases {
+            XCTAssertNotNil(Strings.japanese[layout.detail], layout.detail)
+        }
+    }
+}
+

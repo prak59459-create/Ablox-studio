@@ -109,6 +109,70 @@ public enum ButtonPreset: String, CaseIterable, Sendable, Identifiable {
     }
 }
 
+/// Three ready-made play screens (Ablox NEXT): easy, normal, pro. Each sets
+/// only what it is about — the buttons' size, the stick, which buttons and
+/// facts show — and leaves the rest (the camera's speed, the habits) as
+/// the player had them. The browser version has the same three.
+public enum HUDLayout: String, CaseIterable, Sendable, Identifiable {
+    case easy, normal, pro
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .easy: return L("Easy")
+        case .normal: return L("Normal")
+        case .pro: return L("Pro")
+        }
+    }
+
+    public var detail: String {
+        switch self {
+        case .easy: return L("Big buttons, a stick that stays in the corner, and today's mission on the screen.")
+        case .normal: return L("The play screen as it comes.")
+        case .pro: return L("Smaller buttons, with where you are, how fast you go and the first-person button.")
+        }
+    }
+
+    private var buttons: ButtonPreset { self == .easy ? .big : .standard }
+
+    public func apply(to preferences: inout PlayPreferences) {
+        let standard = HUDOptions()
+        var hud = preferences.hud
+        hud.hiddenTopBar = self == .easy ? [.scoreboard] : []
+        hud.showMissionTracker = self == .easy
+        hud.showZoomButtons = self == .easy
+        hud.joystickStyle = self == .easy ? .fixed : standard.joystickStyle
+        hud.eightWay = self == .easy
+        hud.showViewButton = self == .pro
+        hud.showShiftLockButton = self != .easy
+        hud.showPosition = self == .pro
+        hud.showSpeed = self == .pro
+        hud.showCoinsPreview = self == .pro
+        hud.mapSize = self == .pro ? .medium : standard.mapSize
+        hud.opacity = self == .pro ? 0.85 : standard.opacity
+        preferences.hud = hud
+        buttons.apply(to: &preferences)
+        if self == .pro {
+            preferences.buttonScale = 0.85
+            preferences.hud.joystickScale = 0.9
+            preferences.clamp()
+        }
+    }
+
+    /// Whether the play screen is this layout as it stands (nothing changed by hand since).
+    public func matches(_ preferences: PlayPreferences) -> Bool {
+        var made = preferences
+        apply(to: &made)
+        return made == preferences
+    }
+
+    /// The layout the play screen is, or nil when it has been changed by hand.
+    public static func current(_ preferences: PlayPreferences) -> HUDLayout? {
+        allCases.first { $0.matches(preferences) }
+    }
+}
+
 /// Everything about the play screen's buttons, chips, stick and camera that
 /// a player can change. One field of `PlayPreferences`, read tolerantly, so
 /// an option added later never loses the others.
