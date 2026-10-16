@@ -9,7 +9,6 @@ final class ScreenFitTests: XCTestCase {
         // 13-inch iPad in landscape.
         for fit in [ScreenFit(width: 744, height: 1133), ScreenFit(width: 1366, height: 1024)] {
             XCTAssertFalse(fit.isCompact)
-            XCTAssertEqual(fit.sidebarWidth, 264)
             XCTAssertTrue(fit.showsTabNames)
             XCTAssertEqual(fit.sidePanel(420), 420)
             XCTAssertEqual(fit.square(520), 520)
@@ -21,7 +20,6 @@ final class ScreenFitTests: XCTestCase {
         for fit in [ScreenFit(width: 932, height: 430), ScreenFit(width: 390, height: 844)] {
             XCTAssertTrue(fit.isCompact)
             XCTAssertFalse(fit.showsTabNames)
-            XCTAssertLessThan(fit.sidebarWidth, 100)
             XCTAssertLessThan(fit.gutter, 28)
         }
     }
@@ -53,10 +51,9 @@ final class ScreenFitTests: XCTestCase {
         XCTAssertEqual(iPad.cardMinimum(280), 280)
         XCTAssertEqual(iPad.cardMinimum(240), 240)
 
-        // The smallest iPhone in portrait: a card is never wider than the
-        // page beside the icons-only sidebar.
+        // The smallest iPhone in portrait: a card is never wider than the page.
         let small = ScreenFit(width: 320, height: 568)
-        let page = small.width - small.sidebarWidth - small.gutter * 2
+        let page = small.width - small.gutter * 2
         for preferred in [170.0, 230, 240, 260, 280] {
             XCTAssertLessThanOrEqual(small.cardMinimum(preferred), page)
             XCTAssertGreaterThanOrEqual(small.cardMinimum(preferred), 140)

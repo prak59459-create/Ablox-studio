@@ -2,10 +2,9 @@
 /// with it.
 ///
 /// Ablox is drawn for an iPad, but the same app runs on an iPhone (and in a
-/// narrow Split View on an iPad). There the iPad's 264-point sidebar would
-/// take a third of the screen and the side panels would cover the game, so
-/// a small window gets the compact layout: an icons-only sidebar, narrower
-/// panels and a map that fits.
+/// narrow Split View on an iPad). There the side panels would cover the
+/// game, so a small window gets the compact layout: a full-width dock with
+/// smaller tabs, narrower panels and a map that fits.
 ///
 /// Plain numbers rather than CGSize so it can be tested off-device.
 public struct ScreenFit: Equatable, Sendable {
@@ -27,34 +26,31 @@ public struct ScreenFit: Equatable, Sendable {
         width < Self.compactWidth || height < Self.compactHeight
     }
 
-    /// The main menu's sidebar: names beside the icons on an iPad, icons
-    /// alone on an iPhone.
-    public var sidebarWidth: Double { isCompact ? 76 : 264 }
-
-    /// Whether the sidebar has room for the tab names, the logo and the
-    /// connection status.
+    /// The dock's tabs show their names under the pictures on an iPad; on a
+    /// phone the names are smaller. (Before the dock, the menu had a sidebar
+    /// beside the page; now the page has the whole width.)
     public var showsTabNames: Bool { !isCompact }
 
     /// The space kept around the content of a page.
     public var gutter: Double { isCompact ? 14 : 28 }
 
     /// The narrowest a card in a grid of cards may be: the size it was drawn
-    /// at on an iPad, but on a small screen never wider than the page beside
-    /// the sidebar (less its margins and a panel's own padding), so one column
-    /// always fits instead of running off the edge.
+    /// at on an iPad, but on a small screen never wider than the page (less
+    /// its margins and a panel's own padding), so one column always fits
+    /// instead of running off the edge.
     public func cardMinimum(_ preferred: Double) -> Double {
         guard isCompact else { return preferred }
-        let room = width - sidebarWidth - gutter * 4
+        let room = width - gutter * 4
         return max(140, min(preferred, room))
     }
 
-    /// Whether the page beside the sidebar, less its margins, is at least
+    /// Whether the page, less its margins, is at least
     /// `room` wide: things set side by side on an iPad go one under the
     /// other when it is not (a phone held upright). An iPad keeps the
     /// layout it was drawn with.
     public func pageHas(room: Double) -> Bool {
         guard isCompact else { return true }
-        return width - sidebarWidth - gutter * 2 >= room
+        return width - gutter * 2 >= room
     }
 
     /// A panel beside the game or the avatar (player list, avatar editor):

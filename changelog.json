@@ -2,6 +2,23 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "5.8",
+      "build": 49,
+      "date": "2026-10-16",
+      "notes": {
+        "en": [
+          "Three building levels on the toolbar: Easy (pick, move and paint, on a 1 m grid), Normal (every building tool, snapping and the rules) and Pro (everything, with the ground tool and scripts)",
+          "The tools have the pictures drawn for Ablox",
+          "The same block buttons, cards and menu sounds as the new Ablox"
+        ],
+        "ja": [
+          "ツールバーに 3つの つくるレベル：かんたん（選ぶ・動かす・ぬる、1 m ごとの マス目）、ふつう（つくる道具 ぜんぶと ぴったり合わせる 設定と ルール）、プロ（ぜんぶ。地面の 道具と スクリプトも）",
+          "道具の アイコンが Ablox の ために 描いた 絵に なりました",
+          "新しい Ablox と 同じ ブロックの ボタン・カード・メニューの 音"
+        ]
+      }
+    },
+    {
       "version": "5.7",
       "build": 48,
       "date": "2026-10-16",

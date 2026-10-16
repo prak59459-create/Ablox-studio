@@ -7,6 +7,10 @@ struct StudioToolbar: View {
     var onFrameSelection: () -> Void
     var onExit: () -> Void
 
+    /// Easy, normal or pro: which tools and choices the bar shows (StudioLevel).
+    @AppStorage(StudioLevel.key) private var levelName = StudioLevel.standard.rawValue
+    private var level: StudioLevel { StudioLevel(stored: levelName) }
+
     @State private var showShareSheet = false
     @State private var showGuide = false
     @State private var showPublish = false
@@ -27,13 +31,17 @@ struct StudioToolbar: View {
 
             Divider().frame(height: 26).background(Color.white.opacity(0.1))
 
+            levelMenu
+
             toolPicker
 
             Divider().frame(height: 26).background(Color.white.opacity(0.1))
 
-            snapControls
+            if level.showsSnapping {
+                snapControls
 
-            Divider().frame(height: 26).background(Color.white.opacity(0.1))
+                Divider().frame(height: 26).background(Color.white.opacity(0.1))
+            }
 
             historyControls
 
@@ -79,15 +87,58 @@ struct StudioToolbar: View {
         .frame(minWidth: 90, alignment: .leading)
     }
 
+    /// Easy, normal or pro. Choosing easy puts the tools it does not have
+    /// away and builds on whole metres and quarter turns.
+    private var levelMenu: some View {
+        Menu {
+            Picker(L("Building level"), selection: Binding(get: { level }, set: { choose($0) })) {
+                ForEach(StudioLevel.allCases) { choice in
+                    Text(choice.displayName).tag(choice)
+                }
+            }
+            Text(L("Only what is on screen changes: a world is the same at every level."))
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: level == .easy ? "1.circle.fill" : level == .normal ? "2.circle.fill" : "3.circle.fill")
+                    .font(.caption)
+                Text(level.displayName)
+                    .font(.caption.weight(.bold))
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(Ablox.Palette.accent.opacity(0.16), in: Capsule())
+            .foregroundStyle(Ablox.Palette.accent)
+        }
+        .accessibilityLabel(L("Building level"))
+    }
+
+    private func choose(_ next: StudioLevel) {
+        levelName = next.rawValue
+        session.setTool(next.tool(replacing: session.document.tool))
+        if let grid = next.fixedGrid { session.gridSize = grid }
+        if let angle = next.fixedAngle { session.angleSnap = angle }
+    }
+
+    /// The drawn picture for a tool that has one (design/icons).
+    private func drawnIcon(for tool: EditorDocument.Tool) -> DrawnIcon? {
+        switch tool {
+        case .select: return .toolSelect
+        case .move: return .toolMove
+        case .rotate: return .toolRotate
+        case .scale: return .toolScale
+        case .paint: return .toolPaint
+        default: return nil
+        }
+    }
+
     private var toolPicker: some View {
         HStack(spacing: 3) {
-            ForEach(EditorDocument.Tool.allCases) { tool in
+            ForEach(level.tools) { tool in
                 let isActive = session.document.tool == tool
                 Button {
                     session.setTool(tool)
                 } label: {
-                    Image(systemName: tool.symbolName)
-                        .font(.system(size: 14, weight: .semibold))
+                    toolPicture(tool)
                         .frame(width: 36, height: 32)
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -103,6 +154,15 @@ struct StudioToolbar: View {
         }
         .padding(3)
         .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+    }
+
+    @ViewBuilder private func toolPicture(_ tool: EditorDocument.Tool) -> some View {
+        if let drawn = drawnIcon(for: tool) {
+            DrawnIconImage(drawn, size: 26)
+        } else {
+            Image(systemName: tool.symbolName)
+                .font(.system(size: 14, weight: .semibold))
+        }
     }
 
     private var snapControls: some View {

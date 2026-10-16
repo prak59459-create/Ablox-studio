@@ -8,6 +8,19 @@ struct StudioView: View {
     var onExit: () -> Void
 
     @State private var leftTab: LeftTab = .explorer
+    /// Which panels the level shows (StudioLevel): easy has no rules or scripts.
+    @AppStorage(StudioLevel.key) private var levelName = StudioLevel.standard.rawValue
+    private var level: StudioLevel { StudioLevel(stored: levelName) }
+
+    private var leftTabs: [LeftTab] {
+        LeftTab.allCases.filter { tab in
+            switch tab {
+            case .explorer: return true
+            case .rules: return level.showsRules
+            case .script: return level.showsScripts
+            }
+        }
+    }
     @StateObject private var viewportCommands = ViewportCommands()
     @State private var showPalette = true
     @State private var sheet: StudioSheet?
@@ -106,6 +119,10 @@ struct StudioView: View {
         .tint(Ablox.Palette.accent)
         .animation(.easeInOut(duration: 0.22), value: session.mode)
         .animation(.easeInOut(duration: 0.2), value: session.document.tool)
+        // A panel the level put away: back to the Explorer.
+        .onChange(of: levelName) { _, _ in
+            if !leftTabs.contains(leftTab) { leftTab = .explorer }
+        }
         .statusBarHidden()
         .fullScreenCover(isPresented: $session.isTestPlaying) {
             let player = session.testPlayer
@@ -148,7 +165,7 @@ struct StudioView: View {
     private var leftPane: some View {
         VStack(spacing: 0) {
             Picker(L("Panel"), selection: $leftTab) {
-                ForEach(LeftTab.allCases) { tab in
+                ForEach(leftTabs) { tab in
                     Label(tab.title, systemImage: tab.symbolName).tag(tab)
                 }
             }

@@ -1,16 +1,20 @@
 {
   "app": "Ablox Studio",
-  "version": "5.7",
-  "build": 48,
+  "version": "5.8",
+  "build": 49,
   "protocol": 8,
   "date": "2026-10-16",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shared with Ablox 6.9: in rooms of three or more, everyone’s movement reaches everyone, and guests are told when the host closes the room"
+      "Three building levels on the toolbar: Easy (pick, move and paint, on a 1 m grid), Normal (every building tool, snapping and the rules) and Pro (everything, with the ground tool and scripts)",
+      "The tools have the pictures drawn for Ablox",
+      "The same block buttons, cards and menu sounds as the new Ablox"
     ],
     "ja": [
-      "Ablox 6.9 と同じ: 3人 以上の ルームで みんなの 動きが ちゃんと 届くように し、ホストが ルームを 閉じたら 知らせるように しました"
+      "ツールバーに 3つの つくるレベル：かんたん（選ぶ・動かす・ぬる、1 m ごとの マス目）、ふつう（つくる道具 ぜんぶと ぴったり合わせる 設定と ルール）、プロ（ぜんぶ。地面の 道具と スクリプトも）",
+      "道具の アイコンが Ablox の ために 描いた 絵に なりました",
+      "新しい Ablox と 同じ ブロックの ボタン・カード・メニューの 音"
     ]
   }
 }

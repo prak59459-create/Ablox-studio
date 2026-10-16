@@ -57,6 +57,8 @@ MIRRORED_FILES=(
   "Sources/UI/Components/PresentationQueue.swift:Sources/UI/Components/PresentationQueue.swift"
   "Sources/UI/Components/SoundLibraryViews.swift:Sources/UI/Components/SoundLibraryViews.swift"
   "Sources/UI/Components/UpdateHistoryViews.swift:Sources/UI/Components/UpdateHistoryViews.swift"
+  # Ablox NEXT's block buttons, cards and menu sounds.
+  "Sources/UI/Components/BlockStyles.swift:Sources/UI/Components/BlockStyles.swift"
   # The play screen's stick, camera, jump and script HUD, for Play (test play).
   "Sources/UI/Game/VirtualJoystick.swift:Sources/UI/Game/VirtualJoystick.swift"
   "Sources/UI/Game/ScriptHUDView.swift:Sources/UI/Game/ScriptHUDView.swift"
