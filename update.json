@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "6.0",
-  "build": 51,
+  "version": "6.1",
+  "build": 52,
   "protocol": 8,
   "date": "2026-10-16",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shares Ablox 7.2’s engine: the words for the Plaza, and worlds tested in Studio behave as in the app"
+      "Shares Ablox 7.3’s engine and words"
     ],
     "ja": [
-      "Ablox 7.2 と 同じ エンジンに：プラザの ことばと、Studio で ためす ワールドが アプリと 同じ 動きに"
+      "Ablox 7.3 と 同じ エンジンと ことばに"
     ]
   }
 }
