@@ -2,6 +2,19 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "6.3",
+      "build": 54,
+      "date": "2026-10-16",
+      "notes": {
+        "en": [
+          "Shares Ablox 7.5’s engine: ready for the Mac and for rooms over Bluetooth"
+        ],
+        "ja": [
+          "Ablox 7.5 と 同じ エンジンに：Mac と Bluetooth の ルームの じゅんび"
+        ]
+      }
+    },
+    {
       "version": "6.2",
       "build": 53,
       "date": "2026-10-16",

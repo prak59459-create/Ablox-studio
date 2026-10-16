@@ -1,5 +1,10 @@
 import Foundation
 import AVFoundation
+// On a Mac (Mac Catalyst) the audio buffer types come from CoreAudio itself;
+// on an iPad, AVFoundation brings them.
+#if targetEnvironment(macCatalyst)
+import CoreAudio
+#endif
 import AbloxCore
 
 /// Ablox's sound effects and music.

@@ -3463,6 +3463,10 @@ public enum Strings {
         ("Only the host can do that.", "それができるのはホストだけです。"),
         ("Going on to the next game with {}…", "{}といっしょに次のゲームへ移動中…"),
         ("Couldn't find {}'s next game.", "{}の次のゲームが見つかりませんでした。"),
+        // Rooms over Bluetooth (Net/BluetoothRelay.swift)
+        ("Bluetooth is off. Turn it on to find rooms nearby without Wi-Fi.", "Bluetooth がオフです。オンにすると、Wi-Fi がなくても近くのルームが見つかります。"),
+        ("Bluetooth is turned off for Ablox. Turn it on in the iPad's Settings → Ablox.", "Ablox の Bluetooth がオフになっています。iPad の「設定」→「Ablox」でオンにしてください。"),
+        ("This iPad cannot host over Bluetooth.", "この iPad では Bluetooth でルームを開けません。"),
         ("{} waiting", "{}個まってるよ"),
         ("Menu sounds", "メニューの音"),
         ("A little sound for every button in the menus.", "メニューのボタンをおすと、小さな音が鳴ります。"),
