@@ -2,6 +2,19 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "6.7",
+      "build": 58,
+      "date": "2026-10-17",
+      "notes": {
+        "en": [
+          "Kept in step with Ablox 7.9: the shared core now has the AI helper's rules, the help list and their translations, so games and words stay the same in both apps"
+        ],
+        "ja": [
+          "Ablox 7.9 と そろえました：共通の しくみに AIヘルパーの きまり・ヘルプの 答え・ほんやくが 入り、2つの アプリで ゲームと ことばが 同じに なります"
+        ]
+      }
+    },
+    {
       "version": "6.6",
       "build": 57,
       "date": "2026-10-16",
