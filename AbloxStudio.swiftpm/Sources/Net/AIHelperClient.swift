@@ -29,17 +29,22 @@ struct AIHelperClient {
     func ask(_ question: String, history: [AIHelper.Turn], japanese: Bool,
              moderator: ChatModerator = ChatModerator()) async -> Result<String, AIHelper.Failure> {
         guard let key = AIHelperKey.read() else { return .failure(.badKey) }
-        var request = URLRequest(url: AIHelper.endpoint, timeoutInterval: 25)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = AIHelper.requestBody(question: question, history: history, japanese: japanese)
-        do {
-            let (data, response) = try await session.data(for: request)
-            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            return AIHelper.reply(status: status, data: data, moderator: moderator)
-        } catch {
-            return .failure(.offline)
+        var result: Result<String, AIHelper.Failure> = .failure(.unreadable)
+        for model in AIHelper.models {
+            var request = URLRequest(url: AIHelper.endpoint, timeoutInterval: 25)
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = AIHelper.requestBody(question: question, history: history, japanese: japanese, model: model)
+            do {
+                let (data, response) = try await session.data(for: request)
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                result = AIHelper.reply(status: status, data: data, moderator: moderator)
+                guard AIHelper.modelIsGone(status: status) else { return result }
+            } catch {
+                return .failure(.offline)
+            }
         }
+        return result
     }
 }

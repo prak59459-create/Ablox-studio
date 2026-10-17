@@ -11,12 +11,18 @@ import Foundation
 // a low token limit — the free tier lasts longer and answers stay short.
 //
 // The provider is any OpenAI-compatible chat endpoint; the default is Groq
-// with Llama 4 Scout. Net/AIHelperClient.swift sends it; everything here is
+// with Llama 3.1 8B Instant (the free tier's most generous limits), and
+// another model is tried when the provider says a model is gone (404).
+// Net/AIHelperClient.swift sends it; everything here is
 // plain data, tested on Linux.
 
 public enum AIHelper {
     public static let endpoint = URL(string: "https://api.groq.com/openai/v1/chat/completions")!
-    public static let model = "meta-llama/llama-4-scout-17b-16e-instruct"
+    /// Tried in order: the next one only when the provider no longer has a model.
+    public static let models = ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]
+    public static var model: String { models[0] }
+    /// The provider's answer when the model named in the request is gone.
+    public static func modelIsGone(status: Int) -> Bool { status == 404 || status == 400 }
     /// Enough for four or five short sentences.
     public static let maximumTokens = 260
     /// Turns of the conversation sent with each question (question + answer each).

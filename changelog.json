@@ -2,6 +2,19 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "6.8",
+      "build": 59,
+      "date": "2026-10-17",
+      "notes": {
+        "en": [
+          "Same engine as Ablox 8.0: the AI helper now uses Llama 3.1 8B Instant and moves on to the next model if one is gone (404)"
+        ],
+        "ja": [
+          "Ablox 8.0 と おなじ エンジンに しました：AI ヘルパーの モデルを Llama 3.1 8B Instant に かえ、「404」の ときは 自動で つぎの モデルに かわります"
+        ]
+      }
+    },
+    {
       "version": "6.7",
       "build": 58,
       "date": "2026-10-17",

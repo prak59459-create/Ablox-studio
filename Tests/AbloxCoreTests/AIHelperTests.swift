@@ -33,6 +33,14 @@ final class AIHelperTests: XCTestCase {
         XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("Bearer"), "the key never goes in the body")
     }
 
+    func testAModelThatIsGoneMovesOnToTheNext() {
+        XCTAssertEqual(AIHelper.model, "llama-3.1-8b-instant")
+        XCTAssertGreaterThan(AIHelper.models.count, 1)
+        XCTAssertTrue(AIHelper.modelIsGone(status: 404))
+        XCTAssertFalse(AIHelper.modelIsGone(status: 401))
+        XCTAssertFalse(AIHelper.modelIsGone(status: 200))
+    }
+
     func testTheGuideIsShortInBothLanguages() {
         for japanese in [true, false] {
             let prompt = AIHelper.systemPrompt(japanese: japanese)

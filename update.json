@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "6.7",
-  "build": 58,
+  "version": "6.8",
+  "build": 59,
   "protocol": 8,
   "date": "2026-10-17",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Kept in step with Ablox 7.9: the shared core now has the AI helper's rules, the help list and their translations, so games and words stay the same in both apps"
+      "Same engine as Ablox 8.0: the AI helper now uses Llama 3.1 8B Instant and moves on to the next model if one is gone (404)"
     ],
     "ja": [
-      "Ablox 7.9 と そろえました：共通の しくみに AIヘルパーの きまり・ヘルプの 答え・ほんやくが 入り、2つの アプリで ゲームと ことばが 同じに なります"
+      "Ablox 8.0 と おなじ エンジンに しました：AI ヘルパーの モデルを Llama 3.1 8B Instant に かえ、「404」の ときは 自動で つぎの モデルに かわります"
     ]
   }
 }
