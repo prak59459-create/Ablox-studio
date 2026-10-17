@@ -34,7 +34,13 @@ final class AIHelperTests: XCTestCase {
     }
 
     func testAModelThatIsGoneMovesOnToTheNext() {
-        XCTAssertEqual(AIHelper.model, "llama-3.1-8b-instant")
+        XCTAssertEqual(AIHelper.model, "qwen/qwen3.8-27b")
+        let list = #"{"data":[{"id":"whisper-large-v3"},{"id":"openai/gpt-oss-20b"},{"id":"zz-chat"}]}"#
+        XCTAssertEqual(AIHelper.chooseModel(fromList: Data(list.utf8)), "openai/gpt-oss-20b")
+        let unknown = #"{"data":[{"id":"whisper-large-v3"},{"id":"meta-llama/llama-prompt-guard-2-22m"},{"id":"new-chat-9b"}]}"#
+        XCTAssertEqual(AIHelper.chooseModel(fromList: Data(unknown.utf8)), "new-chat-9b")
+        XCTAssertNil(AIHelper.chooseModel(fromList: Data("{}".utf8)))
+        XCTAssertEqual(AIHelper.clean("<think>hmm</think>Tap Host."), "Tap Host.")
         XCTAssertGreaterThan(AIHelper.models.count, 1)
         XCTAssertTrue(AIHelper.modelIsGone(status: 404))
         XCTAssertFalse(AIHelper.modelIsGone(status: 401))

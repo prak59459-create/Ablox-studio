@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "6.8",
-  "build": 59,
+  "version": "6.9",
+  "build": 60,
   "protocol": 8,
   "date": "2026-10-17",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Same engine as Ablox 8.0: the AI helper now uses Llama 3.1 8B Instant and moves on to the next model if one is gone (404)"
+      "Same engine as Ablox 8.1: the AI helper works again (Qwen 3.8, and it finds another model by itself when one is gone)"
     ],
     "ja": [
-      "Ablox 8.0 と おなじ エンジンに しました：AI ヘルパーの モデルを Llama 3.1 8B Instant に かえ、「404」の ときは 自動で つぎの モデルに かわります"
+      "Ablox 8.1 と おなじ エンジン：AI ヘルパーが また 使えるように なりました（Qwen 3.8。モデルが なくなっても 自分で ほかの モデルを さがします）"
     ]
   }
 }

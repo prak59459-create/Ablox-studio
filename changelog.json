@@ -2,6 +2,19 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "6.9",
+      "build": 60,
+      "date": "2026-10-17",
+      "notes": {
+        "en": [
+          "Same engine as Ablox 8.1: the AI helper works again (Qwen 3.8, and it finds another model by itself when one is gone)"
+        ],
+        "ja": [
+          "Ablox 8.1 と おなじ エンジン：AI ヘルパーが また 使えるように なりました（Qwen 3.8。モデルが なくなっても 自分で ほかの モデルを さがします）"
+        ]
+      }
+    },
+    {
       "version": "6.8",
       "build": 59,
       "date": "2026-10-17",

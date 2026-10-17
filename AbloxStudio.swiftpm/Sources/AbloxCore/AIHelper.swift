@@ -11,20 +11,34 @@ import Foundation
 // a low token limit — the free tier lasts longer and answers stay short.
 //
 // The provider is any OpenAI-compatible chat endpoint; the default is Groq
-// with Llama 3.1 8B Instant (the free tier's most generous limits), and
-// another model is tried when the provider says a model is gone (404).
+// with Qwen 3.8 (no hidden reasoning, so short answers stay cheap). Models
+// come and go there, so when the provider says one is gone (404) the next is
+// tried, and then the account's own model list is read and a chat model
+// picked from it.
 // Net/AIHelperClient.swift sends it; everything here is
 // plain data, tested on Linux.
 
 public enum AIHelper {
     public static let endpoint = URL(string: "https://api.groq.com/openai/v1/chat/completions")!
     /// Tried in order: the next one only when the provider no longer has a model.
-    public static let models = ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]
+    public static let models = ["qwen/qwen3.8-27b", "openai/gpt-oss-20b", "openai/gpt-oss-120b", "llama-3.1-8b-instant"]
     public static var model: String { models[0] }
+    /// The account's model list, read when every model above is gone.
+    public static let modelsURL = URL(string: "https://api.groq.com/openai/v1/models")!
     /// The provider's answer when the model named in the request is gone.
     public static func modelIsGone(status: Int) -> Bool { status == 404 || status == 400 }
-    /// Enough for four or five short sentences.
-    public static let maximumTokens = 260
+    /// A chat model from the provider's list (`{"data":[{"id":…}]}`): one of
+    /// `models` if it is there, else the first that is not speech, a guard or Arabic-only.
+    public static func chooseModel(fromList data: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let list = object["data"] as? [[String: Any]] else { return nil }
+        let ids = list.compactMap { $0["id"] as? String }
+        if let known = models.first(where: ids.contains) { return known }
+        let notChat = ["whisper", "orpheus", "tts", "guard", "embed", "allam", "vision"]
+        return ids.sorted().first { id in !notChat.contains(where: { id.lowercased().contains($0) }) }
+    }
+    /// Enough for four or five short sentences (and a little hidden reasoning on some models).
+    public static let maximumTokens = 400
     /// Turns of the conversation sent with each question (question + answer each).
     public static let historyTurns = 2
     public static let maximumQuestionLength = 300
@@ -171,7 +185,9 @@ public enum AIHelper {
 
     /// Trims, drops Markdown the bubble cannot show, and caps the length.
     public static func clean(_ text: String) -> String {
-        var t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Some models show their thinking between <think> tags first.
+        var t = text.replacingOccurrences(of: #"(?s)<think>.*?</think>"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         for mark in ["**", "__", "```", "##", "#"] { t = t.replacingOccurrences(of: mark, with: "") }
         // Links are not followed from here: the model is told not to give them.
         t = t.replacingOccurrences(of: #"https?://\S+"#, with: "", options: .regularExpression)
