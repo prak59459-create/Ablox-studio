@@ -52,6 +52,9 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
 
     /// A script's screen shake. Off for anyone it makes queasy.
     public var cameraShake = true
+    /// Real mode: first person (where the game allows), with the camera
+    /// moving like a head — steps, turning, landing (`RealCamera`).
+    public var realMode = false
     /// Degrees added to (or taken from) the camera's field of view. Wider
     /// sits better with people who feel sick in games.
     public var fieldOfViewBoost: Float = 0
@@ -135,6 +138,7 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = PlayPreferences.defaults
         cameraShake = try c.decodeIfPresent(Bool.self, forKey: .cameraShake) ?? d.cameraShake
+        realMode = (try? c.decodeIfPresent(Bool.self, forKey: .realMode)) ?? d.realMode
         fieldOfViewBoost = try c.decodeIfPresent(Float.self, forKey: .fieldOfViewBoost) ?? d.fieldOfViewBoost
         hapticStrength = (try? c.decodeIfPresent(HapticStrength.self, forKey: .hapticStrength)) ?? d.hapticStrength
         warmScreen = try c.decodeIfPresent(Bool.self, forKey: .warmScreen) ?? d.warmScreen

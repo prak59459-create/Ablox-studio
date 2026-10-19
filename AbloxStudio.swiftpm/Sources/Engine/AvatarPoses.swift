@@ -173,6 +173,14 @@ extension AvatarEntity {
             pose.armSpread = SIMD2<Float>(0.95 + sway, 0.95 - sway)
             pose.legSpread = SIMD2<Float>(0.12, 0.12)
             pose.lean = speed > 4 ? 0.1 : 0
+        case .slide:
+            // On the back, feet first: the whole body tips back about the
+            // feet, one hand trailing on the ground and the other up for balance.
+            pose.lean = -1.35
+            pose.armSwing = SIMD2<Float>(-0.7, 0.9)
+            pose.armSpread = SIMD2<Float>(0.55, 0.25)
+            pose.legSwing = SIMD2<Float>(0.12, -0.04)
+            pose.legSpread = SIMD2<Float>(0.06, 0.06)
         case .jetpack, .none:
             break
         }
@@ -200,7 +208,8 @@ extension AvatarEntity {
         // The head leans back by as much, so it keeps looking ahead instead
         // of at the ground while running or riding. Looking about when idle
         // (`lookAbout`) sets the head after this.
-        head.orientation = simd_quatf(angle: limbs.lean, axis: Self.sideways)
+        // Lying back in a slide it only lifts a little, as a neck would.
+        head.orientation = simd_quatf(angle: Swift.max(-0.6, limbs.lean), axis: Self.sideways)
     }
 
     /// Swinging forward (about X: the avatar faces -Z, so a positive angle

@@ -212,6 +212,8 @@ public struct GameViewport: UIViewRepresentable {
         private var tracers: [(entity: ModelEntity, age: Float)] = []
         private var shakeSerial = 0
         private var shakeRemaining: Float = 0
+        /// Real mode's head movement (RealCamera.swift).
+        private var realCamera = RealCamera()
         private var shakeStrength: Float = 0
         /// "Camera follows behind me": the yaw it last saw or set, and a
         /// pause after the player turns the camera themselves.
@@ -522,6 +524,7 @@ public struct GameViewport: UIViewRepresentable {
                 case let .teleportPlayer(destination):
                     localSnapshot.position = destination
                     localSnapshot.velocity = .zero
+                    realCamera.reset()
                     localAvatar?.teleport(to: destination, yawDegrees: localSnapshot.yawDegrees)
                     // Clear the touch set: the blocks we were standing in are
                     // no longer under us, and they must be able to fire again.
@@ -671,7 +674,8 @@ public struct GameViewport: UIViewRepresentable {
             }
             surroundings = around
             let motion = CharacterSolver.step(snapshot: localSnapshot, input: input, config: movement, surroundings: around,
-                                              floats: parent.session.localAppearance.ride == .hoverboard, deltaTime: dt)
+                                              floats: parent.session.localAppearance.ride == .hoverboard,
+                                              slides: parent.session.localAppearance.ride == .slide, deltaTime: dt)
             localSnapshot.velocity = motion.velocity
             localSnapshot.yawDegrees = motion.yawDegrees
             let shiftLocked = ShiftLock.turnsBody(isOn: preferences.hud.shiftLock, cameraMode: scripted.camera.mode,
@@ -762,7 +766,7 @@ public struct GameViewport: UIViewRepresentable {
             let yaw = parent.controls.cameraYaw
             var seen = yaw
             defer { followSeenYaw = seen }
-            guard preferences.hud.cameraFollows, !parent.photoMode, parent.spectating == nil, !parent.preferFirstPerson,
+            guard preferences.hud.cameraFollows, !parent.photoMode, parent.spectating == nil, !parent.preferFirstPerson, !preferences.realMode,
                   parent.session.scripted.camera.mode == .thirdPerson else { return }
             if let last = followSeenYaw, abs(normalizeDegrees(yaw - last)) > 0.01 {
                 followPause = 1.5
@@ -1173,7 +1177,7 @@ public struct GameViewport: UIViewRepresentable {
             var settings = parent.session.scripted.camera
             // The player may choose first person where the game leaves the
             // camera behind them; watching someone is always from behind.
-            if settings.mode == .thirdPerson, parent.preferFirstPerson, parent.spectating == nil {
+            if settings.mode == .thirdPerson, parent.preferFirstPerson || preferences.realMode, parent.spectating == nil {
                 settings.mode = .firstPerson
             }
             if parent.spectating != nil { settings.mode = .thirdPerson }
@@ -1195,13 +1199,33 @@ public struct GameViewport: UIViewRepresentable {
 
             switch settings.mode {
             case .firstPerson:
-                let pitch = max(-80, min(80, parent.controls.cameraPitch))
-                let look = Quat.euler(degrees: Vec3(pitch, parent.controls.cameraYaw, 0)).act(Vec3(0, 0, -1))
-                let eye = localSnapshot.position + Vec3(0, PlayerHitBody.eyeHeight * size, 0) + jitter
+                var pitch = max(-80, min(80, parent.controls.cameraPitch))
+                let yaw = parent.controls.cameraYaw
+                // Sliding (`ride = "slide"`) puts the eyes at half height.
+                let eyeHeight = PlayerHitBody.eyeHeight * size * parent.session.localAppearance.ride.eyeScale
+                var eye = localSnapshot.position + Vec3(0, eyeHeight, 0) + jitter
+                var roll: Float = 0
+                if preferences.realMode {
+                    let gentle = !preferences.cameraShake || preferences.access.reduceMotion
+                    let head = realCamera.step(velocity: localSnapshot.velocity, grounded: localSnapshot.isGrounded,
+                                               yawDegrees: yaw, gentle: gentle, deltaTime: dt)
+                    pitch = max(-85, min(85, pitch + head.pitchDegrees))
+                    eye = eye + Quat.yaw(degrees: yaw).act(Vec3(head.offset.x, 0, 0)) + Vec3(0, head.offset.y, 0)
+                    roll = head.rollDegrees
+                }
+                let look = Quat.euler(degrees: Vec3(pitch, yaw, 0)).act(Vec3(0, 0, -1))
+                // Rolled about the way the camera looks, for real mode's tilt.
+                var up = Vec3(0, 1, 0)
+                if roll != 0 {
+                    let right = look.cross(Vec3(0, 1, 0)).normalized
+                    let straightUp = right.cross(look).normalized
+                    let angle = roll * .pi / 180
+                    up = straightUp * cos(angle) + right * sin(angle)
+                }
                 // No easing: in first person any lag between thumb and view
                 // reads as the game being slow.
                 cameraAnchor.position = eye.simd
-                camera.look(at: (eye + look).simd, from: eye.simd, relativeTo: nil)
+                camera.look(at: (eye + look).simd, from: eye.simd, upVector: up.simd, relativeTo: nil)
                 viewDirection = look
                 return
 
@@ -1235,7 +1259,8 @@ public struct GameViewport: UIViewRepresentable {
             let pitch = parent.photoMode ? max(-85, min(60, held.cameraPitch)) : max(-75, min(20, held.cameraPitch))
             let orbit = Quat.euler(degrees: Vec3(pitch, held.cameraYaw, 0))
 
-            let focus = subjectPosition + Vec3(0, 1.4 * size, 0) + jitter
+            let crouch = parent.spectating == nil ? parent.session.localAppearance.ride.eyeScale : 1
+            let focus = subjectPosition + Vec3(0, 1.4 * size * crouch, 0) + jitter
             // Pinch-to-zoom (and Settings) scale the game's own distance.
             let desiredDistance: Float = settings.distance * preferences.cameraZoom
             let offset = orbit.act(Vec3(0, 0, 1)) * desiredDistance

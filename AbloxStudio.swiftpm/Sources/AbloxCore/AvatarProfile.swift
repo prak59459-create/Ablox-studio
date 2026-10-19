@@ -476,14 +476,24 @@ public struct AvatarProfile: Codable, Hashable, Sendable {
     /// Something a character rides, drawn around the avatar.
     public enum Ride: String, Codable, CaseIterable, Sendable {
         case none, car, sports, truck, kart, bike, scooter, jetpack, hoverboard
+        /// Not something to ride: lying back, feet first, sliding along the
+        /// ground. The eyes drop to half height and the slide keeps going the
+        /// way it started. An iPad that has not updated reads it as `none`.
+        case slide
 
         /// Sitting down in it, rather than standing on or wearing it.
         public var isSeated: Bool {
             switch self {
             case .car, .sports, .truck, .kart: return true
-            case .none, .bike, .scooter, .jetpack, .hoverboard: return false
+            case .none, .bike, .scooter, .jetpack, .hoverboard, .slide: return false
             }
         }
+
+        /// Something a vehicle part can put you in (`slide` is a move, not a vehicle).
+        public var isVehicle: Bool { self != .none && self != .slide }
+
+        /// Eye height while in it, as a share of standing: half while sliding.
+        public var eyeScale: Float { self == .slide ? 0.5 : 1 }
     }
 
     public enum HatStyle: String, Codable, CaseIterable, Sendable {

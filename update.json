@@ -1,16 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "7.0",
-  "build": 61,
+  "version": "7.1",
+  "build": 62,
   "protocol": 8,
   "date": "2026-10-19",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Sync with Ablox 8.2: a shared room on the router no longer stays in the list after you leave it"
+      "Shared with Ablox 8.3: p.ride = \"slide\" lies a character back, feet first, sliding the way they were going with the eyes at half height (p.rides tells a game whether the iPad knows it)",
+      "The vehicle picker no longer offers the slide, which is a move rather than a vehicle"
     ],
     "ja": [
-      "Ablox 8.2 と 同じに：ルーターで 共有した ルームが、ぬけたあとも 一覧に のこらなくなりました"
+      "Ablox 8.3 と同じに：p.ride = \"slide\" で あおむけで 足から すべる体勢に（進んでいた向きのまま、目の高さは 半分。iPad が知っているかは p.rides で わかる）",
+      "乗り物の えらび方に「slide」は 出しません（乗り物ではなく 動きなので）"
     ]
   }
 }

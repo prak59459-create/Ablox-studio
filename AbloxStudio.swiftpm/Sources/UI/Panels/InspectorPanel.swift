@@ -475,7 +475,7 @@ struct InspectorPanel: View {
                     set: { newValue in
                         session.edit { $0.mutateSelection(label: "Change vehicle") { $0.gimmick.vehicle = newValue.rawValue } }
                     }
-                ), options: AvatarProfile.Ride.allCases.filter { $0 != .none }) { $0.rawValue.capitalized }
+                ), options: AvatarProfile.Ride.allCases.filter(\.isVehicle)) { $0.rawValue.capitalized }
                 gimmickSlider(L("Speed"), value: block.gimmick.vehicleSpeed, range: 1...4, unit: "×") { newValue in
                     session.edit { $0.mutateSelection(label: "Change speed") { $0.gimmick.vehicleSpeed = newValue } }
                 }

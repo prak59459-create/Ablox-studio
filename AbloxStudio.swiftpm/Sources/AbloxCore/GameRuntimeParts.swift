@@ -429,7 +429,7 @@ extension GameRuntime {
 
     private func enterVehicle(_ state: PlayerState, block: BlockData) {
         guard state.vehicle == nil,
-              let ride = AvatarProfile.Ride(rawValue: block.gimmick.vehicle.lowercased()), ride != .none else { return }
+              let ride = AvatarProfile.Ride(rawValue: block.gimmick.vehicle.lowercased()), ride.isVehicle else { return }
         state.vehicle = ride
         state.movementBeforeVehicle = state.movement
         var movement = state.movement

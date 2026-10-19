@@ -414,12 +414,15 @@ public final class AvatarEntity: Entity {
         case .scooter: seat = 0.1
         case .jetpack: seat = 0
         case .hoverboard: seat = 0.18
+        // Lying back: up off the ground by the body's thickness.
+        case .slide: seat = 0.3
         }
         seatHeight = seat
         rig.position = SIMD3<Float>(0, seat, 0)
         leftLeg.isEnabled = !ride.isSeated
         rightLeg.isEnabled = !ride.isSeated
-        guard ride != .none else { return }
+        // A slide is only the pose (AvatarPoses.swift): nothing to build.
+        guard ride != .none, ride != .slide else { return }
 
         let paint = material(color)
         let dark = material(ColorRGBA(r: 0.12, g: 0.13, b: 0.16))
@@ -460,7 +463,7 @@ public final class AvatarEntity: Entity {
         }
 
         switch ride {
-        case .none:
+        case .none, .slide:
             return
         case .car:
             box(SIMD3<Float>(1.9, 0.6, 3.6), at: SIMD3<Float>(0, 0.5, 0), paint, corner: 0.14)

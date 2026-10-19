@@ -163,6 +163,40 @@ final class ScriptWorldTests: RuntimeTestCase {
         XCTAssertTrue(game.drainOutput().contains("sports #FACC15"))
     }
 
+    func testASlideIsARideAGameCanCheckFor() {
+        let game = game(#"""
+        on join(p)
+          if p.rides != nil and contains(p.rides, "slide") then p.ride = "slide" end
+          print(p.ride)
+        end
+        """#)
+        startWithBoth(game)
+        let alice = game.roster.first { $0.peerID == self.alice }!
+        XCTAssertEqual(alice.profile.ride, .slide)
+        XCTAssertEqual(alice.profile.ride.eyeScale, 0.5)
+        XCTAssertTrue(game.drainOutput().contains("slide"))
+        XCTAssertTrue(game.drainErrors().isEmpty)
+    }
+
+    func testAWorldsOwnRidesValueStillWins() {
+        let game = game("on join(p)\n  p.rides = 3\n  print(p.rides)\nend")
+        startWithBoth(game)
+        XCTAssertTrue(game.drainErrors().isEmpty)
+        XCTAssertTrue(game.drainOutput().contains("3"))
+    }
+
+    func testAnIPadThatHasNotUpdatedReadsASlideAsNoRide() throws {
+        var profile = AvatarProfile.default
+        profile.ride = .slide
+        let text = String(decoding: try JSONEncoder().encode(profile), as: UTF8.self)
+        XCTAssertTrue(text.contains("\"slide\""))
+        // An older Ride without `slide` falls back to none; so does any name it does not know.
+        let unknown = text.replacingOccurrences(of: "\"slide\"", with: "\"rocket\"")
+        XCTAssertEqual(try JSONDecoder().decode(AvatarProfile.self, from: Data(unknown.utf8)).ride, .none)
+        XCTAssertFalse(AvatarProfile.Ride.slide.isVehicle)
+        XCTAssertTrue(AvatarProfile.Ride.car.isVehicle)
+    }
+
     func testAnUnknownRideNamesTheChoices() {
         let game = game("on join(p)\n  p.ride = \"rocket\"\nend")
         startWithBoth(game)

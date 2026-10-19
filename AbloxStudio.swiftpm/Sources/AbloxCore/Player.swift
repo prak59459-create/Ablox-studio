@@ -208,6 +208,9 @@ public struct MovementInput: Hashable, Sendable {
 /// identical on host and client. RealityKit applies the result; it does not
 /// decide it.
 public enum CharacterSolver {
+    /// How much of a slide's speed goes each second.
+    public static let slideFriction: Float = 0.35
+
     /// Advances horizontal velocity and applies gravity for one step.
     ///
     /// - Parameters:
@@ -223,6 +226,7 @@ public enum CharacterSolver {
         config: MovementConfig = .default,
         surroundings: Surroundings = .normal,
         floats: Bool = false,
+        slides: Bool = false,
         deltaTime: Float
     ) -> (velocity: Vec3, yawDegrees: Float) {
         let dt = Swift.max(0, Swift.min(deltaTime, 0.1))
@@ -245,7 +249,11 @@ public enum CharacterSolver {
         let targetVelocity = desiredDirection * targetSpeed
 
         var horizontal = Vec3(snapshot.velocity.x, 0, snapshot.velocity.z)
-        if snapshot.isGrounded {
+        if slides {
+            // A slide (`p.ride = "slide"`) keeps going the way it started,
+            // on the ground or off a jump, and only slowly loses speed.
+            horizontal = horizontal * Swift.max(0, 1 - Self.slideFriction * dt)
+        } else if snapshot.isGrounded {
             if magnitude > 0.01 {
                 horizontal = targetVelocity
             } else {
@@ -268,7 +276,7 @@ public enum CharacterSolver {
 
         // Face the way we are moving; keep the old facing when standing still.
         var yaw = snapshot.yawDegrees
-        if magnitude > 0.01 {
+        if magnitude > 0.01, !slides {
             let targetYaw = atan2(desiredDirection.x, -desiredDirection.z) * 180 / .pi
             let delta = angularDelta(from: yaw, to: targetYaw)
             let maxStep = config.turnSpeedDegreesPerSecond * dt
