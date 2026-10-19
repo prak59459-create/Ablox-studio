@@ -166,7 +166,7 @@ final class ScriptWorldTests: RuntimeTestCase {
     func testASlideIsARideAGameCanCheckFor() {
         let game = game(#"""
         on join(p)
-          if p.rides != nil and contains(p.rides, "slide") then p.ride = "slide" end
+          if p.ride_kinds != nil and contains(p.ride_kinds, "slide") then p.ride = "slide" end
           print(p.ride)
         end
         """#)
@@ -179,7 +179,7 @@ final class ScriptWorldTests: RuntimeTestCase {
     }
 
     func testAWorldsOwnRidesValueStillWins() {
-        let game = game("on join(p)\n  p.rides = 3\n  print(p.rides)\nend")
+        let game = game("on join(p)\n  p.ride_kinds = 3\n  print(p.ride_kinds)\nend")
         startWithBoth(game)
         XCTAssertTrue(game.drainErrors().isEmpty)
         XCTAssertTrue(game.drainOutput().contains("3"))

@@ -23,7 +23,7 @@ extension GameRuntime: ScriptObjectResolver {
         "name", "id", "is_npc", "health", "max_health", "alive", "score", "team",
         "position", "x", "y", "z", "yaw", "look", "velocity",
         "weapon", "ammo", "speed", "jump", "gravity", "frozen",
-        "color", "head_color", "leg_color", "size", "hat", "ride", "ride_color", "rides", "visible",
+        "color", "head_color", "leg_color", "size", "hat", "ride", "ride_color", "ride_kinds", "visible",
         "give", "take", "reload", "teleport", "damage", "heal", "kill", "respawn", "launch", "look_at"
     ]
 
@@ -37,9 +37,9 @@ extension GameRuntime: ScriptObjectResolver {
     /// Members added after worlds had been written that use the same
     /// names for their own data. A world may store its own value under one
     /// of these; the world's value is then what it reads back.
-    /// `rides` came with `slide` (8.3): an older iPad reads it as nothing, so
-    /// `p.rides != nil and contains(p.rides, "slide")` tells a game it can slide.
-    static let laterMemberNames: Set<String> = Set(partsMemberNames + ["rides"])
+    /// `ride_kinds` came with `slide` (8.3): an older iPad reads it as nothing, so
+    /// `p.ride_kinds != nil and contains(p.ride_kinds, "slide")` tells a game it can slide.
+    static let laterMemberNames: Set<String> = Set(partsMemberNames + ["ride_kinds"])
 
     /// Members only an NPC has: being told where to go.
     public static let npcOnlyMemberNames: [String] = [
@@ -263,7 +263,7 @@ extension GameRuntime: ScriptObjectResolver {
         case "hat": return .string(state.profile.hat.rawValue)
         case "ride": return .string(state.profile.ride.rawValue)
         case "ride_color": return .string(state.profile.rideColor.hexString)
-        case "rides": return .list(ScriptList(AvatarProfile.Ride.allCases.map { .string($0.rawValue) }))
+        case "ride_kinds": return .list(ScriptList(AvatarProfile.Ride.allCases.map { .string($0.rawValue) }))
         case "visible": return .bool(!state.isHidden)
         case "camera": return .string(state.camera.mode.rawValue)
         case "camera_distance": return .number(Double(state.camera.distance))
