@@ -120,9 +120,11 @@ public final class AbloxClient {
 
     /// Leaves deliberately. Clears the remembered session, so nothing tries
     /// to reconnect afterwards.
+    /// Says goodbye and closes the connection. Holds on to itself until then:
+    /// the app lets go of its client at once, and a connection nobody
+    /// cancels keeps this iPad in the room.
     public func disconnect() {
-        queue.async { [weak self] in
-            guard let self else { return }
+        queue.async {
             self.lastEndpoint = nil
             self.lastRoomCode = nil
             self.disconnectOnQueue(reason: .userLeft)

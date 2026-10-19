@@ -193,8 +193,21 @@ public final class AbloxHost {
         }
     }
 
+    /// Closes the room: goodbyes, then the listener, which takes the room
+    /// out of every lobby on the router.
+    ///
+    /// Holds on to itself until then, like `handOver`: the app lets go of its
+    /// host at once, and a listener nobody cancels stays advertised (the room
+    /// left behind in the list) until the app quits.
     public func stop() {
-        queue.async { [weak self] in self?.stopOnQueue() }
+        queue.async { self.stopOnQueue() }
+    }
+
+    deinit {
+        // Never expected — `stop` keeps the host until it has run — but a
+        // room must not outlive its host.
+        tickTimer?.cancel()
+        listener?.cancel()
     }
 
     private func stopOnQueue() {

@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "6.9",
-  "build": 60,
+  "version": "7.0",
+  "build": 61,
   "protocol": 8,
-  "date": "2026-10-17",
+  "date": "2026-10-19",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Same engine as Ablox 8.1: the AI helper works again (Qwen 3.8, and it finds another model by itself when one is gone)"
+      "Sync with Ablox 8.2: a shared room on the router no longer stays in the list after you leave it"
     ],
     "ja": [
-      "Ablox 8.1 と おなじ エンジン：AI ヘルパーが また 使えるように なりました（Qwen 3.8。モデルが なくなっても 自分で ほかの モデルを さがします）"
+      "Ablox 8.2 と 同じに：ルーターで 共有した ルームが、ぬけたあとも 一覧に のこらなくなりました"
     ]
   }
 }

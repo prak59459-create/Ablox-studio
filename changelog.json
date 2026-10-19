@@ -2,6 +2,19 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "7.0",
+      "build": 61,
+      "date": "2026-10-19",
+      "notes": {
+        "en": [
+          "Sync with Ablox 8.2: a shared room on the router no longer stays in the list after you leave it"
+        ],
+        "ja": [
+          "Ablox 8.2 と 同じに：ルーターで 共有した ルームが、ぬけたあとも 一覧に のこらなくなりました"
+        ]
+      }
+    },
+    {
       "version": "6.9",
       "build": 60,
       "date": "2026-10-17",

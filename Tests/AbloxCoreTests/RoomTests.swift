@@ -231,4 +231,49 @@ final class RoomTests: XCTestCase {
         XCTAssertFalse(Whisper.isAllowed(.phrases))
         XCTAssertFalse(Whisper.isAllowed(.off))
     }
+
+    // MARK: Leaving a room on the router
+
+    /// A room left once stayed in every router lobby until the app quit: the
+    /// app lets go of its host right after `stop()`, and a `[weak self]`
+    /// there found nothing, so the listener (and its Bonjour name) was never
+    /// cancelled. The same for a guest's connection. Network is not on Linux,
+    /// so this reads the code.
+    func testLeavingClosesTheListenerEvenAfterTheAppLetsGo() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let net = ["Ablox.swiftpm", "AbloxStudio.swiftpm"]
+            .map { root.appendingPathComponent($0).appendingPathComponent("Sources/Net") }
+            .first { FileManager.default.fileExists(atPath: $0.path) }
+        guard let net else { throw XCTSkip("No app sources next to the tests.") }
+
+        let host = try String(contentsOf: net.appendingPathComponent("AbloxHost.swift"), encoding: .utf8)
+        let stop = try XCTUnwrap(Self.body(of: "public func stop()", in: host))
+        XCTAssertTrue(stop.contains("self.stopOnQueue()"), "stop closes the room")
+        XCTAssertFalse(stop.contains("weak self"), "stop must hold the host until the listener is cancelled")
+        XCTAssertNotNil(Self.body(of: "deinit", in: host)?.range(of: "listener?.cancel()"), "a host never leaves its listener behind")
+
+        let client = try String(contentsOf: net.appendingPathComponent("AbloxClient.swift"), encoding: .utf8)
+        let disconnect = try XCTUnwrap(Self.body(of: "public func disconnect()", in: client))
+        XCTAssertFalse(disconnect.contains("weak self"), "disconnect must hold the client until the connection is cancelled")
+        XCTAssertTrue(disconnect.contains("disconnectOnQueue"))
+    }
+
+    /// The text of a function, from its signature to its closing brace.
+    private static func body(of signature: String, in source: String) -> String? {
+        guard let start = source.range(of: signature) else { return nil }
+        var depth = 0
+        var opened = false
+        var index = start.upperBound
+        while index < source.endIndex {
+            let character = source[index]
+            if character == "{" { depth += 1; opened = true }
+            if character == "}" {
+                depth -= 1
+                if opened && depth == 0 { return String(source[start.lowerBound...index]) }
+            }
+            index = source.index(after: index)
+        }
+        return nil
+    }
 }
