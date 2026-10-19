@@ -734,14 +734,25 @@ public final class GameRuntime {
             }
             state.wantsJump = false
 
+            // People and other NPCs are in the way too — but an NPC held up
+            // by them for a second walks through, so a game waiting for it
+            // to arrive never waits forever.
+            let others = state.bumpedFor > 1 ? [] : characterBoxes(near: body.position, except: state)
             let result = WorldCollider.resolve(position: body.position, velocity: velocity,
                                                body: CharacterBody(radius: 0.4 * state.profile.height,
                                                                    height: 1.8 * state.profile.height),
-                                               index: index, deltaTime: step)
-            // Walking into a step it cannot walk up: hop, as a player would.
+                                               index: index, characters: others, deltaTime: step)
             let wanted = Vec3(desired.x, 0, desired.z).length
             let got = Vec3(result.velocity.x, 0, result.velocity.z).length
-            if wanted > 0.5, got < wanted * 0.3, result.isGrounded { state.wantsJump = true }
+            let blocked = wanted > 0.5 && got < wanted * 0.3
+            if blocked, !others.isEmpty {
+                state.bumpedFor += step
+            } else if !blocked {
+                state.bumpedFor = 0
+            }
+            // Walking into a step it cannot walk up: hop, as a player would
+            // (not onto someone's head).
+            if blocked, others.isEmpty, result.isGrounded { state.wantsJump = true }
 
             let moved = result.position.distance(to: body.position) > 0.005
             body.position = result.position
@@ -761,6 +772,18 @@ public final class GameRuntime {
             if body.position.y < world.environment.killPlaneHeight, state.isAlive {
                 knockOut(state, by: nil)
             }
+        }
+    }
+
+    /// Everyone near `point` an NPC bumps into: people and NPCs that are
+    /// alive and shown, while the world has solid players.
+    func characterBoxes(near point: Vec3, except state: PlayerState) -> [BoundingBox] {
+        guard world.environment.solidCharacters else { return [] }
+        let reach = WorldCollider.characterReach
+        return orderedStates.compactMap { other in
+            guard other !== state, other.isAlive, !other.isHidden,
+                  let at = position(of: other), at.distance(to: point) < reach else { return nil }
+            return WorldCollider.characterBox(at: at, size: other.profile.height)
         }
     }
 
@@ -1061,6 +1084,8 @@ extension GameRuntime {
         var home: Vec3?
         var goal: Goal = .none
         var wantsJump = false
+        /// Seconds it has been held up by other characters.
+        var bumpedFor: Float = 0
         var needsTransformSend = false
         var npcScore = 0
 

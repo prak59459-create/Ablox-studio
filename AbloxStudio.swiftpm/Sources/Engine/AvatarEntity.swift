@@ -73,6 +73,11 @@ public final class AvatarEntity: Entity {
     /// Where the arms and legs are and are heading, and how fast the avatar
     /// is rising or falling (AvatarPoses.swift).
     var limbs = LimbState()
+    /// Shoes, hands, a belt and the other small parts (`AvatarDetail.swift`);
+    /// off at the lowest graphics levels.
+    var detailed = true {
+        didSet { if detailed != oldValue { applyDetail(profile) } }
+    }
     /// What it is riding, and how far it has walked: read by the poses.
     var appliedRideKind: AvatarProfile.Ride { appliedRide }
     var strideDistanceForPose: Float { strideDistance }
@@ -160,6 +165,7 @@ public final class AvatarEntity: Entity {
         applyFace(profile.face)
         applyPet(profile.pet, color: profile.petColor)
         applyAura(profile.aura)
+        applyDetail(profile)
     }
 
     // MARK: Face

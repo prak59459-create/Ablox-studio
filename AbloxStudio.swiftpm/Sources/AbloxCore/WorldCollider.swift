@@ -80,10 +80,15 @@ public enum WorldCollider {
         velocity: Vec3,
         body: CharacterBody = .default,
         index: WorldIndex,
+        characters: [BoundingBox] = [],
         deltaTime: Float
     ) -> CollisionResult {
         let dt = Swift.max(0, Swift.min(deltaTime, 0.1))
-        let solids = Solids(index: index)
+        // Other people and NPCs stand in the way like a block — but one
+        // already overlapping (everyone sent to the same spawn) is left out,
+        // so a crowd walks apart instead of locking together.
+        let start = body.bounds(at: position)
+        let solids = Solids(index: index, characters: characters.filter { !start.penetrates($0) })
 
         var p = position
         var v = velocity
@@ -138,6 +143,15 @@ public enum WorldCollider {
         return CollisionResult(position: p, velocity: v, isGrounded: grounded, touchedBlockIDs: touched)
     }
 
+    /// The box another person or NPC takes up, feet at `position`, for
+    /// `characters:` above. `size` is their avatar's height scale.
+    public static func characterBox(at position: Vec3, size: Float) -> BoundingBox {
+        CharacterBody(radius: 0.4 * size, height: 1.8 * size).bounds(at: position)
+    }
+
+    /// Only characters this close are worth testing against.
+    public static let characterReach: Float = 4
+
     /// Something you stand on or walk into.
     private static func isSolid(_ entry: WorldIndex.Entry) -> Bool {
         entry.isVisible && entry.hasCollision && !isPassThrough(entry.behavior)
@@ -158,10 +172,15 @@ public enum WorldCollider {
     /// only looks at the blocks near that box.
     struct Solids {
         let index: WorldIndex
+        var characters: [BoundingBox] = []
 
-        /// The first solid, in document order, that `box` sinks into.
+        /// The first solid, in document order, that `box` sinks into; then
+        /// the other characters.
         func first(penetratedBy box: BoundingBox) -> BoundingBox? {
-            index.entries(near: box).first { isSolid($0) && box.penetrates($0.bounds) }?.bounds
+            if let block = index.entries(near: box).first(where: { isSolid($0) && box.penetrates($0.bounds) }) {
+                return block.bounds
+            }
+            return characters.first { box.penetrates($0) }
         }
 
         func any(penetratedBy box: BoundingBox) -> Bool {

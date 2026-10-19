@@ -1866,6 +1866,7 @@ public enum Strings {
         ("A character talking, with answers to pick. The answer runs “on choice”.", "キャラクターが話しかけ、答えを選べます。選んだ答えで「on choice」が動きます。"),
         ("A countdown reached zero. p is nil for everyone's countdown.", "カウントダウンが 0 になった。全員向けのカウントダウンなら p は nil です。"),
         ("A look for the whole screen (none, bloom, vivid, warm, cool, noir, retro, dream), shadows, and the world's music.", "画面全体の見た目（none, bloom, vivid, warm, cool, noir, retro, dream）、影、ワールドの音楽です。"),
+        ("People and NPCs bump into each other and can stand on each other. False lets them pass through, as before 8.4.", "人と NPC は ぶつかり、上に乗ることもできます。false にすると、8.4 より前のように すりぬけます。"),
         ("A player buys something in a shop. The price has already been paid.", "プレイヤーがショップで何かを買った。代金はもう払われています。"),
         ("A player picks an answer in a conversation.", "プレイヤーが会話で答えを選んだ。"),
         ("A player taps something they carry.", "プレイヤーが持ち物をタップした。"),

@@ -1,18 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "7.1",
-  "build": 62,
+  "version": "7.2",
+  "build": 63,
   "protocol": 8,
   "date": "2026-10-19",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Shared with Ablox 8.3: p.ride = \"slide\" lies a character back, feet first, sliding the way they were going with the eyes at half height (p.ride_kinds tells a game whether the iPad knows it)",
-      "The vehicle picker no longer offers the slide, which is a move rather than a vehicle"
+      "In test play, people and NPCs bump into each other and can stand on each other, as in Ablox 8.4 (world.solid_players = false turns it off)",
+      "Avatars have shoes, hands, sleeves, a belt and more small parts, as in Ablox 8.4"
     ],
     "ja": [
-      "Ablox 8.3 と同じに：p.ride = \"slide\" で あおむけで 足から すべる体勢に（進んでいた向きのまま、目の高さは 半分。iPad が知っているかは p.ride_kinds で わかる）",
-      "乗り物の えらび方に「slide」は 出しません（乗り物ではなく 動きなので）"
+      "テストプレイで、人と NPC が ぶつかり、上に乗れるように（Ablox 8.4 と同じ。world.solid_players = false で 切れます）",
+      "アバターに くつ・手・そで・ベルトなどの こまかいパーツ（Ablox 8.4 と同じ）"
     ]
   }
 }

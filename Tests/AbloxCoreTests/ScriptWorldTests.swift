@@ -103,6 +103,40 @@ final class ScriptWorldTests: RuntimeTestCase {
         XCTAssertFalse(game.drainNPCTransforms().isEmpty, "and everyone was told where it went")
     }
 
+    func testNPCsBumpIntoPeopleAndThenGetThrough() {
+        let game = game(#"""
+        on start()
+          let n = create_npc({name: "Guard", position: {x: 0, y: 0, z: 0}})
+          n.move_to({x: 10, y: 0, z: 0})
+        end
+        """#, world: floorWorld())
+        startWithBoth(game)
+        place(game, alice, at: Vec3(4, 0, 0))
+        for step in 1...8 { game.advance(to: Double(step) * 0.1) }
+        let held = game.roster.first { $0.isNPC }?.position.x ?? 0
+        XCTAssertLessThan(held, 3.3, "stopped at Alice instead of walking through her")
+        for step in 9...80 { game.advance(to: Double(step) * 0.1) }
+        XCTAssertEqual(game.roster.first { $0.isNPC }?.position.x ?? 0, 10, accuracy: 0.5,
+                       "held up only for a moment: the game still sees it arrive")
+    }
+
+    func testAGameCanLetCharactersPassThrough() {
+        let game = game(#"""
+        on start()
+          world.solid_players = false
+          print(world.solid_players)
+          let n = create_npc({name: "Ghost", position: {x: 0, y: 0, z: 0}})
+          n.move_to({x: 10, y: 0, z: 0})
+        end
+        """#, world: floorWorld())
+        startWithBoth(game)
+        place(game, alice, at: Vec3(4, 0, 0))
+        for step in 1...10 { game.advance(to: Double(step) * 0.1) }
+        XCTAssertEqual(game.drainOutput(), ["false"])
+        XCTAssertGreaterThan(game.roster.first { $0.isNPC }?.position.x ?? 0, 4.5, "walked straight through")
+        XCTAssertFalse(game.world.environment.solidCharacters)
+    }
+
     func testNPCsFollowAndCanBeShot() {
         let game = game(#"""
         on start()

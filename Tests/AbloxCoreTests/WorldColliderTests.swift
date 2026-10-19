@@ -275,4 +275,46 @@ final class WorldColliderTests: XCTestCase {
             )
         }
     }
+
+    // MARK: Other characters
+
+    private func someone(at x: Float) -> BoundingBox {
+        WorldCollider.characterBox(at: Vec3(x, 0, 0), size: 1)
+    }
+
+    func testWalkingIntoSomeoneStopsYou() {
+        let index = WorldIndex(world: floorWorld())
+        var position = Vec3(0, 0, 0)
+        for _ in 0..<120 {
+            position = WorldCollider.resolve(position: position, velocity: Vec3(6, 0, 0), index: index,
+                                             characters: [someone(at: 3)], deltaTime: 1.0 / 60).position
+        }
+        XCTAssertEqual(position.x, 3 - 0.8, accuracy: 0.01, "stopped body to body, not walked through")
+    }
+
+    func testYouCanStandOnSomeone() {
+        let index = WorldIndex(world: floorWorld())
+        var position = Vec3(0, 4, 0)
+        var velocity = Vec3(0, -5, 0)
+        var grounded = false
+        for _ in 0..<120 {
+            let result = WorldCollider.resolve(position: position, velocity: velocity, index: index,
+                                               characters: [someone(at: 0)], deltaTime: 1.0 / 60)
+            position = result.position
+            velocity = result.velocity
+            grounded = result.isGrounded
+        }
+        XCTAssertEqual(position.y, 1.8, accuracy: 0.06, "on their head")
+        XCTAssertTrue(grounded, "and can jump off")
+    }
+
+    func testPeopleSentToTheSameSpotWalkApart() {
+        let index = WorldIndex(world: floorWorld())
+        var position = Vec3(0, 0, 0)
+        for _ in 0..<60 {
+            position = WorldCollider.resolve(position: position, velocity: Vec3(4, 0, 0), index: index,
+                                             characters: [someone(at: 0.3)], deltaTime: 1.0 / 60).position
+        }
+        XCTAssertGreaterThan(position.x, 3, "already overlapping at the start: not locked together")
+    }
 }

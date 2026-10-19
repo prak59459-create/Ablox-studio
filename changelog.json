@@ -2,6 +2,21 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "7.2",
+      "build": 63,
+      "date": "2026-10-19",
+      "notes": {
+        "en": [
+          "In test play, people and NPCs bump into each other and can stand on each other, as in Ablox 8.4 (world.solid_players = false turns it off)",
+          "Avatars have shoes, hands, sleeves, a belt and more small parts, as in Ablox 8.4"
+        ],
+        "ja": [
+          "テストプレイで、人と NPC が ぶつかり、上に乗れるように（Ablox 8.4 と同じ。world.solid_players = false で 切れます）",
+          "アバターに くつ・手・そで・ベルトなどの こまかいパーツ（Ablox 8.4 と同じ）"
+        ]
+      }
+    },
+    {
       "version": "7.1",
       "build": 62,
       "date": "2026-10-19",

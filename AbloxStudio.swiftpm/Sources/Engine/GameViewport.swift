@@ -309,6 +309,7 @@ public struct GameViewport: UIViewRepresentable {
                 profile: parent.session.profile,
                 position: localSnapshot.position
             )
+            local.detailed = avatarsDetailed
             worldScene.anchor.addChild(local)
             localAvatar = local
             if reportsFrameRate {
@@ -480,6 +481,24 @@ public struct GameViewport: UIViewRepresentable {
             }
         }
 
+        /// Avatars get their small parts (shoes, hands, a belt) from the
+        /// medium graphics level up.
+        private var avatarsDetailed: Bool {
+            (appliedProfile?.level ?? .high).rawValue >= GraphicsProfile.Level.medium.rawValue
+        }
+
+        /// Everyone else close by, where they are drawn, for us to bump
+        /// into and stand on — unless the game made players pass through.
+        private func characterBoxes(near point: Vec3, world: WorldDocument) -> [BoundingBox] {
+            guard world.environment.solidCharacters else { return [] }
+            return avatars.compactMap { peer, avatar in
+                guard avatarHidden[peer] != true, avatar.parent != nil else { return nil }
+                let at = Vec3(avatar.position)
+                guard at.distance(to: point) < WorldCollider.characterReach else { return nil }
+                return WorldCollider.characterBox(at: at, size: avatar.profile.height)
+            }
+        }
+
         func syncRoster(_ roster: [PlayerSnapshot], localPeerID: PeerID) {
             var seen = Set<PeerID>()
 
@@ -497,6 +516,7 @@ public struct GameViewport: UIViewRepresentable {
                     }
                 } else {
                     let avatar = AvatarEntity(peerID: player.peerID, profile: player.profile, position: player.position)
+                    avatar.detailed = avatarsDetailed
                     avatarHidden[player.peerID] = player.isHidden
                     avatar.isEnabled = !player.isHidden
                     worldScene.anchor.addChild(avatar)
@@ -695,6 +715,7 @@ public struct GameViewport: UIViewRepresentable {
                 velocity: localSnapshot.velocity,
                 body: body,
                 index: index,
+                characters: characterBoxes(near: localSnapshot.position, world: world),
                 deltaTime: dt
             )
             localSnapshot.position = collision.position
@@ -880,6 +901,8 @@ public struct GameViewport: UIViewRepresentable {
             guard profile != appliedProfile else { return }
             appliedProfile = profile
             worldScene.setGraphics(profile)
+            localAvatar?.detailed = avatarsDetailed
+            for avatar in avatars.values { avatar.detailed = avatarsDetailed }
             switch profile.level {
             case .high: particles?.budget = 600
             case .medium: particles?.budget = 300

@@ -19,7 +19,7 @@ extension GameRuntime {
     ]
 
     public static let partsWorldMemberNames: [String] = [
-        "weather", "time", "day_length", "sky_style", "effect", "shadows", "music"
+        "weather", "time", "day_length", "sky_style", "effect", "shadows", "music", "solid_players"
     ]
 
     // MARK: Leaderboards, kept by the host
@@ -499,6 +499,7 @@ extension GameRuntime {
         case "effect": return .string(environment.screenEffect.rawValue)
         case "shadows": return .bool(environment.shadows)
         case "music": return environment.music.map { .string($0.rawValue) } ?? .null
+        case "solid_players": return .bool(environment.solidCharacters)
         default: return nil
         }
     }
@@ -533,6 +534,7 @@ extension GameRuntime {
         case "effect": environment.screenEffect = try choice(ScreenEffect.self)
         case "shadows": environment.shadows = value.isTruthy
         case "music": environment.music = value.isNull ? nil : try choice(MusicTrack.self)
+        case "solid_players": environment.solidCharacters = value.isTruthy
         default: return false
         }
         return true

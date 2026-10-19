@@ -33,6 +33,9 @@ public struct EnvironmentSettings: Codable, Hashable, Sendable {
     public var shadows: Bool
     /// The music that plays when nothing else has been asked for.
     public var music: MusicTrack?
+    /// People and NPCs bump into each other and can stand on each other,
+    /// unless the game turns it off (`world.solid_players = false`).
+    public var solidCharacters: Bool
 
     public init(
         skyTop: ColorRGBA = ColorRGBA(hex: "#0B1026")!,
@@ -51,7 +54,8 @@ public struct EnvironmentSettings: Codable, Hashable, Sendable {
         screenEffect: ScreenEffect = .none,
         shadows: Bool = true,
         music: MusicTrack? = nil,
-        dayEpoch: Double? = nil
+        dayEpoch: Double? = nil,
+        solidCharacters: Bool = true
     ) {
         self.skyTop = skyTop
         self.skyBottom = skyBottom
@@ -70,6 +74,7 @@ public struct EnvironmentSettings: Codable, Hashable, Sendable {
         self.shadows = shadows
         self.music = music
         self.dayEpoch = dayEpoch
+        self.solidCharacters = solidCharacters
     }
 
     public static let `default` = EnvironmentSettings()
@@ -78,6 +83,7 @@ public struct EnvironmentSettings: Codable, Hashable, Sendable {
         case skyTop, skyBottom, ambientIntensity, sunPitchDegrees, sunYawDegrees, gravity, killPlaneHeight
         case showGroundPlane, groundColor
         case weather, timeOfDay, dayLengthMinutes, skyStyle, screenEffect, shadows, music, dayEpoch
+        case solidCharacters
     }
 
     public init(from decoder: Decoder) throws {
@@ -101,6 +107,7 @@ public struct EnvironmentSettings: Codable, Hashable, Sendable {
         shadows = (try? c.decodeIfPresent(Bool.self, forKey: .shadows)) ?? true
         music = try? c.decodeIfPresent(MusicTrack.self, forKey: .music)
         dayEpoch = try? c.decodeIfPresent(Double.self, forKey: .dayEpoch)
+        solidCharacters = (try? c.decodeIfPresent(Bool.self, forKey: .solidCharacters)) ?? true
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -124,6 +131,7 @@ public struct EnvironmentSettings: Codable, Hashable, Sendable {
         if !shadows { try c.encode(shadows, forKey: .shadows) }
         try c.encodeIfPresent(music, forKey: .music)
         try c.encodeIfPresent(dayEpoch, forKey: .dayEpoch)
+        if !solidCharacters { try c.encode(solidCharacters, forKey: .solidCharacters) }
     }
 
     /// Uses something the first world format did not have.

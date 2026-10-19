@@ -190,6 +190,8 @@ public enum ScriptReference {
                   L("Weather (clear, rain, snow, fog, storm), the hour, minutes for a whole day, and the sky: gradient, clouds, sunset, stars, aurora, space.")),
             Entry("world.effect = \"retro\"  world.shadows = false  world.music = \"calm\"",
                   L("A look for the whole screen (none, bloom, vivid, warm, cool, noir, retro, dream), shadows, and the world's music.")),
+            Entry("world.solid_players = false",
+                  L("People and NPCs bump into each other and can stand on each other. False lets them pass through, as before 8.4.")),
             Entry("b.particles = \"fire\"  b.image = \"Poster\"",
                   L("A block that keeps giving off particles, or shows one of the world's pictures.")),
             Entry("b.label = \"Shop\"  b.label = [{text: \"Rare\", color: \"#3B82F6\"}, \"Pizza Cat\"]  b.label_height = 2  b.label_size = 1.2  b.label_range = 40",
