@@ -120,6 +120,50 @@ final class ScriptWorldTests: RuntimeTestCase {
                        "held up only for a moment: the game still sees it arrive")
     }
 
+    /// Last Survivor Games: a hundred NPCs walking one field together.
+    /// Each bumps into only the nearest few, and they all get across.
+    func testAHundredNPCsCrossAFieldTogether() {
+        let game = game(#"""
+        on start()
+          for i in range(1, 99) do
+            let n = create_npc({name: "#" + i, position: {x: (i % 10) * 1.2 - 6, y: 0, z: floor(i / 10) * 1.2}})
+            n.move_to({x: (i % 10) * 1.2 - 6, y: 0, z: 30})
+          end
+        end
+        on tick(dt)
+          if len(npcs()) != 99 then print("lost some") end
+        end
+        """#, world: floorWorld())
+        startWithBoth(game)
+        for step in 1...200 { game.advance(to: Double(step) * 0.1) }
+        XCTAssertTrue(game.drainErrors().isEmpty)
+        XCTAssertTrue(game.drainOutput().isEmpty)
+        let npcs = game.roster.filter(\.isNPC)
+        XCTAssertEqual(npcs.count, 99)
+        XCTAssertTrue(npcs.allSatisfy { $0.position.z > 29 }, "everyone got across")
+        let others = game.characterBoxes(near: Vec3(0, 0, 30), except: game.states.values.first { $0.isNPC }!)
+        XCTAssertLessThanOrEqual(others.count, CrowdGrid<PeerID>.limit)
+    }
+
+    func testPlayersStayInJoinOrderAsNPCsComeAndGo() {
+        let game = game(#"""
+        on start()
+          for i in range(1, 3) do create_npc({name: "N" + i, position: {x: i, y: 0, z: 0}}) end
+          print(len(npcs()))
+          npcs()[1].destroy()
+          let names = []
+          for n in npcs() do append(names, n.name) end
+          print(join(names, ","))
+          create_npc({name: "N4", position: {x: 4, y: 0, z: 0}})
+          print(len(npcs()))
+          print(npcs()[3].name)
+        end
+        """#, world: floorWorld())
+        startWithBoth(game)
+        XCTAssertTrue(game.drainErrors().isEmpty, "\(game.drainErrors())")
+        XCTAssertEqual(game.drainOutput(), ["3", "N2,N3", "3", "N4"])
+    }
+
     func testAGameCanLetCharactersPassThrough() {
         let game = game(#"""
         on start()

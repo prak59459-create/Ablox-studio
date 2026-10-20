@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "7.4",
-  "build": 65,
+  "version": "7.5",
+  "build": 66,
   "protocol": 8,
   "date": "2026-10-20",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Same as Ablox 8.6: games that bring in a lot of characters at once no longer freeze the test play. Characters share their parts and appear a few at a time"
+      "Test play keeps up with crowds: with lots of NPCs, far-away characters take turns moving their arms and legs, only the nearest 30 names show, NPCs only check the people right next to them, and a crowd that holds you up lets you slip through after half a second"
     ],
     "ja": [
-      "Ablox 8.6 と同じ：たくさんの キャラクターが 一度に 来る ゲームで テストプレイが 止まらないように（キャラクターの 部品を 使い回して、少しずつ 出す）"
+      "テストプレイが 人ごみでも 軽く なりました：NPC が たくさん いるとき、遠くの キャラクターは 手足を 交代で 動かし、名前は 近くの 30人だけ。NPC は すぐ となりの人だけを 見て、人ごみに 0.5秒 止められたら すりぬけて 進めます"
     ]
   }
 }

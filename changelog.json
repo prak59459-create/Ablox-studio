@@ -2,6 +2,19 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "7.5",
+      "build": 66,
+      "date": "2026-10-20",
+      "notes": {
+        "en": [
+          "Test play keeps up with crowds: with lots of NPCs, far-away characters take turns moving their arms and legs, only the nearest 30 names show, NPCs only check the people right next to them, and a crowd that holds you up lets you slip through after half a second"
+        ],
+        "ja": [
+          "テストプレイが 人ごみでも 軽く なりました：NPC が たくさん いるとき、遠くの キャラクターは 手足を 交代で 動かし、名前は 近くの 30人だけ。NPC は すぐ となりの人だけを 見て、人ごみに 0.5秒 止められたら すりぬけて 進めます"
+        ]
+      }
+    },
+    {
       "version": "7.4",
       "build": 65,
       "date": "2026-10-20",

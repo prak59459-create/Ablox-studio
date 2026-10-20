@@ -197,6 +197,12 @@ public struct GameViewport: UIViewRepresentable {
         /// Blocks currently overlapped, so a touch is reported on entry rather
         /// than every frame the player stands there.
         private var currentlyTouching: Set<UUID> = []
+        /// How long a crowd has held us up; we slip through after a moment.
+        private var squeeze = CrowdSqueeze()
+        /// Each other avatar's place from the camera, nearest first, looked
+        /// at with the far-away check; and frames counted, for taking turns.
+        private var avatarRanks: [PeerID: Int] = [:]
+        private var frameNumber = 0
 
         // MARK: Script-driven play
 
@@ -517,12 +523,14 @@ public struct GameViewport: UIViewRepresentable {
         /// Everyone else close by, where they are drawn, for us to bump
         /// into and stand on — unless the game made players pass through.
         private func characterBoxes(near point: Vec3, world: WorldDocument) -> [BoundingBox] {
-            guard world.environment.solidCharacters else { return [] }
-            return avatars.compactMap { peer, avatar in
+            guard world.environment.solidCharacters, !squeeze.passesThrough else { return [] }
+            let near = CrowdGrid(avatars.compactMap { peer, avatar -> (id: PeerID, position: Vec3)? in
                 guard avatarHidden[peer] != true, avatar.parent != nil else { return nil }
-                let at = Vec3(avatar.position)
-                guard at.distance(to: point) < WorldCollider.characterReach else { return nil }
-                return WorldCollider.characterBox(at: at, size: avatar.profile.height)
+                return (peer, Vec3(avatar.position))
+            })
+            return near.nearest(to: point, within: WorldCollider.characterReach).compactMap { found in
+                guard let avatar = avatars[found.id] else { return nil }
+                return WorldCollider.characterBox(at: found.position, size: avatar.profile.height)
             }
         }
 
@@ -759,14 +767,18 @@ public struct GameViewport: UIViewRepresentable {
 
             // 2. Velocity → position, resolved against the world.
             //    Deterministic and shared with the host — see WorldCollider.
+            let others = characterBoxes(near: localSnapshot.position, world: world)
             let collision = WorldCollider.resolve(
                 position: localSnapshot.position,
                 velocity: localSnapshot.velocity,
                 body: body,
                 index: index,
-                characters: characterBoxes(near: localSnapshot.position, world: world),
+                characters: others,
                 deltaTime: dt
             )
+            squeeze.note(wanted: Vec3(localSnapshot.velocity.x, 0, localSnapshot.velocity.z).length,
+                         got: Vec3(collision.velocity.x, 0, collision.velocity.z).length,
+                         amongCharacters: !others.isEmpty, deltaTime: dt)
             localSnapshot.position = collision.position
             localSnapshot.velocity = collision.velocity
             localSnapshot.isGrounded = collision.isGrounded
@@ -788,8 +800,10 @@ public struct GameViewport: UIViewRepresentable {
             }
 
             // 5. Ease everyone else toward their last known transform.
-            for avatar in avatars.values {
-                avatar.update(deltaTime: dt)
+            frameNumber &+= 1
+            for (peer, avatar) in avatars {
+                let rank = avatarRanks[peer] ?? 0
+                avatar.update(deltaTime: dt, poses: CrowdDetail.poses(rank: rank, frame: frameNumber))
             }
             emitTrails(dt: dt)
 
@@ -1231,6 +1245,9 @@ public struct GameViewport: UIViewRepresentable {
                 }
                 if avatar.isEnabled != show { avatar.isEnabled = show }
             }
+            avatarRanks = CrowdDetail.ranks(avatars.map { peer, avatar in
+                (peer, avatar.targetPosition.distance(to: eye))
+            })
         }
 
         /// Where the camera is centred: the local player, or whoever they
@@ -1595,6 +1612,11 @@ public struct GameViewport: UIViewRepresentable {
                     anchor: point, distance: distance, isNPC: player?.isNPC ?? false,
                     plate: player?.profile.nameplate ?? avatar.profile.nameplate
                 ))
+            }
+            // In a crowd, only the nearest names: a hundred labels moving
+            // every frame cost more than the people under them.
+            if tags.count > CrowdDetail.nameTags {
+                tags = Array(tags.sorted { $0.distance < $1.distance }.prefix(CrowdDetail.nameTags))
             }
             overlay.sizeFactor = CGFloat(chat.nameSize.scale)
             overlay.update(tags, showNames: !parent.photoMode)

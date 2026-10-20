@@ -578,7 +578,10 @@ public final class AvatarEntity: Entity {
     /// - Parameter smoothing: 0 snaps, 1 never arrives. Remote avatars use a
     ///   frame-rate-independent factor so the easing looks the same at 30 and
     ///   120 Hz.
-    public func update(deltaTime: Float, smoothing: Float = 12) {
+    /// - Parameter poses: false to only move it this frame; the walk cycle
+    ///   catches up the next time it is posed. Far people in a crowd are
+    ///   posed every few frames.
+    public func update(deltaTime: Float, smoothing: Float = 12, poses: Bool = true) {
         let blend = 1 - exp(-smoothing * deltaTime)
 
         let current = Vec3(position)
@@ -589,9 +592,15 @@ public final class AvatarEntity: Entity {
         let yaw = normalizeDegrees(currentYaw + angularDelta(from: currentYaw, to: targetYawDegrees) * blend)
         orientation = Facing.rotation(yawDegrees: yaw).simd
 
-        let travelled = next.horizontalDistance(to: current)
-        animate(travelled: travelled, deltaTime: deltaTime)
+        unposed.travelled += next.horizontalDistance(to: current)
+        unposed.time += deltaTime
+        guard poses else { return }
+        animate(travelled: unposed.travelled, deltaTime: unposed.time)
+        unposed = (0, 0)
     }
+
+    /// How far it walked, and for how long, since it was last posed.
+    private var unposed: (travelled: Float, time: Float) = (0, 0)
 
     /// The walk cycle, or the gesture playing — for the local avatar too,
     /// which is moved directly rather than eased.

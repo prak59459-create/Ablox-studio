@@ -112,7 +112,12 @@ public final class GameRuntime {
 
     var interpreter: ScriptInterpreter?
     var fileNames: [String] = []
-    var states: [PeerID: PlayerState] = [:]
+    var states: [PeerID: PlayerState] = [:] {
+        didSet { joinedOrder = nil }
+    }
+    /// `states` in the order they joined, kept until someone joins or
+    /// leaves: sorting a hundred players for every question made a crowd slow.
+    private var joinedOrder: [PlayerState]?
     var joinCounter = 0
     var clock: Double
     var roundStartedAt: Double = 0
@@ -712,6 +717,9 @@ public final class GameRuntime {
         let gravityScale = worldGravityScale
         // One index for every NPC this step: NPCs do not move blocks.
         let index = worldIndex
+        // Who stands where, once a step: an NPC moves a few centimetres in
+        // one, so the ones that moved first are near enough where they were.
+        let crowd = world.environment.solidCharacters ? crowdGrid() : nil
 
         for state in orderedStates where state.isNPC {
             guard var body = state.body else { continue }
@@ -739,7 +747,7 @@ public final class GameRuntime {
             // People and other NPCs are in the way too — but an NPC held up
             // by them for a second walks through, so a game waiting for it
             // to arrive never waits forever.
-            let others = state.bumpedFor > 1 ? [] : characterBoxes(near: body.position, except: state)
+            let others = state.bumpedFor > 1 ? [] : characterBoxes(near: body.position, except: state, crowd: crowd)
             let result = WorldCollider.resolve(position: body.position, velocity: velocity,
                                                body: CharacterBody(radius: 0.4 * state.profile.height,
                                                                    height: 1.8 * state.profile.height),
@@ -777,16 +785,24 @@ public final class GameRuntime {
         }
     }
 
-    /// Everyone near `point` an NPC bumps into: people and NPCs that are
-    /// alive and shown, while the world has solid players.
-    func characterBoxes(near point: Vec3, except state: PlayerState) -> [BoundingBox] {
+    /// The nearest few near `point` an NPC bumps into: people and NPCs that
+    /// are alive and shown, while the world has solid players. `crowd` is
+    /// where everyone stood when this step began.
+    func characterBoxes(near point: Vec3, except state: PlayerState,
+                        crowd: CrowdGrid<PeerID>? = nil) -> [BoundingBox] {
         guard world.environment.solidCharacters else { return [] }
-        let reach = WorldCollider.characterReach
-        return orderedStates.compactMap { other in
-            guard other !== state, other.isAlive, !other.isHidden,
-                  let at = position(of: other), at.distance(to: point) < reach else { return nil }
-            return WorldCollider.characterBox(at: at, size: other.profile.height)
+        let grid = crowd ?? crowdGrid()
+        return grid.nearest(to: point, within: WorldCollider.characterReach, except: state.peer).map { found in
+            WorldCollider.characterBox(at: found.position, size: states[found.id]?.profile.height ?? 1)
         }
+    }
+
+    /// Everyone who can be bumped into, sorted into squares.
+    private func crowdGrid() -> CrowdGrid<PeerID> {
+        CrowdGrid(orderedStates.compactMap { other in
+            guard other.isAlive, !other.isHidden, let at = position(of: other) else { return nil }
+            return (other.peer, at)
+        })
     }
 
     private func goalPosition(of state: PlayerState) -> Vec3? {
@@ -948,7 +964,10 @@ public final class GameRuntime {
     }
 
     var orderedStates: [PlayerState] {
-        states.values.sorted { $0.joinOrder < $1.joinOrder }
+        if let joinedOrder { return joinedOrder }
+        let sorted = states.values.sorted { $0.joinOrder < $1.joinOrder }
+        joinedOrder = sorted
+        return sorted
     }
 
     func hasHandler(_ event: Event) -> Bool {
