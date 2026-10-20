@@ -526,7 +526,7 @@ public struct GameViewport: UIViewRepresentable {
             guard world.environment.solidCharacters, !squeeze.passesThrough else { return [] }
             let near = CrowdGrid(avatars.compactMap { peer, avatar -> (id: PeerID, position: Vec3)? in
                 guard avatarHidden[peer] != true, avatar.parent != nil else { return nil }
-                return (peer, Vec3(avatar.position))
+                return (id: peer, position: Vec3(avatar.position))
             })
             return near.nearest(to: point, within: WorldCollider.characterReach).compactMap { found in
                 guard let avatar = avatars[found.id] else { return nil }
@@ -1246,7 +1246,7 @@ public struct GameViewport: UIViewRepresentable {
                 if avatar.isEnabled != show { avatar.isEnabled = show }
             }
             avatarRanks = CrowdDetail.ranks(avatars.map { peer, avatar in
-                (peer, avatar.targetPosition.distance(to: eye))
+                (id: peer, distance: avatar.targetPosition.distance(to: eye))
             })
         }
 
