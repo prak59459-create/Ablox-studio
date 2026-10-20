@@ -482,15 +482,28 @@ public struct GameViewport: UIViewRepresentable {
             worldScene.sync(to: world, changes: changes, index: index, physicsEnabled: physicsNeeded)
         }
 
-        /// Where everyone else is this frame. Their looks, arrivals and
-        /// leavings are seen to ten times a second (`syncRoster`).
+        /// Where everyone else is this frame. Their looks and leavings are
+        /// seen to ten times a second (`syncRoster`); arrivals a few each
+        /// frame here, so a hundred at once do not freeze the iPad.
         private func followPlayers() {
             let session = parent.session
             let local = session.localPeerID
+            drawArrivals(session.livePlayers, localPeerID: local)
             for player in session.livePlayers where player.peerID != local {
                 guard let avatar = avatars[player.peerID] else { continue }
                 avatar.targetPosition = player.position
                 avatar.targetYawDegrees = player.yawDegrees
+            }
+        }
+
+        private func drawArrivals(_ roster: [PlayerSnapshot], localPeerID: PeerID) {
+            for player in RosterArrivals.toDraw(roster, except: localPeerID, isDrawn: { avatars[$0] != nil }) {
+                let avatar = AvatarEntity(peerID: player.peerID, profile: player.profile, position: player.position)
+                avatar.detailed = avatarsDetailed
+                avatarHidden[player.peerID] = player.isHidden
+                avatar.isEnabled = !player.isHidden
+                worldScene.anchor.addChild(avatar)
+                avatars[player.peerID] = avatar
             }
         }
 
@@ -528,15 +541,9 @@ public struct GameViewport: UIViewRepresentable {
                         avatarHidden[player.peerID] = player.isHidden
                         existing.isEnabled = !player.isHidden
                     }
-                } else {
-                    let avatar = AvatarEntity(peerID: player.peerID, profile: player.profile, position: player.position)
-                    avatar.detailed = avatarsDetailed
-                    avatarHidden[player.peerID] = player.isHidden
-                    avatar.isEnabled = !player.isHidden
-                    worldScene.anchor.addChild(avatar)
-                    avatars[player.peerID] = avatar
                 }
             }
+            drawArrivals(roster, localPeerID: localPeerID)
 
             for (peerID, avatar) in avatars where !seen.contains(peerID) {
                 avatar.removeFromParent()

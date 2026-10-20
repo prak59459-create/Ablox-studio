@@ -36,7 +36,7 @@ public enum Strings {
     /// Exposed so the tests can see duplicates, which the dictionary hides.
     public static let entries: [(String, String)] = [
         coreEntries, clientEntries, studioEntries, guideEntries, catalogueEntries, scriptEntries, updateEntries, updateEntries2,
-        featureEntries, featureEntries2, featureEntries3, featureEntries4, featureEntries5, featureEntries6, featureEntries7, featureEntries8, featureEntries9, featureEntries10, featureEntries11, featureEntries12, featureEntries13, featureEntries14, featureEntries15, nextEntries, aiEntries
+        featureEntries, featureEntries2, featureEntries3, featureEntries4, featureEntries5, featureEntries6, featureEntries7, featureEntries8, featureEntries9, featureEntries10, featureEntries11, featureEntries12, featureEntries13, featureEntries14, featureEntries15, nextEntries, aiEntries, settingsPaneEntries
     ].flatMap { $0 }
 
     // MARK: - Shared vocabulary
@@ -3577,5 +3577,14 @@ public enum Strings {
         ("That doesn't look like a key.", "キーの 形では ないようです。"),
         ("AI helper (for grown-ups)", "AIヘルパー（おうちの人へ）"),
         ("The key stays in this iPad's keychain. Questions go to the provider with it; nothing else from the iPad is sent. Get a free key at console.groq.com.", "キーは この iPad の キーチェーンにだけ 保存されます。しつもんは このキーで サービスに 送られ、ほかの データは 送りません。無料の キーは console.groq.com で 作れます。"),
+    ]
+
+    /// Settings in groups, like a Mac's System Settings (`SettingsPanes.swift`).
+    static let settingsPaneEntries: [(String, String)] = [
+        ("General", "一般"),
+        ("Help and ideas", "ヘルプと 意見"),
+        ("Clear search", "検索を けす"),
+        ("Nothing matches that search.", "見つかりませんでした。"),
+        ("{} found", "{} こ 見つかりました"),
     ]
 }

@@ -49,10 +49,10 @@ enum AvatarWardrobe {
     }
 
     static func box(_ w: Float, _ h: Float, _ d: Float, corner: Float = 0) -> MeshResource {
-        .generateBox(size: SIMD3<Float>(w, h, d), cornerRadius: corner)
+        AvatarMeshes.box(SIMD3<Float>(w, h, d), corner: corner)
     }
 
-    static func ball(_ radius: Float) -> MeshResource { .generateSphere(radius: radius) }
+    static func ball(_ radius: Float) -> MeshResource { AvatarMeshes.ball(radius) }
     static func tube(_ height: Float, _ radius: Float) -> MeshResource { .abloxCylinder(height: height, radius: radius) }
     static func cone(_ height: Float, _ radius: Float) -> MeshResource { .abloxCone(height: height, radius: radius) }
 
@@ -282,7 +282,7 @@ enum AvatarWardrobe {
     static func pet(_ pet: AvatarProfile.Pet, skin: RealityKit.Material) -> Entity? {
         let root = Entity()
         func part(_ size: SIMD3<Float>, _ at: SIMD3<Float>, _ m: RealityKit.Material? = nil, tilt: Float = 0) {
-            add(.generateBox(size: size, cornerRadius: min(size.x, size.y, size.z) * 0.2), m ?? skin, at: at, to: root, turn: tilt)
+            add(AvatarMeshes.box(size, corner: min(size.x, size.y, size.z) * 0.2), m ?? skin, at: at, to: root, turn: tilt)
         }
         func eyes(y: Float, z: Float, spread: Float = 0.04, size: Float = 0.03) {
             part([size, size, 0.01], [-spread, y, z], ink)

@@ -1,18 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "7.3",
-  "build": 64,
+  "version": "7.4",
+  "build": 65,
   "protocol": 8,
   "date": "2026-10-20",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Matches Ablox 8.5: others sliding with the slide button every game now has are seen sliding in test play, and characters are plain blocks again",
-      "The jump button in test play is a little bigger"
+      "Same as Ablox 8.6: games that bring in a lot of characters at once no longer freeze the test play. Characters share their parts and appear a few at a time"
     ],
     "ja": [
-      "Ablox 8.5 と 同じに：どのゲームにも できた スライディングボタンで すべる人が テストプレイでも 見えます。キャラクターは シンプルな ブロックに もどりました",
-      "テストプレイの ジャンプボタンを 少し 大きく"
+      "Ablox 8.6 と同じ：たくさんの キャラクターが 一度に 来る ゲームで テストプレイが 止まらないように（キャラクターの 部品を 使い回して、少しずつ 出す）"
     ]
   }
 }

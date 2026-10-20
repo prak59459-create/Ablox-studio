@@ -88,7 +88,7 @@ extension AvatarEntity {
     }
 
     private func add(_ group: Entity, _ material: RealityKit.Material, size: SIMD3<Float>, at position: SIMD3<Float>) {
-        let part = ModelEntity(mesh: .generateBox(size: size, cornerRadius: Swift.min(size.x, size.y, size.z) * 0.2),
+        let part = ModelEntity(mesh: AvatarMeshes.box(size, corner: Swift.min(size.x, size.y, size.z) * 0.2),
                                materials: [material])
         part.position = position
         group.addChild(part)

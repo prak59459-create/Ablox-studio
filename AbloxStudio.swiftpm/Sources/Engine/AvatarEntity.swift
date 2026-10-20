@@ -121,19 +121,19 @@ public final class AvatarEntity: Entity {
         // forgiving of the box collider that represents the player in
         // `WorldCollider`. Limbs turn about the shoulder and hip
         // (`AvatarPoses.swift`), not their middle.
-        body.model = ModelComponent(mesh: .generateBox(size: SIMD3<Float>(0.6, 0.7, 0.34), cornerRadius: 0.05), materials: [])
+        body.model = ModelComponent(mesh: AvatarMeshes.box(SIMD3<Float>(0.6, 0.7, 0.34), corner: 0.05), materials: [])
         body.position = SIMD3<Float>(0, 0.95, 0)
 
-        head.model = ModelComponent(mesh: .generateBox(size: SIMD3<Float>(0.45, 0.45, 0.45), cornerRadius: 0.06), materials: [])
+        head.model = ModelComponent(mesh: AvatarMeshes.box(SIMD3<Float>(0.45, 0.45, 0.45), corner: 0.06), materials: [])
         head.position = SIMD3<Float>(0, 1.53, 0)
 
         for (arm, side) in [(leftArm, Float(-1)), (rightArm, Float(1))] {
-            arm.model = ModelComponent(mesh: .generateBox(size: SIMD3<Float>(0.24, 0.6, 0.26), cornerRadius: 0.05), materials: [])
+            arm.model = ModelComponent(mesh: AvatarMeshes.box(SIMD3<Float>(0.24, 0.6, 0.26), corner: 0.05), materials: [])
             arm.position = SIMD3<Float>(side * Self.shoulderX, 0.95, 0)
         }
 
         for (leg, side) in [(leftLeg, Float(-1)), (rightLeg, Float(1))] {
-            leg.model = ModelComponent(mesh: .generateBox(size: SIMD3<Float>(0.29, 0.6, 0.3), cornerRadius: 0.05), materials: [])
+            leg.model = ModelComponent(mesh: AvatarMeshes.box(SIMD3<Float>(0.29, 0.6, 0.3), corner: 0.05), materials: [])
             leg.position = SIMD3<Float>(side * Self.hipX, 0.3, 0)
         }
 
@@ -185,7 +185,7 @@ public final class AvatarEntity: Entity {
         let ink = UnlitMaterial(color: UIColor(red: 0.1, green: 0.11, blue: 0.14, alpha: 1))
         let front: Float = -0.228
         func part(_ w: Float, _ h: Float, _ x: Float, _ y: Float, _ material: RealityKit.Material? = nil) {
-            let box = ModelEntity(mesh: .generateBox(size: SIMD3<Float>(w, h, 0.012)), materials: [material ?? ink])
+            let box = ModelEntity(mesh: AvatarMeshes.box(SIMD3<Float>(w, h, 0.012)), materials: [material ?? ink])
             box.position = SIMD3<Float>(x, y, front)
             group.addChild(box)
         }
@@ -229,7 +229,7 @@ public final class AvatarEntity: Entity {
             // Ears, on top of the head.
             for side: Float in [-1, 1] {
                 let earMaterials: [RealityKit.Material] = head.model?.materials ?? [ink]
-                let ear = ModelEntity(mesh: .generateBox(size: SIMD3<Float>(0.1, 0.12, 0.06)), materials: earMaterials)
+                let ear = ModelEntity(mesh: AvatarMeshes.box(SIMD3<Float>(0.1, 0.12, 0.06)), materials: earMaterials)
                 ear.position = SIMD3<Float>(side * 0.14, 0.27, 0)
                 ear.orientation = simd_quatf(angle: side * 0.3, axis: SIMD3<Float>(0, 0, 1))
                 group.addChild(ear)
@@ -275,7 +275,7 @@ public final class AvatarEntity: Entity {
         let root = Entity()
         let dark = UnlitMaterial(color: UIColor(red: 0.1, green: 0.11, blue: 0.14, alpha: 1))
         func box(_ size: SIMD3<Float>, _ at: SIMD3<Float>, _ m: RealityKit.Material? = nil, tilt: Float = 0) {
-            let part = ModelEntity(mesh: .generateBox(size: size, cornerRadius: min(size.x, size.y, size.z) * 0.2), materials: [m ?? skin])
+            let part = ModelEntity(mesh: AvatarMeshes.box(size, corner: min(size.x, size.y, size.z) * 0.2), materials: [m ?? skin])
             part.position = at
             if tilt != 0 { part.orientation = simd_quatf(angle: tilt, axis: SIMD3<Float>(0, 0, 1)) }
             root.addChild(part)
@@ -314,7 +314,7 @@ public final class AvatarEntity: Entity {
             box(SIMD3<Float>(0.18, 0.02, 0.1), SIMD3<Float>(-0.12, 0.03, 0.02), tilt: 0.4)
             box(SIMD3<Float>(0.18, 0.02, 0.1), SIMD3<Float>(0.12, 0.03, 0.02), tilt: -0.4)
         case .slime:
-            let blob = ModelEntity(mesh: .generateSphere(radius: 0.17), materials: [skin])
+            let blob = ModelEntity(mesh: AvatarMeshes.ball(0.17), materials: [skin])
             blob.position = SIMD3<Float>(0, 0.14, 0)
             blob.scale = SIMD3<Float>(1.1, 0.8, 1.1)
             root.addChild(blob)
@@ -378,7 +378,7 @@ public final class AvatarEntity: Entity {
         case .none:
             return
         case .cap:
-            mesh = .generateBox(size: SIMD3<Float>(0.5, 0.12, 0.5), cornerRadius: 0.04)
+            mesh = AvatarMeshes.box(SIMD3<Float>(0.5, 0.12, 0.5), corner: 0.04)
             offset = SIMD3<Float>(0, 1.8, 0)
         case .crown:
             mesh = .abloxCylinder(height: 0.2, radius: 0.26)
@@ -464,7 +464,7 @@ public final class AvatarEntity: Entity {
         root.name = "ablox.avatar.ride"
         func box(_ size: SIMD3<Float>, at position: SIMD3<Float>, _ material: RealityKit.Material,
                  corner: Float = 0.03, tilt: Float = 0) {
-            let part = ModelEntity(mesh: .generateBox(size: size, cornerRadius: corner), materials: [material])
+            let part = ModelEntity(mesh: AvatarMeshes.box(size, corner: corner), materials: [material])
             part.position = position
             if tilt != 0 { part.orientation = simd_quatf(angle: tilt, axis: SIMD3<Float>(1, 0, 0)) }
             root.addChild(part)

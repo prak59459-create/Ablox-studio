@@ -2,6 +2,19 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "7.4",
+      "build": 65,
+      "date": "2026-10-20",
+      "notes": {
+        "en": [
+          "Same as Ablox 8.6: games that bring in a lot of characters at once no longer freeze the test play. Characters share their parts and appear a few at a time"
+        ],
+        "ja": [
+          "Ablox 8.6 と同じ：たくさんの キャラクターが 一度に 来る ゲームで テストプレイが 止まらないように（キャラクターの 部品を 使い回して、少しずつ 出す）"
+        ]
+      }
+    },
+    {
       "version": "7.3",
       "build": 64,
       "date": "2026-10-20",
