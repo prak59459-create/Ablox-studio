@@ -24,6 +24,9 @@ public final class PlayControls: ObservableObject {
     public var keepWalking = false
     public var alwaysRun = false
     public var isFiring = false
+    /// The ⇩ button or the C key was pressed: the 3D view slides on its next
+    /// frame, if it can (`QuickSlide`), and clears this.
+    public var slideRequested = false
 
     // A game controller, keyboard or mouse.
     public var padStick: Vec3 = .zero

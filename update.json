@@ -1,18 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "7.2",
-  "build": 63,
+  "version": "7.3",
+  "build": 64,
   "protocol": 8,
-  "date": "2026-10-19",
+  "date": "2026-10-20",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "In test play, people and NPCs bump into each other and can stand on each other, as in Ablox 8.4 (world.solid_players = false turns it off)",
-      "Avatars have shoes, hands, sleeves, a belt and more small parts, as in Ablox 8.4"
+      "Matches Ablox 8.5: others sliding with the slide button every game now has are seen sliding in test play, and characters are plain blocks again",
+      "The jump button in test play is a little bigger"
     ],
     "ja": [
-      "テストプレイで、人と NPC が ぶつかり、上に乗れるように（Ablox 8.4 と同じ。world.solid_players = false で 切れます）",
-      "アバターに くつ・手・そで・ベルトなどの こまかいパーツ（Ablox 8.4 と同じ）"
+      "Ablox 8.5 と 同じに：どのゲームにも できた スライディングボタンで すべる人が テストプレイでも 見えます。キャラクターは シンプルな ブロックに もどりました",
+      "テストプレイの ジャンプボタンを 少し 大きく"
     ]
   }
 }

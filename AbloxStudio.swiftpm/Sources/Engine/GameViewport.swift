@@ -238,7 +238,14 @@ public struct GameViewport: UIViewRepresentable {
         /// The world as drawn this frame: moving platforms where the clock puts them.
         private var placedWorld: WorldDocument?
         private var surroundings: Surroundings = .normal
-        private var musicPlaying: (track: MusicTrack?, volume: Float)?
+        /// The slide button's slide, while it lasts (`QuickSlide`).
+        private var quickSlide = QuickSlide()
+        /// What the local player rides this frame: a slide from the button
+        /// looks and moves as the game's `p.ride = "slide"` does.
+        private var localRide: AvatarProfile.Ride {
+            quickSlide.isSliding ? .slide : parent.session.localAppearance.ride
+        }
+        private var musicPlaying: MyMusic.Playback?
         /// The best graphics level the battery and the iPad's heat allow.
         private var powerCap: GraphicsProfile.Level?
         private var powerClock: Float = 5
@@ -366,7 +373,12 @@ public struct GameViewport: UIViewRepresentable {
             guard preferences != self.preferences else { return }
             let batteryChanged = preferences.batterySaver != self.preferences.batterySaver
                 || preferences.coolDownWhenHot != self.preferences.coolDownWhenHot
+            let detailChanged = preferences.detailedAvatars != self.preferences.detailedAvatars
             self.preferences = preferences
+            if detailChanged {
+                localAvatar?.detailed = avatarsDetailed
+                for avatar in avatars.values { avatar.detailed = avatarsDetailed }
+            }
             feedback.effectsVolume = Float(preferences.effectsVolume)
             SoundSynth.shared.musicGain = parent.soundEnabled ? Float(preferences.musicVolume) : 0
             if !preferences.readLinesAloud { LineReader.shared.stop() }
@@ -406,6 +418,7 @@ public struct GameViewport: UIViewRepresentable {
             waypointOverlay?.removeFromSuperview()
             waypointOverlay = nil
             SoundSynth.shared.setMusic(nil)
+            MyMusicPlayer.shared.stop()
             LineReader.shared.stop()
         }
 
@@ -481,10 +494,11 @@ public struct GameViewport: UIViewRepresentable {
             }
         }
 
-        /// Avatars get their small parts (shoes, hands, a belt) from the
-        /// medium graphics level up.
+        /// Avatars get their small parts (shoes, hands, a belt) when the
+        /// player turned them on, from the medium graphics level up.
         private var avatarsDetailed: Bool {
-            (appliedProfile?.level ?? .high).rawValue >= GraphicsProfile.Level.medium.rawValue
+            preferences.detailedAvatars
+                && (appliedProfile?.level ?? .high).rawValue >= GraphicsProfile.Level.medium.rawValue
         }
 
         /// Everyone else close by, where they are drawn, for us to bump
@@ -597,6 +611,11 @@ public struct GameViewport: UIViewRepresentable {
                             avatar?.play(emote)
                         case let .stamp(emoji)?:
                             nameTags?.showStamp(emoji, for: speaker)
+                        case .slide?:
+                            // Our own slide started when the button was pressed.
+                            if speaker != parent.session.localPeerID {
+                                avatars[speaker]?.slideBriefly(seconds: QuickSlide.duration)
+                            }
                         case nil:
                             break
                         }
@@ -613,6 +632,28 @@ public struct GameViewport: UIViewRepresentable {
         }
 
         // MARK: Render loop
+
+        /// The slide button: starts a slide when it may, and ends one early
+        /// when the game freezes them, they reach water or a ladder, or get
+        /// on a ride. The other iPads see the pose from a gesture.
+        private func slideIfAsked(controls: PlayControls, scale: MovementScale, movement: MovementConfig,
+                                  around: Surroundings, dt: Float) {
+            quickSlide.advance(by: dt)
+            let wasSliding = quickSlide.isSliding
+            let may = parent.spectating == nil
+                && QuickSlide.allowed(frozen: scale.frozen, ride: parent.session.localAppearance.ride,
+                                      surroundings: around, speedScale: scale.speed)
+            if !may { quickSlide.stop() }
+            if wasSliding, !quickSlide.isSliding { localAvatar?.slideBriefly(seconds: 0) }
+            guard controls.slideRequested else { return }
+            controls.slideRequested = false
+            guard may, let started = quickSlide.start(velocity: localSnapshot.velocity, yawDegrees: localSnapshot.yawDegrees,
+                                                      walkSpeed: movement.walkSpeed) else { return }
+            localSnapshot.velocity = started
+            localAvatar?.slideBriefly(seconds: QuickSlide.duration)
+            feedback.play(.whoosh, volume: 0.7)
+            parent.session.send(gesture: .slide)
+        }
 
         /// Sparkles, bubbles… behind anyone wearing a trail, while they move.
         private func emitTrails(dt: Float) {
@@ -693,9 +734,10 @@ public struct GameViewport: UIViewRepresentable {
                 if localSnapshot.velocity.y < -4 { feedback.play(.splash, volume: 0.6) }
             }
             surroundings = around
+            slideIfAsked(controls: controls, scale: scale, movement: movement, around: around, dt: dt)
             let motion = CharacterSolver.step(snapshot: localSnapshot, input: input, config: movement, surroundings: around,
                                               floats: parent.session.localAppearance.ride == .hoverboard,
-                                              slides: parent.session.localAppearance.ride == .slide, deltaTime: dt)
+                                              slides: localRide == .slide, deltaTime: dt)
             localSnapshot.velocity = motion.velocity
             localSnapshot.yawDegrees = motion.yawDegrees
             let shiftLocked = ShiftLock.turnsBody(isOn: preferences.hud.shiftLock, cameraMode: scripted.camera.mode,
@@ -1225,7 +1267,7 @@ public struct GameViewport: UIViewRepresentable {
                 var pitch = max(-80, min(80, parent.controls.cameraPitch))
                 let yaw = parent.controls.cameraYaw
                 // Sliding (`ride = "slide"`) puts the eyes at half height.
-                let eyeHeight = PlayerHitBody.eyeHeight * size * parent.session.localAppearance.ride.eyeScale
+                let eyeHeight = PlayerHitBody.eyeHeight * size * localRide.eyeScale
                 var eye = localSnapshot.position + Vec3(0, eyeHeight, 0) + jitter
                 var roll: Float = 0
                 if preferences.realMode {
@@ -1282,7 +1324,7 @@ public struct GameViewport: UIViewRepresentable {
             let pitch = parent.photoMode ? max(-85, min(60, held.cameraPitch)) : max(-75, min(20, held.cameraPitch))
             let orbit = Quat.euler(degrees: Vec3(pitch, held.cameraYaw, 0))
 
-            let crouch = parent.spectating == nil ? parent.session.localAppearance.ride.eyeScale : 1
+            let crouch = parent.spectating == nil ? localRide.eyeScale : 1
             let focus = subjectPosition + Vec3(0, 1.4 * size * crouch, 0) + jitter
             // Pinch-to-zoom (and Settings) scale the game's own distance.
             let desiredDistance: Float = settings.distance * preferences.cameraZoom
@@ -1453,7 +1495,8 @@ public struct GameViewport: UIViewRepresentable {
             particles.update(dt: dt)
         }
 
-        /// The script's music, or the world's, as loud as Settings says.
+        /// The script's music, or the world's, as loud as Settings says —
+        /// or a song of the player's own in its place (`MyMusic`).
         private func updateMusic(world: WorldDocument) {
             let wanted: MusicTrack?
             let volume: Float
@@ -1464,10 +1507,27 @@ public struct GameViewport: UIViewRepresentable {
                 wanted = world.environment.music
                 volume = 1
             }
-            let track = parent.soundEnabled && preferences.musicVolume > 0.01 ? wanted : nil
-            if let playing = musicPlaying, playing.track == track, playing.volume == volume { return }
-            musicPlaying = (track, volume)
-            SoundSynth.shared.setMusic(track, volume: volume)
+            let songs = MyMusicPlayer.shared
+            let playback = MyMusic.playback(inPlaza: world.id == PlazaWorld.worldID, gameMusic: wanted, volume: volume,
+                                            soundOn: parent.soundEnabled && preferences.musicVolume > 0.01,
+                                            plazaSong: preferences.plazaSong, gameSong: preferences.gameSong,
+                                            available: songs.available)
+            // A song's loudness follows the music slider here; the built-in
+            // music's follows it in SoundSynth.
+            let songGain = Float(preferences.musicVolume)
+            if case let .mine(id, songVolume) = playback { songs.play(id, volume: songVolume * songGain) }
+            if playback == musicPlaying { return }
+            musicPlaying = playback
+            switch playback {
+            case let .game(track, trackVolume):
+                songs.stop()
+                SoundSynth.shared.setMusic(track, volume: trackVolume)
+            case .mine:
+                SoundSynth.shared.setMusic(nil)
+            case .silence:
+                songs.stop()
+                SoundSynth.shared.setMusic(nil)
+            }
         }
 
         /// The script's arrow: a pin on the place, or an arrow round the edge.

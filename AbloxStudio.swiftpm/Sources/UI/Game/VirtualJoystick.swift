@@ -283,10 +283,11 @@ public struct JumpButton: View {
             .overlay(Circle().strokeBorder(Ablox.Palette.accent.opacity(isPressed ? 0.9 : 0.4), lineWidth: 2))
             .overlay(
                 Image(systemName: "arrow.up")
-                    .font(.system(size: 26, weight: .bold))
+                    .font(.system(size: 29, weight: .bold))
                     .foregroundStyle(isPressed ? Ablox.Palette.accent : .white)
             )
-            .frame(width: 76, height: 76)
+            // A little bigger in 8.5 (was 76), as asked from the suggestion box.
+            .frame(width: 86, height: 86)
             .scaleEffect(isPressed ? 0.92 : 1)
             .animation(.spring(response: 0.2, dampingFraction: 0.6), value: isPressed)
             .gesture(

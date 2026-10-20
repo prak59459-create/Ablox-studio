@@ -39,6 +39,9 @@ public final class AvatarEntity: Entity {
     private var rideEntity: Entity?
     private var appliedRide: AvatarProfile.Ride = .none
     private var appliedRideColor: ColorRGBA?
+    /// Seconds left of a slide from the slide button (`QuickSlide`): the
+    /// slide's pose over whatever the profile says it rides.
+    private var quickSlideLeft: Float = 0
     private var heldWeapon: Entity?
     public private(set) var heldWeaponModel: String?
 
@@ -161,7 +164,7 @@ public final class AvatarEntity: Entity {
         scale = SIMD3<Float>(repeating: profile.height)
 
         applyHat(profile.hat, material: profile.hatColor.map { material($0) } ?? accentMaterial)
-        applyRide(profile.ride, color: profile.rideColor)
+        applyRide(shownRide, color: profile.rideColor)
         applyFace(profile.face)
         applyPet(profile.pet, color: profile.petColor)
         applyAura(profile.aura)
@@ -399,6 +402,25 @@ public final class AvatarEntity: Entity {
 
     // MARK: Ride
 
+    /// The slide button's slide, on this avatar, for `seconds` (0 stands it
+    /// up again). Only over no ride: a game's own ride stays as it is.
+    public func slideBriefly(seconds: Float) {
+        quickSlideLeft = profile.ride == .none ? Swift.max(0, seconds) : 0
+        if quickSlideLeft > 0 { gesture = nil }
+        applyRide(shownRide, color: profile.rideColor)
+    }
+
+    /// What the avatar shows it rides: the profile's, or a slide.
+    private var shownRide: AvatarProfile.Ride {
+        quickSlideLeft > 0 ? .slide : profile.ride
+    }
+
+    private func countDownSlide(deltaTime: Float) {
+        guard quickSlideLeft > 0 else { return }
+        quickSlideLeft -= deltaTime
+        if quickSlideLeft <= 0 { slideBriefly(seconds: 0) }
+    }
+
     /// Builds what they ride from boxes and cylinders, front toward -Z like
     /// the avatar. Seated rides lower the person into the seat and hide the
     /// legs; the rest leave them standing on it or wearing it.
@@ -587,6 +609,7 @@ public final class AvatarEntity: Entity {
             petEntity.position = petHome + SIMD3<Float>(0, bob + petTrickLift(deltaTime: deltaTime), 0)
         }
         let speed = travelled / Swift.max(deltaTime, 1e-4)
+        countDownSlide(deltaTime: deltaTime)
         trackHeight(deltaTime: deltaTime)
         if animateGesture(deltaTime: deltaTime, speed: speed) { return }
         poseBody(speed: speed, deltaTime: deltaTime)

@@ -55,6 +55,10 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
     /// Real mode: first person (where the game allows), with the camera
     /// moving like a head — steps, turning, landing (`RealCamera`).
     public var realMode = false
+    /// Characters with shoes, hands, a belt and the other small parts (8.4).
+    /// Off from 8.5, as asked from the suggestion box: the plain blocky
+    /// characters, and the detail goes into the worlds instead.
+    public var detailedAvatars = false
     /// Degrees added to (or taken from) the camera's field of view. Wider
     /// sits better with people who feel sick in games.
     public var fieldOfViewBoost: Float = 0
@@ -98,6 +102,10 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
     /// Effect and music volume, 0 to 1.
     public var effectsVolume: Double = 1
     public var musicVolume: Double = 0.7
+    /// A song of the player's own for the Plaza, and one for games in place
+    /// of their music (`MyMusic`); nil for the built-in music.
+    public var plazaSong: UUID?
+    public var gameSong: UUID?
     /// Ping and signal in the corner while playing.
     public var showNetworkStatus = false
     /// The small map in the corner.
@@ -139,6 +147,7 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
         let d = PlayPreferences.defaults
         cameraShake = try c.decodeIfPresent(Bool.self, forKey: .cameraShake) ?? d.cameraShake
         realMode = (try? c.decodeIfPresent(Bool.self, forKey: .realMode)) ?? d.realMode
+        detailedAvatars = (try? c.decodeIfPresent(Bool.self, forKey: .detailedAvatars)) ?? d.detailedAvatars
         fieldOfViewBoost = try c.decodeIfPresent(Float.self, forKey: .fieldOfViewBoost) ?? d.fieldOfViewBoost
         hapticStrength = (try? c.decodeIfPresent(HapticStrength.self, forKey: .hapticStrength)) ?? d.hapticStrength
         warmScreen = try c.decodeIfPresent(Bool.self, forKey: .warmScreen) ?? d.warmScreen
@@ -154,6 +163,8 @@ public struct PlayPreferences: Codable, Hashable, Sendable {
         buttonScale = try c.decodeIfPresent(Double.self, forKey: .buttonScale) ?? d.buttonScale
         effectsVolume = try c.decodeIfPresent(Double.self, forKey: .effectsVolume) ?? d.effectsVolume
         musicVolume = try c.decodeIfPresent(Double.self, forKey: .musicVolume) ?? d.musicVolume
+        plazaSong = (try? c.decodeIfPresent(UUID.self, forKey: .plazaSong)) ?? nil
+        gameSong = (try? c.decodeIfPresent(UUID.self, forKey: .gameSong)) ?? nil
         showNetworkStatus = try c.decodeIfPresent(Bool.self, forKey: .showNetworkStatus) ?? d.showNetworkStatus
         showMap = try c.decodeIfPresent(Bool.self, forKey: .showMap) ?? d.showMap
         showClock = try c.decodeIfPresent(Bool.self, forKey: .showClock) ?? d.showClock

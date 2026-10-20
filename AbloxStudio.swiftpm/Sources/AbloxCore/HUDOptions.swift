@@ -205,6 +205,9 @@ public struct HUDOptions: Codable, Hashable, Sendable {
     public var showZoomButtons = false
     /// A button to hold for running.
     public var showRunButton = false
+    /// The ⇩ button that slides, in every game (`QuickSlide`, 8.5). It sits
+    /// where the run button was; pushing the stick all the way still runs.
+    public var showSlideButton = true
     /// A button that keeps walking forward without holding the stick.
     public var showWalkButton = false
     /// A button in the top bar to switch between first and third person.
@@ -274,6 +277,7 @@ public struct HUDOptions: Codable, Hashable, Sendable {
         mapTurnsWithCamera = read(.mapTurnsWithCamera, d.mapTurnsWithCamera)
         showZoomButtons = read(.showZoomButtons, d.showZoomButtons)
         showRunButton = read(.showRunButton, d.showRunButton)
+        showSlideButton = read(.showSlideButton, d.showSlideButton)
         showWalkButton = read(.showWalkButton, d.showWalkButton)
         showViewButton = read(.showViewButton, d.showViewButton)
         showShiftLockButton = read(.showShiftLockButton, d.showShiftLockButton)
@@ -310,6 +314,7 @@ public struct HUDOptions: Codable, Hashable, Sendable {
         try c.encode(mapTurnsWithCamera, forKey: .mapTurnsWithCamera)
         try c.encode(showZoomButtons, forKey: .showZoomButtons)
         try c.encode(showRunButton, forKey: .showRunButton)
+        try c.encode(showSlideButton, forKey: .showSlideButton)
         try c.encode(showWalkButton, forKey: .showWalkButton)
         try c.encode(showViewButton, forKey: .showViewButton)
         try c.encode(showShiftLockButton, forKey: .showShiftLockButton)
@@ -332,7 +337,7 @@ public struct HUDOptions: Codable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case opacity, hiddenTopBar, showCompass, showPosition, showSpeed, showBattery, showTimeOfDay
         case showCoinsPreview, showRank, showMissionTracker, mapSize, mapTurnsWithCamera
-        case showZoomButtons, showRunButton, showWalkButton, showViewButton, showShiftLockButton
+        case showZoomButtons, showRunButton, showSlideButton, showWalkButton, showViewButton, showShiftLockButton
         case joystickStyle, joystickScale, joystickOpacity, stickDeadZone, eightWay, alwaysRun
         case cameraFollows, invertLookX, verticalLookSpeed, doubleTapResetsCamera, shiftLock
         case buttonHaptics, pauseWhenAway, powerWarnings
@@ -599,6 +604,7 @@ public enum PlayShortcuts {
             ("W A S D", L("Walk")),
             (L("Space"), L("Jump")),
             (L("Shift"), L("Run")),
+            ("C", L("Slide")),
             (L("Arrow keys"), L("Look around")),
             ("F", L("Use or fire")),
             ("1 – 4", L("Favourite emotes")),

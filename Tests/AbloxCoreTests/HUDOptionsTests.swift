@@ -32,6 +32,15 @@ final class HUDOptionsTests: XCTestCase {
         XCTAssertEqual(loaded.stickDeadZone, 0)
     }
 
+    func testCharactersArePlainUnlessTheirDetailIsTurnedOn() throws {
+        XCTAssertFalse(PlayPreferences().detailedAvatars)
+        let old = try JSONDecoder().decode(PlayPreferences.self, from: Data(#"{"autoJump":true}"#.utf8))
+        XCTAssertFalse(old.detailedAvatars)
+        var on = PlayPreferences()
+        on.detailedAvatars = true
+        XCTAssertTrue(try JSONDecoder().decode(PlayPreferences.self, from: JSONEncoder().encode(on)).detailedAvatars)
+    }
+
     func testPresetsPlaceTheButtonsAndAreRecognised() {
         var preferences = PlayPreferences()
         XCTAssertTrue(ButtonPreset.standard.matches(preferences))

@@ -289,7 +289,9 @@ public final class GameRuntime {
                       clock - state.lastGesture >= Gesture.minimumInterval else { return }
                 state.lastGesture = clock
                 pending.append(broadcast(.script(.gesture(speaker: peer, wire: gesture.wire))))
-                if hasStarted, !isRoundOver { run(.emote, [object(for: state), .string(gesture.wire)]) }
+                // A slide is a move, not an emote: a game's `on emote` hears
+                // only what a player chose to show.
+                if hasStarted, !isRoundOver, gesture != .slide { run(.emote, [object(for: state), .string(gesture.wire)]) }
                 return
             }
             guard hasStarted, !isRoundOver, let state = states[peer], !state.isNPC else { return }

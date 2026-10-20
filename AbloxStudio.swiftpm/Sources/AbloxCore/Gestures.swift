@@ -151,11 +151,17 @@ public enum Stamp {
 public enum Gesture: Hashable, Sendable {
     case emote(Emote)
     case stamp(String)
+    /// The slide button (`QuickSlide`, 8.5): only the pose, for the other
+    /// iPads; the slide itself is the player's own. An iPad that has not
+    /// updated ignores it, as it does any name it does not know.
+    case slide
 
     /// "wave", or "stamp:🎉" — what travels in the packet.
     public init?(wire: String) {
         if let emote = Emote(rawValue: wire) {
             self = .emote(emote)
+        } else if wire == Self.slideWire {
+            self = .slide
         } else if wire.hasPrefix("stamp:"), Stamp.all.contains(String(wire.dropFirst(6))) {
             self = .stamp(String(wire.dropFirst(6)))
         } else {
@@ -167,8 +173,11 @@ public enum Gesture: Hashable, Sendable {
         switch self {
         case let .emote(emote): return emote.rawValue
         case let .stamp(emoji): return "stamp:" + emoji
+        case .slide: return Self.slideWire
         }
     }
+
+    static let slideWire = "move:slide"
 
     /// Seconds between one person's gestures, so a held finger is not a flood.
     public static let minimumInterval: Double = 0.8

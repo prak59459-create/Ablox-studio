@@ -2,6 +2,21 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "7.3",
+      "build": 64,
+      "date": "2026-10-20",
+      "notes": {
+        "en": [
+          "Matches Ablox 8.5: others sliding with the slide button every game now has are seen sliding in test play, and characters are plain blocks again",
+          "The jump button in test play is a little bigger"
+        ],
+        "ja": [
+          "Ablox 8.5 と 同じに：どのゲームにも できた スライディングボタンで すべる人が テストプレイでも 見えます。キャラクターは シンプルな ブロックに もどりました",
+          "テストプレイの ジャンプボタンを 少し 大きく"
+        ]
+      }
+    },
+    {
       "version": "7.2",
       "build": 63,
       "date": "2026-10-19",
