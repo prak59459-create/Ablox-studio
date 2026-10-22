@@ -36,6 +36,11 @@ public struct RosterState: Equatable, Sendable {
     /// keeps the newest one and applies it when they appear.
     private var pending: [PeerID: PlayerTransformPayload] = [:]
 
+    /// Where each one is in `players`. With a hundred in Last Survivor
+    /// Games, a hundred positions arrive at a time, and looking each one up
+    /// from the start of the list was ten thousand comparisons a time.
+    private var places: [PeerID: Int] = [:]
+
     /// Whether the local player has been put where the host assigned them.
     /// Once only: a later roster (someone joined, someone scored) must not
     /// yank the player back to the start.
@@ -88,10 +93,11 @@ public struct RosterState: Equatable, Sendable {
             events.append(.placeLocalPlayer(at: me.position))
         }
 
+        places = Dictionary(players.enumerated().map { ($0.element.peerID, $0.offset) }, uniquingKeysWith: { first, _ in first })
+
         // Anyone pending who is still not in the roster has left, or never
         // arrived. Keeping them would leak a little per departure.
-        let present = Set(players.map(\.peerID))
-        pending = pending.filter { present.contains($0.key) }
+        pending = pending.filter { places[$0.key] != nil }
 
         return events
     }
@@ -105,7 +111,7 @@ public struct RosterState: Equatable, Sendable {
     public mutating func apply(_ transform: PlayerTransformPayload) {
         guard transform.peerID != localPeerID else { return }
 
-        guard let index = players.firstIndex(where: { $0.peerID == transform.peerID }) else {
+        guard let index = places[transform.peerID] else {
             // Not introduced yet — hold the newest one. See `pending`.
             pending[transform.peerID] = transform
             return
@@ -116,7 +122,7 @@ public struct RosterState: Equatable, Sendable {
     // MARK: Reading
 
     public var localPlayer: PlayerSnapshot? {
-        players.first { $0.peerID == localPeerID }
+        player(localPeerID)
     }
 
     public var otherPlayers: [PlayerSnapshot] {
@@ -124,13 +130,14 @@ public struct RosterState: Equatable, Sendable {
     }
 
     public func player(_ peer: PeerID) -> PlayerSnapshot? {
-        players.first { $0.peerID == peer }
+        places[peer].map { players[$0] }
     }
 
     /// Everything forgotten, for leaving a session. The next session places
     /// the local player again.
     public mutating func reset() {
         players = []
+        places = [:]
         pending = [:]
         hasPlacedLocalPlayer = false
     }

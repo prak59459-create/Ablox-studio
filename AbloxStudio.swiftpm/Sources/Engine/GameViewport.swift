@@ -1611,8 +1611,6 @@ public struct GameViewport: UIViewRepresentable {
             let session = parent.session
             let chat = preferences.chat
             let eye = Vec3(camera.position(relativeTo: nil))
-            var people: [PeerID: PlayerSnapshot] = [:]
-            for player in session.roster { people[player.peerID] = player }
             var tags: [NameTagOverlay.Tag] = []
             // Our own head too, for our stamps; our own name is not shown.
             var subjects: [(PeerID, AvatarEntity)] = avatars.map { ($0.key, $0.value) }
@@ -1625,7 +1623,7 @@ public struct GameViewport: UIViewRepresentable {
                 let distance = toTop.length
                 guard distance > 0.5, distance < 70, toTop.dot(viewDirection) > 0.2 * distance,
                       let point = view.project(top.simd) else { continue }
-                let player = people[peer]
+                let player = session.player(peer)
                 let isLocal = peer == session.localPeerID
                 let isFriend = parent.friends.contains(peer)
                 // Chat options: whose names show, and a star by a friend's.

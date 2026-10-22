@@ -2,6 +2,19 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "7.8",
+      "build": 69,
+      "date": "2026-10-22",
+      "notes": {
+        "en": [
+          "Test play is lighter with a crowd: positions of many people are found straight away, a test played alone no longer packs everyone's movement for nobody, and name tags take less work each frame"
+        ],
+        "ja": [
+          "テストプレイで 人が 多い ときを 軽く しました。たくさんの 人の 位置を すぐ 見つけ、ひとりで ためす ときは だれも 受け取らない 動きを つめるのを やめ、名前の 計算も へらしました"
+        ]
+      }
+    },
+    {
       "version": "7.7",
       "build": 68,
       "date": "2026-10-22",

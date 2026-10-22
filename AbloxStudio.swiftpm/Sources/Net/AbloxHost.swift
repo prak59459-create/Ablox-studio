@@ -728,6 +728,9 @@ public final class AbloxHost {
     }
 
     private func broadcast<T: Encodable>(_ kind: PacketKind, _ payload: T) {
+        // Playing alone, nobody is listening: a hundred NPCs moving was a
+        // hundred packets encoded each step for no one.
+        guard !joined.isEmpty else { return }
         guard let packet = try? codec.encode(kind, payload) else { return }
         relay(packet, excluding: nil)
     }

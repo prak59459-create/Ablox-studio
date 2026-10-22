@@ -1,16 +1,16 @@
 {
   "app": "Ablox Studio",
-  "version": "7.7",
-  "build": 68,
+  "version": "7.8",
+  "build": 69,
   "protocol": 8,
   "date": "2026-10-22",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Test play: crowds are lighter — shadows reach only a few steps when many people are near, and people further back in a crowd are drawn without their faces, hats, pets and auras (shared from Ablox 8.9)"
+      "Test play is lighter with a crowd: positions of many people are found straight away, a test played alone no longer packs everyone's movement for nobody, and name tags take less work each frame"
     ],
     "ja": [
-      "テストプレイ：人ごみが 軽く なりました。人が 多い ときは 影を 近くだけに して、人ごみの おくの 人は 顔・ぼうし・ペット・オーラを はぶいて えがきます（Ablox 8.9 と 同じ）"
+      "テストプレイで 人が 多い ときを 軽く しました。たくさんの 人の 位置を すぐ 見つけ、ひとりで ためす ときは だれも 受け取らない 動きを つめるのを やめ、名前の 計算も へらしました"
     ]
   }
 }

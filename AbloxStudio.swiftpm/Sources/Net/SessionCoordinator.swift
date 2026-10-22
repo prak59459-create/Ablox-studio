@@ -1254,6 +1254,12 @@ public final class SessionCoordinator: ObservableObject {
         rosterState.localPlayer
     }
 
+    /// One player as they are this moment, found without going through
+    /// everyone.
+    public func player(_ peer: PeerID) -> PlayerSnapshot? {
+        rosterState.player(peer)
+    }
+
     /// The roster without the NPCs a script created: who is actually playing,
     /// for the scoreboard.
     public var people: [PlayerSnapshot] {

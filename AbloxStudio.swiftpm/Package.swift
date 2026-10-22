@@ -29,8 +29,8 @@ let package = Package(
             targets: ["AbloxStudioApp"],
             bundleIdentifier: "com.ablox.studio",
             teamIdentifier: "",
-            displayVersion: "7.7",
-            bundleVersion: "68",
+            displayVersion: "7.8",
+            bundleVersion: "69",
             // The inverted Studio mark (8.8 of the client), from
             // `Sources/Assets.xcassets`, the form Swift Playgrounds writes
             // itself. Never `.placeholder(icon:)`: a wrong `PlaceholderIcon`

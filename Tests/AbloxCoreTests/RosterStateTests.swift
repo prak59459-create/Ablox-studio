@@ -156,6 +156,48 @@ final class RosterStateTests: XCTestCase {
                        [.placeLocalPlayer(at: Vec3(6, 0, 0))])
     }
 
+    // MARK: A hundred at once
+
+    func testEachOfAHundredMovesOnlyThemselves() {
+        // Last Survivor Games: a hundred positions at a time, each found by
+        // its id rather than by going through the whole list.
+        let crowd = (0..<100).map { _ in PeerID() }
+        var state = RosterState(localPeerID: me)
+        state.replace(with: [snapshot(me)] + crowd.enumerated().map { snapshot($0.element, at: Vec3(Float($0.offset), 0, 0)) })
+
+        state.apply(transform(crowd[73], to: Vec3(0, 0, 50)))
+
+        XCTAssertEqual(state.player(crowd[73])?.position, Vec3(0, 0, 50))
+        XCTAssertEqual(state.player(crowd[72])?.position, Vec3(72, 0, 0))
+        XCTAssertEqual(state.player(crowd[74])?.position, Vec3(74, 0, 0))
+        XCTAssertEqual(state.localPlayer?.peerID, me)
+    }
+
+    func testPlacesFollowANewRosterOrder() {
+        // Someone left: everyone after them moved up one in the list.
+        var state = RosterState(localPeerID: me)
+        state.replace(with: [snapshot(host), snapshot(guest), snapshot(me)])
+        state.replace(with: [snapshot(guest), snapshot(me)])
+
+        state.apply(transform(guest, to: Vec3(9, 0, 9)))
+        state.apply(transform(host, to: Vec3(1, 1, 1)))
+
+        XCTAssertEqual(state.player(guest)?.position, Vec3(9, 0, 9))
+        XCTAssertNil(state.player(host), "someone who left must not be found")
+        XCTAssertEqual(state.players.map(\.peerID), [guest, me])
+    }
+
+    func testResetForgetsWhereEveryoneWas() {
+        var state = RosterState(localPeerID: me)
+        state.replace(with: [snapshot(me), snapshot(guest)])
+        state.reset()
+
+        XCTAssertNil(state.player(guest))
+        XCTAssertNil(state.localPlayer)
+        state.apply(transform(guest, to: Vec3(2, 0, 2)))
+        XCTAssertTrue(state.players.isEmpty)
+    }
+
     // MARK: Against the host's own spawn assignment
 
     func testTheHostAndTheJoinerAgreeOnDifferentSpawns() {
