@@ -469,10 +469,23 @@ public final class WorldScene {
         if profile.viewDistance == nil { showAllCulled() }
     }
 
+    /// How many people are within the shadows' reach, for
+    /// `CrowdDetail.shadowDistance`: in a crowd, shadows reach only a few
+    /// steps, so a hundred people are not drawn a second time for them.
+    public func setPeopleInShadowReach(_ count: Int) {
+        let crowded = CrowdDetail.shadowDistance(profile.shadowDistance, peopleWithin: count) != profile.shadowDistance
+        guard crowded != shadowsCrowded else { return }
+        shadowsCrowded = crowded
+        if let sunLight { applyShadow(to: sunLight) }
+    }
+
+    private var shadowsCrowded = false
+
     private func applyShadow(to light: DirectionalLight) {
         // The world can turn its shadows off; the graphics setting can too.
         let wanted = lastEnvironment?.shadows ?? true
-        light.shadow = wanted ? profile.shadowDistance.map { DirectionalLightComponent.Shadow(maximumDistance: $0, depthBias: 1.5) } : nil
+        let reach = shadowsCrowded ? CrowdDetail.shadowDistance(profile.shadowDistance, peopleWithin: .max) : profile.shadowDistance
+        light.shadow = wanted ? reach.map { DirectionalLightComponent.Shadow(maximumDistance: $0, depthBias: 1.5) } : nil
     }
 
     /// The sun where the time of day puts it, and as bright as the day is.

@@ -1262,9 +1262,17 @@ public struct GameViewport: UIViewRepresentable {
                 }
                 if avatar.isEnabled != show { avatar.isEnabled = show }
             }
-            avatarRanks = CrowdDetail.ranks(avatars.map { peer, avatar in
+            let distances = avatars.map { peer, avatar in
                 (id: peer, distance: avatar.targetPosition.distance(to: eye))
-            })
+            }
+            avatarRanks = CrowdDetail.ranks(distances)
+            for (peer, avatar) in avatars {
+                avatar.dressed = CrowdDetail.isDressed(rank: avatarRanks[peer] ?? 0)
+            }
+            let reach = appliedProfile?.shadowDistance ?? 0
+            worldScene.setPeopleInShadowReach(distances.filter { entry in
+                entry.distance <= reach && avatars[entry.id]?.isEnabled == true
+            }.count)
         }
 
         /// Where the camera is centred: the local player, or whoever they
@@ -1610,7 +1618,8 @@ public struct GameViewport: UIViewRepresentable {
             var subjects: [(PeerID, AvatarEntity)] = avatars.map { ($0.key, $0.value) }
             if let local = localAvatar { subjects.append((session.localPeerID, local)) }
             for (peer, avatar) in subjects {
-                guard avatar.isEnabled, avatar.parent != nil else { continue }
+                guard avatar.isEnabled, avatar.parent != nil,
+                      (avatarRanks[peer] ?? 0) < CrowdDetail.nameTagCandidates else { continue }
                 let top = Vec3(avatar.position(relativeTo: nil)) + Vec3(0, 2.05 * avatar.scale.y, 0)
                 let toTop = top - eye
                 let distance = toTop.length

@@ -79,7 +79,17 @@ public final class AvatarEntity: Entity {
     /// Shoes, hands, a belt and the other small parts (`AvatarDetail.swift`);
     /// off at the lowest graphics levels.
     var detailed = true {
-        didSet { if detailed != oldValue { applyDetail(profile) } }
+        didSet {
+            guard detailed != oldValue else { return }
+            applyDetail(profile)
+            applyDressed()
+        }
+    }
+    /// Face, hat, pet, aura and small parts shown. Far back in a crowd they
+    /// are left off (`CrowdDetail.isDressed`): too small to see, and a
+    /// hundred of each to draw.
+    var dressed = true {
+        didSet { if dressed != oldValue { applyDressed() } }
     }
     /// What it is riding, and how far it has walked: read by the poses.
     var appliedRideKind: AvatarProfile.Ride { appliedRide }
@@ -169,6 +179,20 @@ public final class AvatarEntity: Entity {
         applyPet(profile.pet, color: profile.petColor)
         applyAura(profile.aura)
         applyDetail(profile)
+        applyDressed()
+    }
+
+    /// Shows or hides what `dressed` covers; a part built anew since is
+    /// shown, so this follows every change of look.
+    private func applyDressed() {
+        for extra in [faceEntity, hatEntity, petEntity, auraEntity] {
+            if let extra, extra.isEnabled != dressed { extra.isEnabled = dressed }
+        }
+        for limb in [body, head, leftArm, rightArm, leftLeg, rightLeg] {
+            for child in limb.children where child.name == Self.detailName && child.isEnabled != dressed {
+                child.isEnabled = dressed
+            }
+        }
     }
 
     // MARK: Face

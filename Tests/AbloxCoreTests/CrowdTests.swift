@@ -79,4 +79,20 @@ final class CrowdTests: XCTestCase {
         let ranks = CrowdDetail.ranks([(id: "a", distance: 2), (id: "b", distance: 1), (id: "c", distance: 2)])
         XCTAssertEqual(ranks, ["b": 0, "a": 1, "c": 2])
     }
+    func testOnlyTheNearestAreDressed() {
+        let ranks = CrowdDetail.ranks((0..<100).map { (id: $0, distance: Float($0)) })
+        let dressed = (0..<100).filter { CrowdDetail.isDressed(rank: ranks[$0]!) }
+        XCTAssertEqual(dressed, Array(0..<CrowdDetail.dressed), "the nearest keep their faces and hats")
+        XCTAssertLessThan(CrowdDetail.nameTags, CrowdDetail.nameTagCandidates, "a few more names worked out than shown")
+    }
+
+    func testShadowsReachLessInACrowd() {
+        // Standing in a hundred people: shadows only a few steps out, so
+        // the crowd is not drawn twice. From the stands, as before.
+        XCTAssertEqual(CrowdDetail.shadowDistance(40, peopleWithin: 100), CrowdDetail.crowdShadowDistance)
+        XCTAssertEqual(CrowdDetail.shadowDistance(40, peopleWithin: 5), 40)
+        XCTAssertEqual(CrowdDetail.shadowDistance(40, peopleWithin: CrowdDetail.shadowCrowd), 40)
+        XCTAssertEqual(CrowdDetail.shadowDistance(8, peopleWithin: 100), 8, "never further than the setting")
+        XCTAssertNil(CrowdDetail.shadowDistance(nil, peopleWithin: 100), "no shadows stays no shadows")
+    }
 }
