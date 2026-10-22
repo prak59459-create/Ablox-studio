@@ -41,6 +41,50 @@ final class QuickSlideTests: RuntimeTestCase {
         XCTAssertFalse(slide.isSliding)
     }
 
+    func testDownASlopeItLastsToTheBottomThenTwoSecondsMore() {
+        var slide = QuickSlide()
+        XCTAssertNotNil(slide.start(velocity: Vec3(0, 0, -5), yawDegrees: 0, walkSpeed: 5))
+        // Five seconds down a long slope, the feet dropping every frame.
+        for _ in 0..<300 { slide.advance(by: 1.0 / 60, descended: 0.02, grounded: true) }
+        XCTAssertTrue(slide.isSliding, "a slope is slid all the way down")
+        XCTAssertTrue(slide.onSlope)
+        // The flat ground after it: two seconds from the last drop.
+        var flat: Float = 0
+        while slide.isSliding, flat < 5 {
+            slide.advance(by: 1.0 / 60, descended: 0, grounded: true)
+            flat += 1.0 / 60
+        }
+        XCTAssertFalse(slide.onSlope)
+        XCTAssertEqual(flat, QuickSlide.afterSlope, accuracy: 0.05)
+        XCTAssertNil(slide.start(velocity: .zero, yawDegrees: 0, walkSpeed: 5), "still resting after it")
+    }
+
+    func testOnFlatGroundItIsStillOneSecond() {
+        var slide = QuickSlide()
+        XCTAssertNotNil(slide.start(velocity: Vec3(0, 0, -5), yawDegrees: 0, walkSpeed: 5))
+        var time: Float = 0
+        while slide.isSliding, time < 5 {
+            slide.advance(by: 1.0 / 60, descended: 0, grounded: true)
+            time += 1.0 / 60
+        }
+        XCTAssertEqual(time, QuickSlide.duration, accuracy: 0.05)
+    }
+
+    func testAFallOffALedgeIsNotASlope() {
+        var slide = QuickSlide()
+        XCTAssertNotNil(slide.start(velocity: Vec3(0, 0, -5), yawDegrees: 0, walkSpeed: 5))
+        for _ in 0..<70 { slide.advance(by: 1.0 / 60, descended: 0.1, grounded: false) }
+        XCTAssertFalse(slide.onSlope)
+        XCTAssertFalse(slide.isSliding, "a long fall is a jump, and the second runs out as before")
+    }
+
+    func testTheSolverLosesNoSpeedDownASlope() {
+        let snapshot = PlayerSnapshot(peerID: alice, velocity: Vec3(0, 0, -7.5), isGrounded: true)
+        let motion = CharacterSolver.step(snapshot: snapshot, input: MovementInput(), slides: true, downhill: true,
+                                          deltaTime: 0.1)
+        XCTAssertEqual(motion.velocity.z, -7.5, accuracy: 0.0001)
+    }
+
     func testOnlyOnFootAndFreeToMove() {
         XCTAssertTrue(QuickSlide.allowed(frozen: false, ride: .none, surroundings: .normal, speedScale: 1))
         XCTAssertFalse(QuickSlide.allowed(frozen: true, ride: .none, surroundings: .normal, speedScale: 1))

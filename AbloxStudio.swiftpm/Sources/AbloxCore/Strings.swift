@@ -36,7 +36,7 @@ public enum Strings {
     /// Exposed so the tests can see duplicates, which the dictionary hides.
     public static let entries: [(String, String)] = [
         coreEntries, clientEntries, studioEntries, guideEntries, catalogueEntries, scriptEntries, updateEntries, updateEntries2,
-        featureEntries, featureEntries2, featureEntries3, featureEntries4, featureEntries5, featureEntries6, featureEntries7, featureEntries8, featureEntries9, featureEntries10, featureEntries11, featureEntries12, featureEntries13, featureEntries14, featureEntries15, nextEntries, aiEntries, settingsPaneEntries
+        featureEntries, featureEntries2, featureEntries3, featureEntries4, featureEntries5, featureEntries6, featureEntries7, featureEntries8, featureEntries9, featureEntries10, featureEntries11, featureEntries12, featureEntries13, featureEntries14, featureEntries15, nextEntries, aiEntries, settingsPaneEntries, inboxEntries
     ].flatMap { $0 }
 
     // MARK: - Shared vocabulary
@@ -1032,6 +1032,7 @@ public enum Strings {
         ("Reloading", "リロード中"),
         ("{} of {} rounds", "残り{}発（{}発中）"),
         ("Fire", "撃つ"),
+        ("Attack", "こうげき"),
         ("Script", "スクリプト"),
         ("Dismiss", "閉じる"),
         ("Codes never contain O, 0, I, 1, L or U.", "コードには O・0・I・1・L・U は使われません。"),
@@ -1098,7 +1099,7 @@ public enum Strings {
         ("Lets teammates hurt each other.", "味方同士でも攻撃が当たるようにします。"),
         ("A player (p)", "プレイヤー (p)"),
         ("Health. Setting health to 0 knocks them out.", "体力。health を0にすると倒れます。"),
-        ("Weapons: blaster, rifle, shotgun, pistol, or your own.", "武器: blaster、rifle、shotgun、pistol、または自分で作った武器。"),
+        ("Weapons: blaster, rifle, shotgun, pistol; swung: fist, sword, bat, axe, knife, spear; or your own.", "武器: blaster、rifle、shotgun、pistol。ふる武器: fist（素手）、sword、bat、axe、knife、spear。または自分で作った武器。"),
         ("Store your own values on a player.", "プレイヤーに自分の値を保存できます。"),
         ("Handy extras", "便利な機能"),
         ("Runs something once, later.", "少しあとに1回だけ実行します。"),
@@ -3586,5 +3587,27 @@ public enum Strings {
         ("Clear search", "検索を けす"),
         ("Nothing matches that search.", "見つかりませんでした。"),
         ("{} found", "{} こ 見つかりました"),
+    ]
+
+    /// The bell: notifications from Ablox (`AbloxInbox.swift`, 8.8).
+    static let inboxEntries: [(String, String)] = [
+        ("Notifications", "お知らせ"),
+        ("Notifications, {} new", "お知らせ、新しいのが {} こ"),
+        ("New", "新しい"),
+        ("Nothing new right now.", "いまは 新しい お知らせは ないよ。"),
+        ("iPad notifications", "iPad の 通知"),
+        ("Shows these on the iPad, even during a game, while Ablox is open.", "Ablox を 開いている あいだ、ゲームの とちゅうでも iPad に 通知が 出るよ。"),
+        ("The iPad said no. Turn notifications on in the iPad's Settings, then try again.", "iPad で 通知が オフに なっているよ。iPad の「設定」で 通知を オンにしてから もう一度 ためしてね。"),
+        ("{} is playing nearby", "{} が 近くで 遊んでいるよ"),
+        ("{} — join from the banner, or Play → Rooms.", "{} — 上の おしらせか「プレイ → ルーム」から 入れるよ。"),
+        ("{} invites you to play", "{} から 遊ぼうの さそい"),
+        ("{} — join from Play → Rooms.", "{} —「プレイ → ルーム」から 入れるよ。"),
+        ("Friend request from {}", "{} から フレンドの もうしこみ"),
+        ("Answer it in Play → Rooms → Friends.", "「プレイ → ルーム → フレンド」で 答えてね。"),
+        ("New message from {}", "{} から 新しい メッセージ"),
+        ("Read it in Play → Rooms → Friends.", "「プレイ → ルーム → フレンド」で 読めるよ。"),
+        ("Ablox {} is ready", "Ablox {} が できたよ"),
+        ("Update to keep playing with friends who have it. Tap Update at the top.", "新しい版の 友だちと 遊ぶには アップデートしてね。上の「アップデート」を おしてね。"),
+        ("New things to try. Tap Update at the top.", "新しい ものが ためせるよ。上の「アップデート」を おしてね。"),
     ]
 }

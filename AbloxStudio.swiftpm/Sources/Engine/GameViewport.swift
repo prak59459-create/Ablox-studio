@@ -246,6 +246,11 @@ public struct GameViewport: UIViewRepresentable {
         private var surroundings: Surroundings = .normal
         /// The slide button's slide, while it lasts (`QuickSlide`).
         private var quickSlide = QuickSlide()
+        /// Where the feet were last frame, to tell a slope under a slide.
+        private var slideLastY: Float?
+        /// Seconds since the slide gesture was last sent, so the other iPads
+        /// keep showing a slide that a slope made longer.
+        private var slideGestureAge: Float = 0
         /// What the local player rides this frame: a slide from the button
         /// looks and moves as the game's `p.ride = "slide"` does.
         private var localRide: AvatarProfile.Ride {
@@ -653,8 +658,19 @@ public struct GameViewport: UIViewRepresentable {
         /// on a ride. The other iPads see the pose from a gesture.
         private func slideIfAsked(controls: PlayControls, scale: MovementScale, movement: MovementConfig,
                                   around: Surroundings, dt: Float) {
-            quickSlide.advance(by: dt)
+            let y = localSnapshot.position.y
+            // A drop of metres in one frame is a teleport, not a slope.
+            let descended = slideLastY.map { $0 - y }.flatMap { $0 < 2 ? $0 : nil } ?? 0
+            slideLastY = y
+            slideGestureAge += dt
             let wasSliding = quickSlide.isSliding
+            if quickSlide.advance(by: dt, descended: descended, grounded: localSnapshot.isGrounded) {
+                localAvatar?.slideBriefly(seconds: quickSlide.remaining)
+                if slideGestureAge >= QuickSlide.duration * 0.8 {
+                    slideGestureAge = 0
+                    parent.session.send(gesture: .slide)
+                }
+            }
             let may = parent.spectating == nil
                 && QuickSlide.allowed(frozen: scale.frozen, ride: parent.session.localAppearance.ride,
                                       surroundings: around, speedScale: scale.speed)
@@ -667,6 +683,7 @@ public struct GameViewport: UIViewRepresentable {
             localSnapshot.velocity = started
             localAvatar?.slideBriefly(seconds: QuickSlide.duration)
             feedback.play(.whoosh, volume: 0.7)
+            slideGestureAge = 0
             parent.session.send(gesture: .slide)
         }
 
@@ -752,7 +769,7 @@ public struct GameViewport: UIViewRepresentable {
             slideIfAsked(controls: controls, scale: scale, movement: movement, around: around, dt: dt)
             let motion = CharacterSolver.step(snapshot: localSnapshot, input: input, config: movement, surroundings: around,
                                               floats: parent.session.localAppearance.ride == .hoverboard,
-                                              slides: localRide == .slide, deltaTime: dt)
+                                              slides: localRide == .slide, downhill: quickSlide.onSlope, deltaTime: dt)
             localSnapshot.velocity = motion.velocity
             localSnapshot.yawDegrees = motion.yawDegrees
             let shiftLocked = ShiftLock.turnsBody(isOn: preferences.hud.shiftLock, cameraMode: scripted.camera.mode,
@@ -1741,9 +1758,16 @@ public struct GameViewport: UIViewRepresentable {
 
             recoil = max(0, recoil - dt * 9)
             if let viewModel {
-                // Lower right, like every shooter; knocked back by each shot.
-                viewModel.position = SIMD3<Float>(0.2, -0.2 + recoil * 0.02, -0.42 + recoil * 0.06)
-                viewModel.orientation = simd_quatf(angle: recoil * 0.12, axis: SIMD3<Float>(1, 0, 0))
+                if scripted.weapon?.isMelee == true {
+                    // A swing: raised, then brought down and forward.
+                    let swing = sin(recoil * .pi)
+                    viewModel.position = SIMD3<Float>(0.2 - swing * 0.08, -0.22 + swing * 0.04, -0.4 - swing * 0.12)
+                    viewModel.orientation = simd_quatf(angle: 0.5 - swing * 1.1, axis: SIMD3<Float>(1, 0, 0))
+                } else {
+                    // Lower right, like every shooter; knocked back by each shot.
+                    viewModel.position = SIMD3<Float>(0.2, -0.2 + recoil * 0.02, -0.42 + recoil * 0.06)
+                    viewModel.orientation = simd_quatf(angle: recoil * 0.12, axis: SIMD3<Float>(1, 0, 0))
+                }
             }
         }
 

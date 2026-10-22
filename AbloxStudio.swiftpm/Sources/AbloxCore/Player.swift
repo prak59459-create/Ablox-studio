@@ -227,6 +227,7 @@ public enum CharacterSolver {
         surroundings: Surroundings = .normal,
         floats: Bool = false,
         slides: Bool = false,
+        downhill: Bool = false,
         deltaTime: Float
     ) -> (velocity: Vec3, yawDegrees: Float) {
         let dt = Swift.max(0, Swift.min(deltaTime, 0.1))
@@ -251,8 +252,11 @@ public enum CharacterSolver {
         var horizontal = Vec3(snapshot.velocity.x, 0, snapshot.velocity.z)
         if slides {
             // A slide (`p.ride = "slide"`) keeps going the way it started,
-            // on the ground or off a jump, and only slowly loses speed.
-            horizontal = horizontal * Swift.max(0, 1 - Self.slideFriction * dt)
+            // on the ground or off a jump, and only slowly loses speed —
+            // none at all down a slope (`QuickSlide.onSlope`).
+            if !downhill {
+                horizontal = horizontal * Swift.max(0, 1 - Self.slideFriction * dt)
+            }
         } else if snapshot.isGrounded {
             if magnitude > 0.01 {
                 horizontal = targetVelocity

@@ -605,8 +605,17 @@ public final class GameRuntime {
         let aimed = Hitscan.spread(direction, degrees: armed.weapon.spread, random: &random)
         let result = cast(from: origin, direction: aimed, range: armed.weapon.range, ignoring: state.peer)
 
-        pending.append(broadcast(.script(.tracer(from: origin, to: result.point))))
-        send(state, .playSound(name: SoundCue.shoot.rawValue))
+        if armed.weapon.isMelee {
+            // A swing: no line through the air, and a whoosh.
+            if case .player = result.target {
+                // A hit on someone has its own sound, from `hit`.
+            } else {
+                send(state, .playSound(name: SoundCue.whoosh.rawValue))
+            }
+        } else {
+            pending.append(broadcast(.script(.tracer(from: origin, to: result.point))))
+            send(state, .playSound(name: SoundCue.shoot.rawValue))
+        }
         sendAmmo(state)
         if armed.isReloading {
             send(state, .playSound(name: SoundCue.reload.rawValue))

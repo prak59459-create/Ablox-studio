@@ -104,7 +104,7 @@ public enum ScriptReference {
             Entry("p.controls = false  p.default_ui = false", L("Hides the joystick and buttons, or the top bar and chat.")),
             Entry("p.fade(\"black\", 1)  p.shake(0.5, 1)", L("Fades or shakes this player's screen.")),
             Entry("p.give(\"rifle\")  p.take()  p.weapon  p.ammo  p.reload()",
-                  L("Weapons: blaster, rifle, shotgun, pistol, or your own.")),
+                  L("Weapons: blaster, rifle, shotgun, pistol; swung: fist, sword, bat, axe, knife, spear; or your own.")),
             Entry("p.damage(20)  p.heal(20)  p.kill()  p.respawn()", L("Hurt, heal, knock out, or bring back.")),
             Entry("p.message(\"Hi\", 2)  p.chat(\"Hi\")  p.sound(\"hit\")", L("A message, chat line or sound for this player only.")),
             Entry("p.kills = 0", L("Store your own values on a player.")),

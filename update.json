@@ -1,16 +1,18 @@
 {
   "app": "Ablox Studio",
-  "version": "7.5",
-  "build": 66,
+  "version": "7.6",
+  "build": 67,
   "protocol": 8,
-  "date": "2026-10-20",
+  "date": "2026-10-22",
   "package": "AbloxStudio.swiftpm",
   "notes": {
     "en": [
-      "Test play keeps up with crowds: with lots of NPCs, far-away characters take turns moving their arms and legs, only the nearest 30 names show, NPCs only check the people right next to them, and a crowd that holds you up lets you slip through after half a second"
+      "The Studio mark is now the app's icon in Swift Playgrounds' My Apps",
+      "Test play, shared with Ablox 8.8: close-range weapons are fists, swords, bats, axes, knives and spears you swing (models fist, sword, bat, axe, knife, spear), and a slide down a slope lasts to the bottom, then 2 more seconds"
     ],
     "ja": [
-      "テストプレイが 人ごみでも 軽く なりました：NPC が たくさん いるとき、遠くの キャラクターは 手足を 交代で 動かし、名前は 近くの 30人だけ。NPC は すぐ となりの人だけを 見て、人ごみに 0.5秒 止められたら すりぬけて 進めます"
+      "Swift Playgrounds の「マイアプリ」に Studio の アイコンが 出るように なりました",
+      "テストプレイ（Ablox 8.8 と 同じ）：近くを こうげきする 武器は 素手・剣・バット・オノ・ナイフ・やりを ふるように なりました（model は fist・sword・bat・axe・knife・spear）。坂の スライディングは 下まで、そのあと 2秒 すべります"
     ]
   }
 }

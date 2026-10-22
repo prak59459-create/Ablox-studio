@@ -50,7 +50,7 @@ scan() {
 # ---------------------------------------------------------------- manifest --
 
 manifest_rules=(
-    'appIcon:[[:space:]]*\.placeholder'$'\t''PlaceholderIcon member names are unverifiable here; two guesses (.hammer, .cube) were rejected on device, and a wrong one stops the project opening. Omit appIcon: and set the icon from the app-settings screen.'
+    'appIcon:[[:space:]]*\.placeholder'$'\t''PlaceholderIcon member names are unverifiable here; two guesses (.hammer, .cube) were rejected on device, and a wrong one stops the project opening. Use appIcon: .asset("AppIcon") with Sources/Assets.xcassets instead.'
     '\.portrait\('$'\t''InterfaceOrientation exposes static properties, not functions. Use `.portrait`; leave upside-down out of the list instead of passing `upsideDown:`.'
     '\.landscape(Right|Left)\('$'\t''InterfaceOrientation exposes static properties, not functions. Drop the parentheses.'
     'bonjourServices:'$'\t''The argument label is `bonjourServiceTypes:`.'

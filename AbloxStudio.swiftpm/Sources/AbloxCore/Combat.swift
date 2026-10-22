@@ -61,7 +61,7 @@ public struct WeaponSpec: Codable, Equatable, Hashable, Sendable {
         "rifle": WeaponSpec(name: "rifle", damage: 34, fireRate: 2, range: 120, magazine: 6, reloadTime: 2, spread: 0.2, model: "rifle"),
         "shotgun": WeaponSpec(name: "shotgun", damage: 45, fireRate: 1, range: 18, magazine: 4, reloadTime: 2.2, spread: 6, model: "shotgun"),
         "pistol": WeaponSpec(name: "pistol", damage: 15, fireRate: 5, range: 45, magazine: 10, reloadTime: 1, spread: 1.5, model: "pistol")
-    ]
+    ].merging(WeaponSpec.meleePresets) { gun, _ in gun }
 }
 
 /// The shape a player occupies for the purpose of being hit: a vertical

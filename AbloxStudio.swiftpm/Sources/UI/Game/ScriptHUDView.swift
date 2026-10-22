@@ -380,13 +380,17 @@ struct CombatControls: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 12) {
-            VStack(spacing: 8) {
-                if let ammo = session.scripted.ammo {
-                    ammoCount(ammo)
+            // Fists, a sword, an axe… are swung: no rounds to count or reload.
+            let melee = session.scripted.weapon?.isMelee == true
+            if !melee {
+                VStack(spacing: 8) {
+                    if let ammo = session.scripted.ammo {
+                        ammoCount(ammo)
+                    }
+                    reloadButton
                 }
-                reloadButton
             }
-            fireButton(canFire: session.scripted.canFire)
+            fireButton(canFire: session.scripted.canFire, melee: melee)
         }
     }
 
@@ -416,7 +420,7 @@ struct CombatControls: View {
         .accessibilityLabel(L("Reload"))
     }
 
-    private func fireButton(canFire: Bool) -> some View {
+    private func fireButton(canFire: Bool, melee: Bool) -> some View {
         let fill: Color = isFiring ? Ablox.Palette.danger.opacity(0.55) : Color.black.opacity(0.25)
         let ring: Color = Ablox.Palette.danger.opacity(isFiring ? 1 : 0.6)
         let scale: CGFloat = isFiring ? 0.93 : 1
@@ -425,7 +429,7 @@ struct CombatControls: View {
             .background(.ultraThinMaterial, in: Circle())
             .overlay(Circle().strokeBorder(ring, lineWidth: 3))
             .overlay(
-                Image(systemName: "scope")
+                Image(systemName: melee ? "hand.raised.fill" : "scope")
                     .font(.system(size: 34, weight: .bold))
                     .foregroundStyle(.white)
             )
@@ -434,7 +438,7 @@ struct CombatControls: View {
             .opacity(canFire ? 1 : 0.5)
             .animation(.spring(response: 0.2, dampingFraction: 0.6), value: isFiring)
             .gesture(hold)
-            .accessibilityLabel(L("Fire"))
+            .accessibilityLabel(melee ? L("Attack") : L("Fire"))
             .accessibilityAddTraits(.isButton)
     }
 

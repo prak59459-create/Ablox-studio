@@ -29,14 +29,13 @@ let package = Package(
             targets: ["AbloxStudioApp"],
             bundleIdentifier: "com.ablox.studio",
             teamIdentifier: "",
-            displayVersion: "7.5",
-            bundleVersion: "66",
-            // No `appIcon:` on purpose, matching the client: the parameter is
-            // optional, and a wrong `PlaceholderIcon` member name stops the
-            // manifest compiling rather than falling back to a default icon.
-            // The inverted Studio mark is in `design/AppIcon.png`; set it from
-            // Swift Playgrounds' own app-settings screen, which writes the
-            // asset catalogue itself.
+            displayVersion: "7.6",
+            bundleVersion: "67",
+            // The inverted Studio mark (8.8 of the client), from
+            // `Sources/Assets.xcassets`, the form Swift Playgrounds writes
+            // itself. Never `.placeholder(icon:)`: a wrong `PlaceholderIcon`
+            // member name stops the project opening.
+            appIcon: .asset("AppIcon"),
             accentColor: .presetColor(.cyan),
             supportedDeviceFamilies: [
                 .pad

@@ -2,6 +2,21 @@
   "app": "Ablox Studio",
   "releases": [
     {
+      "version": "7.6",
+      "build": 67,
+      "date": "2026-10-22",
+      "notes": {
+        "en": [
+          "The Studio mark is now the app's icon in Swift Playgrounds' My Apps",
+          "Test play, shared with Ablox 8.8: close-range weapons are fists, swords, bats, axes, knives and spears you swing (models fist, sword, bat, axe, knife, spear), and a slide down a slope lasts to the bottom, then 2 more seconds"
+        ],
+        "ja": [
+          "Swift Playgrounds の「マイアプリ」に Studio の アイコンが 出るように なりました",
+          "テストプレイ（Ablox 8.8 と 同じ）：近くを こうげきする 武器は 素手・剣・バット・オノ・ナイフ・やりを ふるように なりました（model は fist・sword・bat・axe・knife・spear）。坂の スライディングは 下まで、そのあと 2秒 すべります"
+        ]
+      }
+    },
+    {
       "version": "7.5",
       "build": 66,
       "date": "2026-10-20",
